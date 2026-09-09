@@ -1,5 +1,5 @@
-// Stub deklarasi sementara untuk modul yang types-nya sempat hilang dari node_modules
-// setelah penambahan dependensi PDF (jspdf/html2canvas). Dihapus bila @types pulih.
+// Deklarasi untuk modul yang tidak menyertakan @types di manifest (react-dom,
+// papaparse). Sumber tipe tunggal agar konsisten di semua environment.
 declare module "react-dom" {
   import * as React from "react";
   export function createPortal(

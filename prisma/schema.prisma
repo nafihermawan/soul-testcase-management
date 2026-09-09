@@ -1,0 +1,273 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Platform {
+  MOBILE
+  WEB
+  HARDWARE
+  API
+}
+
+enum UserRole {
+  QA
+  DEVELOPER
+  PRODUCT
+}
+
+enum TCPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum TCStatus {
+  DRAFT
+  ACTIVE
+  DEPRECATED
+}
+
+enum RunStatus {
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum RunResultStatus {
+  PASS
+  FAIL
+  BLOCKED
+  SKIPPED
+  NOT_RUN
+}
+
+enum AutomationStatus {
+  NOT_AUTOMATED
+  AUTOMATED
+  FAILING
+  UNSTABLE
+}
+
+enum BugStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum ActivityAction {
+  CREATED
+  UPDATED
+  DELETED
+  STATUS_CHANGED
+  EXECUTED
+  COMMENTED
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  image     String?
+  role      UserRole @default(DEVELOPER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  projects Project[]
+  suites   Suite[]
+  testCases TestCase[]
+  testRuns TestRun[]
+  runResultUpdates TestRunResult[]
+  bugs    Bug[]
+  activities ActivityLog[]
+}
+
+model Project {
+  id          String    @id @default(cuid())
+  name        String
+  code        String    @unique
+  description String?
+  platform    Platform?
+  docUrl      String?
+  order       Int       @default(0)
+  isActive    Boolean   @default(true)
+  createdById String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  createdBy User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  suites    Suite[]
+  testRuns  TestRun[]
+}
+
+model Suite {
+  id          String   @id @default(cuid())
+  projectId   String
+  parentId    String?
+  name        String
+  code        String
+  description String?
+  docUrl      String?
+  order       Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  project  Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  parent   Suite?   @relation("SuiteChildren", fields: [parentId], references: [id], onDelete: Cascade)
+  children Suite[]  @relation("SuiteChildren")
+  createdBy User?   @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  testCases TestCase[]
+  sections  Section[]
+
+  @@unique([projectId, parentId, code])
+  @@index([projectId, order])
+  @@index([parentId, order])
+}
+
+model Section {
+  id          String   @id @default(cuid())
+  suiteId     String
+  name        String
+  description String?
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  suite     Suite      @relation(fields: [suiteId], references: [id], onDelete: Cascade)
+  testCases TestCase[]
+
+  @@index([suiteId, order])
+}
+
+model TestCase {
+  id          String     @id @default(cuid())
+  tcId        String     @unique
+  title       String
+  suiteId     String?
+  sectionId   String?
+  scenario    String?
+  precondition String?
+  steps       String?
+  testData    String?
+  expectedResult String?
+  priority    TCPriority @default(MEDIUM)
+  status      TCStatus   @default(DRAFT)
+  order       Int        @default(0)
+  createdById String?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  suite     Suite? @relation(fields: [suiteId], references: [id], onDelete: SetNull)
+  section   Section? @relation(fields: [sectionId], references: [id], onDelete: SetNull)
+  createdBy User?  @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  runResults TestRunResult[]
+  automation AutomationLink?
+  bugs       Bug[]
+  activities ActivityLog[]
+
+  @@index([suiteId, order])
+  @@index([sectionId, order])
+}
+
+model ActivityLog {
+  id          String         @id @default(cuid())
+  testCaseId  String
+  action      ActivityAction
+  detail      String?
+  userId      String?
+  createdAt   DateTime       @default(now())
+
+  testCase TestCase @relation(fields: [testCaseId], references: [id], onDelete: Cascade)
+  user     User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([testCaseId, createdAt])
+}
+
+model TestRun {
+  id           String     @id @default(cuid())
+  name         String
+  projectId    String
+  status       RunStatus  @default(IN_PROGRESS)
+  activityType String?
+  platforms    String?    // CSV: Web, Mobile, Hardware, API
+  environment  String?    // DEV, STG, PRE-PROD, PROD
+  sprint       String?
+  taskLink     String?
+  createdById  String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  completedAt  DateTime?
+
+  project Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy User?         @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  results   TestRunResult[]
+
+  @@index([projectId, createdAt])
+}
+
+model TestRunResult {
+  id            String          @id @default(cuid())
+  runId         String
+  testCaseId    String
+  titleSnapshot String
+  status        RunResultStatus @default(NOT_RUN)
+  actualResult  String?
+  notes         String?
+  updatedById   String?
+  updatedAt     DateTime        @updatedAt
+
+  run        TestRun   @relation(fields: [runId], references: [id], onDelete: Cascade)
+  testCase   TestCase  @relation(fields: [testCaseId], references: [id], onDelete: Cascade)
+  updatedBy  User?     @relation(fields: [updatedById], references: [id], onDelete: SetNull)
+
+  bugs       Bug[]
+
+  @@unique([runId, testCaseId])
+  @@index([testCaseId, updatedAt])
+}
+
+model AutomationLink {
+  id             String           @id @default(cuid())
+  testCaseId     String           @unique
+  externalTestId String           @unique
+  status         AutomationStatus @default(NOT_AUTOMATED)
+  scriptPath     String?
+  lastRunAt      DateTime?
+  lastResult     String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  testCase TestCase @relation(fields: [testCaseId], references: [id], onDelete: Cascade)
+}
+
+model Bug {
+  id          String    @id @default(cuid())
+  title       String
+  description String?
+  expectedResult String?
+  status      BugStatus @default(OPEN)
+  severity    String?
+  externalLink String?
+  testCaseId  String?
+  testRunResultId String?
+  createdById String?
+  resolvedAt  DateTime?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  testCase      TestCase?      @relation(fields: [testCaseId], references: [id], onDelete: SetNull)
+  testRunResult TestRunResult? @relation(fields: [testRunResultId], references: [id], onDelete: SetNull)
+  createdBy     User?          @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([testCaseId, createdAt])
+  @@index([testRunResultId, createdAt])
+}

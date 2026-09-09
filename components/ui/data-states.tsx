@@ -1,0 +1,122 @@
+"use client";
+
+import Link from "next/link";
+import { ArrowLeft, RefreshCw, TriangleAlert } from "lucide-react";
+import { Spinner } from "@/components/ui/feedback";
+
+const baseBlock: React.CSSProperties = {
+  background: "#fff",
+  border: "1px solid var(--border)",
+  borderRadius: "var(--radius-lg)",
+  padding: "3rem 1.5rem",
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: "0.85rem",
+  textAlign: "center",
+};
+
+/** Blok loading awal halaman (saat fetch pertama kali). */
+export function LoadingBlock({ label = "Memuat data…" }: { label?: string }) {
+  return (
+    <div style={baseBlock}>
+      <span style={{ color: "var(--text-muted)", display: "inline-flex", alignItems: "center", gap: "0.5rem" }}>
+        <Spinner size={18} />
+        <span style={{ fontSize: "0.85rem", fontWeight: 500 }}>{label}</span>
+      </span>
+    </div>
+  );
+}
+
+/** Blok error fetch dengan tombol coba lagi. */
+export function ErrorBlock({
+  message = "Gagal memuat data.",
+  onRetry,
+}: {
+  message?: string;
+  onRetry?: () => void;
+}) {
+  return (
+    <div style={baseBlock}>
+      <span
+        style={{
+          width: 44,
+          height: 44,
+          borderRadius: "50%",
+          background: "#FEF2F2",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          color: "#DC2626",
+        }}
+      >
+        <TriangleAlert size={22} />
+      </span>
+      <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-secondary)", lineHeight: 1.5 }}>
+        {message}
+      </p>
+      {onRetry && (
+        <button
+          type="button"
+          onClick={onRetry}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "0.4rem",
+            padding: "0.5rem 1rem",
+            borderRadius: 8,
+            border: "1px solid var(--border)",
+            background: "#fff",
+            color: "var(--text)",
+            fontWeight: 600,
+            fontSize: "0.82rem",
+            cursor: "pointer",
+          }}
+        >
+          <RefreshCw size={13} /> Coba lagi
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** Pengganti halaman 404 server (notFound) untuk detail yang fetch client. */
+export function NotFoundBlock({
+  title = "Data tidak ditemukan",
+  message = "Data yang Anda cari mungkin sudah dihapus atau tidak tersedia.",
+  backHref = "/",
+  backLabel = "Kembali ke Beranda",
+}: {
+  title?: string;
+  message?: string;
+  backHref?: string;
+  backLabel?: string;
+}) {
+  return (
+    <div style={baseBlock}>
+      <h2 style={{ margin: 0, fontSize: "1.05rem", fontWeight: 700, color: "var(--text)" }}>{title}</h2>
+      <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-muted)", lineHeight: 1.5 }}>
+        {message}
+      </p>
+      <Link
+        href={backHref}
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: "0.4rem",
+          padding: "0.5rem 1rem",
+          borderRadius: 8,
+          border: "1px solid var(--border)",
+          background: "#fff",
+          color: "var(--text)",
+          fontWeight: 600,
+          fontSize: "0.82rem",
+          textDecoration: "none",
+        }}
+      >
+        <ArrowLeft size={13} /> {backLabel}
+      </Link>
+    </div>
+  );
+}

@@ -1,25 +1,64 @@
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+  /* Brand (blue) */
+  --brand-50: #eff6ff;
+  --brand-100: #dbeafe;
+  --brand-200: #bfdbfe;
+  --brand-500: #3b82f6;
+  --brand-600: #2563eb;
+  --brand-700: #1d4ed8;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  /* Neutrals */
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --surface-muted: #f3f4f6;
+  --border: #e5e7eb;
+  --border-strong: #d1d5db;
+  --text: #111827;
+  --text-secondary: #4b5563;
+  --text-muted: #9ca3af;
+
+  /* State */
+  --success: #10b981;
+  --success-bg: #ecfdf5;
+  --warning: #f59e0b;
+  --warning-bg: #fffbeb;
+  --danger: #ef4444;
+  --danger-bg: #fef2f2;
+  --info: #3b82f6;
+  --info-bg: #eff6ff;
+
+  /* Spacing */
+  --space-1: 4px;
+  --space-4: 16px;
+  --space-9: 36px;
+
+  /* Shape & elevation */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --shadow-sm: 0 1px 2px rgba(17, 24, 39, 0.05);
+  --shadow-md: 0 4px 12px rgba(17, 24, 39, 0.06);
+
+  /* Type */
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* Background & foreground */
+  --background: #f6f7f9;
+  --foreground: #111827;
 }
 
 html,
 body {
+  height: 100vh;
   max-width: 100vw;
-  overflow-x: hidden;
+  overflow: hidden;
 }
 
 body {
   color: var(--foreground);
   background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -35,8 +74,156 @@ a {
   text-decoration: none;
 }
 
-@media (prefers-color-scheme: dark) {
-  html {
-    color-scheme: dark;
+input,
+select,
+textarea,
+button {
+  font-family: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+/* Global button design system: sharp 3px corner radius on all buttons.
+   Overrides inline styles (incl. older 5px/8px values) via !important. */
+button,
+.btn,
+[role="button"] {
+  border-radius: 3px !important;
+}
+
+/* Sidebar menu item: unified base + hover state */
+.sidebar-item {
+  color: var(--text-secondary);
+  transition: color 0.2s ease, background-color 0.2s ease;
+}
+
+.sidebar-item:hover {
+  color: #ffc348;
+}
+
+/* Sub-menu (child) item: hover = soft gray background + dark text */
+.sidebar-item-child {
+  border-radius: 6px;
+}
+
+.sidebar-item-child:hover {
+  color: #111827;
+  background: #f9fafb;
+}
+
+/* Brand logo block: ultra-tight gap + heavy italic title */
+.brand-logo-container {
+  display: flex;
+  align-items: center;
+  gap: 4px !important;
+}
+
+.brand-title {
+  font-family: inherit;
+  font-style: italic;
+  font-weight: 900 !important;
+  letter-spacing: -0.03em !important;
+  color: #0f172a;
+}
+
+/* Samakan kelas kontainer untuk semua grup sub-menu */
+.sidebar-submenu-list {
+  padding-left: 36px !important;
+  margin-left: 0 !important;
+}
+
+/* Samakan styling item sub-menu */
+.sidebar-submenu-item {
+  font-family: inherit !important;
+  font-size: 14px !important;
+  font-weight: 400 !important;
+  line-height: 1.5;
+  padding-left: 0 !important;
+  margin-left: 0 !important;
+}
+
+/* Dropdown item (row actions kebab menu) */
+.row-action-item:hover {
+  background: #f3f4f6;
+}
+
+/* Kebab button: borderless + lingkaran hover */
+.kebab-btn:hover {
+  background: #f3f4f6;
+}
+
+/* Modal dialog animation */
+@keyframes modalIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Spinner rotation */
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Small circular spinner (export/import/save pending states) */
+.spinner-ring {
+  width: 14px;
+  height: 14px;
+  border-radius: 50% !important;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  animation: spin 0.7s linear infinite;
+}
+
+:focus-visible {
+  outline: 2px solid var(--brand-500, #3b82f6);
+  outline-offset: 2px;
+}
+
+/* Print: sembunyikan navigasi & action bar, konten full-width */
+@media print {
+  .app-sidebar,
+  .app-header,
+  aside,
+  header,
+  nav,
+  .report-action-bar {
+    display: none !important;
+  }
+
+  .report-container {
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+}
+
+/* Kartu metrik dashboard: 1 kolom (mobile) -> 2 kolom (tablet) -> 5 kolom (desktop) */
+.metric-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+}
+
+@media (min-width: 640px) {
+  .metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .metric-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
   }
 }

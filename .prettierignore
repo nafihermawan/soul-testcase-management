@@ -1,0 +1,15 @@
+node_modules
+.next
+out
+build
+coverage
+*.log
+.env
+.env*.local
+.DS_Store
+lib/generated
+.agents
+.claude
+.windsurf
+skills-lock.json
+prisma.config.ts

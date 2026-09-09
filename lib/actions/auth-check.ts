@@ -9,7 +9,7 @@ export type CheckLoginResult =
   | { status: "no_password" }
   | { status: "wrong_password" }
   | { status: "invalid" }
-  | { status: "error" };
+  | { status: "error"; detail?: string };
 
 /** Pre-check sebelum NextAuth: bedakan penyebab login gagal untuk UX. */
 export async function checkLoginCredentials(
@@ -32,6 +32,10 @@ export async function checkLoginCredentials(
     return valid ? { status: "ok" } : { status: "wrong_password" };
   } catch (error) {
     console.error("checkLoginCredentials error:", error);
-    return { status: "error" };
+    // detail sementara untuk debugging prod — hapus setelah akar masalah ditemukan
+    return {
+      status: "error",
+      detail: error instanceof Error ? error.message : "unknown",
+    };
   }
 }

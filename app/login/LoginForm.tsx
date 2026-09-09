@@ -55,7 +55,11 @@ export function LoginForm() {
         setError("Akun ini belum punya password — minta di-set oleh QA di Settings.");
       else if (check.status === "wrong_password") setError("Password salah.");
       else if (check.status === "invalid") setError("Email dan password wajib diisi.");
-      else setError("Terjadi kesalahan server. Coba lagi.");
+      else
+        setError(
+          "Terjadi kesalahan server. Coba lagi." +
+            (check.status === "error" && check.detail ? `\n(${check.detail})` : "")
+        );
       return;
     }
 
@@ -151,6 +155,7 @@ export function LoginForm() {
             borderRadius: 10,
             padding: "0.5rem 0.75rem",
             textAlign: "left",
+            whiteSpace: "pre-line",
           }}
         >
           {error}

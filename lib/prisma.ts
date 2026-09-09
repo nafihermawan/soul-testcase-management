@@ -15,16 +15,15 @@ const globalForPrisma = globalThis as unknown as {
 };
 
 function createPrismaClient() {
-  let connectionString =
+  const connectionString =
     process.env.DATABASE_URL ?? "postgresql://localhost:5432/soul_testcase";
-  // Supabase (pooler/direct) mewajibkan SSL; pastikan selalu aktif bila belum ada.
-  if (/supabase\.co/.test(connectionString) && !/sslmode=/.test(connectionString)) {
-    connectionString += connectionString.includes("?") ? "&sslmode=require" : "?sslmode=require";
-  }
+  // Supabase memakai sertifikat sendiri; aktifkan TLS tanpa verifikasi CA penuh.
+  const isSupabase = /supabase\.co/.test(connectionString);
   const poolConfig: ConstructorParameters<typeof Pool>[0] = {
     connectionString,
     connectionTimeoutMillis: 15000,
     query_timeout: 25000,
+    ...(isSupabase ? { ssl: { rejectUnauthorized: false } } : {}),
   };
   const pool = new Pool({
     ...poolConfig,

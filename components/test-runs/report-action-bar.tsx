@@ -33,7 +33,7 @@ async function downloadContainerAsPdf(fileName: string): Promise<void> {
   const contentW = pageW - margin * 2;
   const imgH = (canvas.height * contentW) / canvas.width;
 
-  let y = margin;
+  const y = margin;
   let remaining = imgH;
   let first = true;
   let pos = 0;

@@ -3,6 +3,7 @@
 import { useState, type CSSProperties, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
+import { checkLoginCredentials } from "@/lib/actions/auth-check";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 
 const inputBase: CSSProperties = {
@@ -44,6 +45,20 @@ export function LoginForm() {
     }
     setError(null);
     setPending(true);
+
+    // Pre-check: bedakan penyebab gagal (email / password / belum di-set).
+    const check = await checkLoginCredentials(email.trim(), password);
+    if (check.status !== "ok") {
+      setPending(false);
+      if (check.status === "no_user") setError("Email tidak terdaftar di sistem.");
+      else if (check.status === "no_password")
+        setError("Akun ini belum punya password — minta di-set oleh QA di Settings.");
+      else if (check.status === "wrong_password") setError("Password salah.");
+      else if (check.status === "invalid") setError("Email dan password wajib diisi.");
+      else setError("Terjadi kesalahan server. Coba lagi.");
+      return;
+    }
+
     const res = await signIn("credentials", {
       email: email.trim(),
       password,

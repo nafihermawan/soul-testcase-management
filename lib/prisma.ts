@@ -15,13 +15,22 @@ const globalForPrisma = globalThis as unknown as {
 };
 
 function createPrismaClient() {
-  const connectionString =
+  let connectionString =
     process.env.DATABASE_URL ?? "postgresql://localhost:5432/soul_testcase";
-  const pool = new Pool({
+  // Supabase (pooler/direct) mewajibkan SSL; pastikan selalu aktif bila belum ada.
+  if (/supabase\.co/.test(connectionString) && !/sslmode=/.test(connectionString)) {
+    connectionString += connectionString.includes("?") ? "&sslmode=require" : "?sslmode=require";
+  }
+  const poolConfig: ConstructorParameters<typeof Pool>[0] = {
     connectionString,
-    connectionTimeoutMillis: 5000,
-    query_timeout: 10000,
-  });
+    connectionTimeoutMillis: 15000,
+    query_timeout: 25000,
+  };
+  const pool = new Pool({
+    ...poolConfig,
+    // paksa IPv4: di lingkungan serverless (Vercel) resolusi IPv6 bisa menggantung
+    family: 4,
+  } as ConstructorParameters<typeof Pool>[0] & { family: number });
   const adapter = new PrismaPg(pool);
   return { prisma: new PrismaClient({ adapter }), pool };
 }

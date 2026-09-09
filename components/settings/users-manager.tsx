@@ -56,6 +56,7 @@ function UserModal({
   const [name, setName] = useState(initial?.name ?? "");
   const [email, setEmail] = useState(initial?.email ?? "");
   const [role, setRole] = useState<UserItem["role"]>(initial?.role ?? "DEVELOPER");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const nameRef = useRef<HTMLInputElement>(null);
@@ -86,10 +87,15 @@ function UserModal({
       setError("Email tidak valid.");
       return;
     }
+    const pwd = password.trim();
+    if (!initial && pwd.length < 6) {
+      setError("Password minimal 6 karakter.");
+      return;
+    }
     setPending(true);
     const res = initial
-      ? await updateUser(initial.id, { name, email, role })
-      : await addUserByEmail({ name, email, role });
+      ? await updateUser(initial.id, { name, email, role, password: pwd || undefined })
+      : await addUserByEmail({ name, email, role, password: pwd });
     setPending(false);
     if (res.error) {
       setError(res.error);
@@ -200,6 +206,22 @@ function UserModal({
                 </option>
               ))}
             </select>
+          </div>
+          <div>
+            <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)" }}>
+              Password {initial ? "(opsional)" : ""}
+            </label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => {
+                setPassword(e.target.value);
+                if (error) setError(null);
+              }}
+              placeholder={initial ? "Kosongkan jika tidak diubah" : "Minimal 6 karakter"}
+              autoComplete="new-password"
+              style={fieldStyle}
+            />
           </div>
           {error && <div style={{ fontSize: "0.82rem", color: "var(--danger)" }}>{error}</div>}
         </div>

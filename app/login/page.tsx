@@ -1,31 +1,28 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { LoginForm } from "./LoginForm";
 
 export default function LoginPage() {
   const router = useRouter();
-  // Cek sesi client: user yang sudah login langsung diarahkan ke beranda.
-  const [checking, setChecking] = useState(true);
 
+  // Cek sesi client: user yang sudah login diarahkan ke beranda.
+  // Card login langsung tampil (tidak pernah blank); redirect authed berjalan
+  // di latar belakang.
   useEffect(() => {
     let cancelled = false;
     fetch("/api/me", { headers: { accept: "application/json" } })
       .then((res) => {
-        if (cancelled) return;
-        if (res.ok) router.replace("/");
-        else setChecking(false);
+        if (!cancelled && res.ok) router.replace("/");
       })
       .catch(() => {
-        if (!cancelled) setChecking(false);
+        // abaikan — tampilkan form login
       });
     return () => {
       cancelled = true;
     };
   }, [router]);
-
-  if (checking) return null;
 
   return (
     <main
@@ -46,7 +43,7 @@ export default function LoginPage() {
           backdropFilter: "blur(12px)",
           border: "1px solid rgba(229, 231, 235, 0.8)",
           borderRadius: 16,
-          boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)",
+          boxShadow: "0 10px 25px -5px rgba(226, 232, 240, 0.6), 0 4px 12px -4px rgba(15, 23, 42, 0.08)",
           padding: "2rem",
           textAlign: "center",
         }}
@@ -55,8 +52,8 @@ export default function LoginPage() {
         <img
           src="/images/spn-logo.png"
           alt="Soulparking logo"
-          width={48}
-          height={48}
+          width={56}
+          height={56}
           style={{
             display: "block",
             margin: "0 auto 0.75rem",
@@ -82,7 +79,7 @@ export default function LoginPage() {
             color: "#4B5563",
           }}
         >
-          Masuk dengan akun Google <strong style={{ color: "#111827" }}>@soulparking.co.id</strong>
+          Masuk dengan email &amp; password akun internal
         </p>
         <LoginForm />
         <p style={{ marginTop: "1.25rem", fontSize: "0.75rem", color: "#6B7280" }}>

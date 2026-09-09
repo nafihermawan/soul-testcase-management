@@ -1,59 +1,46 @@
 import type { NextAuthOptions } from "next-auth";
-import GoogleProvider from "next-auth/providers/google";
+import CredentialsProvider from "next-auth/providers/credentials";
+import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
-
-export const ALLOWED_EMAIL_DOMAIN = "soulparking.co.id";
 
 export const authOptions: NextAuthOptions = {
   session: {
     strategy: "jwt",
   },
   providers: [
-    GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+    CredentialsProvider({
+      name: "Email & Password",
+      credentials: {
+        email: { label: "Email", type: "email" },
+        password: { label: "Password", type: "password" },
+      },
+      async authorize(credentials) {
+        const email = credentials?.email?.trim().toLowerCase();
+        const password = credentials?.password;
+        if (!email || !password) return null;
+
+        const user = await prisma.user.findUnique({ where: { email } });
+        // Tidak ada akun, atau akun belum di-set password oleh QA.
+        if (!user?.passwordHash) return null;
+
+        const valid = await bcrypt.compare(password, user.passwordHash);
+        if (!valid) return null;
+
+        return {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+        };
+      },
     }),
   ],
   callbacks: {
-    async signIn({ user }) {
-      const email = user.email?.toLowerCase();
-      if (!email || !email.endsWith(`@${ALLOWED_EMAIL_DOMAIN}`)) {
-        return false;
-      }
-
-      try {
-        const existing = await prisma.user.findUnique({ where: { email } });
-        if (!existing) {
-          await prisma.user.create({
-            data: {
-              email,
-              name: user.name,
-              image: user.image,
-              role: "DEVELOPER",
-            },
-          });
-        }
-      } catch (error) {
-        console.error("Failed to upsert user on signIn:", error);
-        return false;
-      }
-
-      return true;
-    },
     async jwt({ token, user }) {
-      // JWT strategy: id & role already persisted in the token at sign-in.
-      // Avoid a DB round-trip on every request (which hangs when the DB is
-      // unreachable) — only enrich the token when the user first signs in.
+      // JWT strategy: id & role disimpan di token saat sign-in pertama.
       if (user) {
-        const dbUser = await prisma.user.findUnique({
-          where: { email: user.email!.toLowerCase() },
-          select: { id: true, role: true },
-        });
-        if (!dbUser) {
-          return { ...token, error: "UserNotFound" };
-        }
-        token.id = dbUser.id;
-        token.role = dbUser.role;
+        token.id = user.id;
+        token.role = user.role;
       }
       return token;
     },

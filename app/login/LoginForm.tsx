@@ -1,60 +1,176 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type CSSProperties, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
+import { Eye, EyeOff, Loader2 } from "lucide-react";
 
-function GoogleIcon({ size = 18 }: { size?: number }) {
-  return (
-    <svg viewBox="0 0 24 24" width={size} height={size} aria-hidden="true">
-      <path
-        fill="#4285F4"
-        d="M23.49 12.27c0-.79-.07-1.54-.19-2.27H12v4.51h6.47c-.29 1.48-1.14 2.73-2.4 3.58v3h3.86c2.26-2.09 3.56-5.17 3.56-8.82z"
-      />
-      <path
-        fill="#34A853"
-        d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.86-3c-1.08.72-2.45 1.16-4.07 1.16-3.13 0-5.78-2.11-6.73-4.96H1.29v3.09C3.26 21.3 7.31 24 12 24z"
-      />
-      <path
-        fill="#FBBC05"
-        d="M5.27 14.29c-.25-.72-.38-1.49-.38-2.29s.14-1.57.38-2.29V6.62H1.29C.47 8.24 0 10.06 0 12s.47 3.76 1.29 5.38l3.98-3.09z"
-      />
-      <path
-        fill="#EA4335"
-        d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.29 6.62l3.98 3.09C6.22 6.86 8.87 4.75 12 4.75z"
-      />
-    </svg>
-  );
-}
+const inputBase: CSSProperties = {
+  width: "100%",
+  padding: "0.65rem 0.9rem",
+  borderRadius: 12,
+  border: "1px solid #D1D5DB",
+  fontSize: "0.9rem",
+  background: "#fff",
+  outline: "none",
+  boxSizing: "border-box",
+  transition: "border-color 0.15s ease, box-shadow 0.15s ease",
+};
 
 export function LoginForm() {
+  const router = useRouter();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
   const [hovered, setHovered] = useState(false);
+  const [pressed, setPressed] = useState(false);
+
+  const focusStyle = (e: React.FocusEvent<HTMLInputElement>) => {
+    e.currentTarget.style.borderColor = "#2563EB";
+    e.currentTarget.style.boxShadow = "0 0 0 3px rgba(37, 99, 235, 0.15)";
+  };
+  const blurStyle = (e: React.FocusEvent<HTMLInputElement>) => {
+    e.currentTarget.style.borderColor = "#D1D5DB";
+    e.currentTarget.style.boxShadow = "none";
+  };
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!email.trim() || !password) {
+      setError("Email dan password wajib diisi.");
+      return;
+    }
+    setError(null);
+    setPending(true);
+    const res = await signIn("credentials", {
+      email: email.trim(),
+      password,
+      redirect: false,
+    });
+    setPending(false);
+    if (!res?.ok) {
+      setError("Email atau password salah.");
+      return;
+    }
+    router.replace("/");
+    router.refresh();
+  };
 
   return (
-    <button
-      type="button"
-      onClick={() => signIn("google", { callbackUrl: "/" })}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: "0.625rem",
-        width: "100%",
-        padding: "0.625rem 1rem",
-        border: "none",
-        borderRadius: 3,
-        background: hovered ? "#D97706" : "#F59E0B",
-        color: "#000000",
-        fontSize: "0.9375rem",
-        fontWeight: 600,
-        cursor: "pointer",
-        boxShadow: "0 1px 2px rgba(0, 0, 0, 0.05)",
-        transition: "background-color 0.2s ease",
-      }}
-    >
-      <GoogleIcon size={18} />
-      Masuk dengan Google
-    </button>
+    <form onSubmit={submit} style={{ display: "flex", flexDirection: "column", gap: "0.9rem" }}>
+      <div style={{ textAlign: "left" }}>
+        <label
+          htmlFor="login-email"
+          style={{ display: "block", fontSize: "0.8rem", fontWeight: 600, color: "#374151", marginBottom: "0.35rem" }}
+        >
+          Email
+        </label>
+        <input
+          id="login-email"
+          type="email"
+          autoComplete="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          onFocus={focusStyle}
+          onBlur={blurStyle}
+          placeholder="email@soulparking.co.id"
+          style={inputBase}
+        />
+      </div>
+
+      <div style={{ textAlign: "left" }}>
+        <label
+          htmlFor="login-password"
+          style={{ display: "block", fontSize: "0.8rem", fontWeight: 600, color: "#374151", marginBottom: "0.35rem" }}
+        >
+          Password
+        </label>
+        <div style={{ position: "relative" }}>
+          <input
+            id="login-password"
+            type={showPassword ? "text" : "password"}
+            autoComplete="current-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            onFocus={focusStyle}
+            onBlur={blurStyle}
+            placeholder="••••••••"
+            style={{ ...inputBase, paddingRight: "2.6rem" }}
+          />
+          <button
+            type="button"
+            aria-label={showPassword ? "Sembunyikan password" : "Tampilkan password"}
+            title={showPassword ? "Sembunyikan password" : "Tampilkan password"}
+            onClick={() => setShowPassword((v) => !v)}
+            style={{
+              position: "absolute",
+              top: "50%",
+              right: "0.4rem",
+              transform: "translateY(-50%)",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 34,
+              height: 34,
+              border: "none",
+              background: "transparent",
+              color: "#6B7280",
+              borderRadius: 8,
+              cursor: "pointer",
+            }}
+          >
+            {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+          </button>
+        </div>
+      </div>
+
+      {error && (
+        <div
+          style={{
+            fontSize: "0.8rem",
+            color: "#B91C1C",
+            background: "#FEF2F2",
+            border: "1px solid #FECACA",
+            borderRadius: 10,
+            padding: "0.5rem 0.75rem",
+            textAlign: "left",
+          }}
+        >
+          {error}
+        </div>
+      )}
+
+      <button
+        type="submit"
+        disabled={pending}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        onMouseDown={() => setPressed(true)}
+        onMouseUp={() => setPressed(false)}
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: "0.5rem",
+          width: "100%",
+          padding: "0.7rem 1rem",
+          border: "none",
+          borderRadius: 12,
+          background: hovered ? "#1D4ED8" : "#2563EB",
+          color: "#ffffff",
+          fontSize: "0.9rem",
+          fontWeight: 700,
+          cursor: pending ? "wait" : "pointer",
+          boxShadow: "0 4px 12px rgba(37, 99, 235, 0.25)",
+          transform: pressed ? "scale(0.99)" : "scale(1)",
+          transition: "background-color 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease",
+        }}
+      >
+        {pending && <Loader2 size={15} style={{ animation: "spin 0.8s linear infinite" }} />}
+        Masuk
+      </button>
+    </form>
   );
 }

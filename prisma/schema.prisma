@@ -74,8 +74,9 @@ model User {
   email     String   @unique
   name      String?
   image     String?
-  role      UserRole @default(DEVELOPER)
-  createdAt DateTime @default(now())
+  role        UserRole @default(DEVELOPER)
+  passwordHash String?
+  createdAt   DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   projects Project[]

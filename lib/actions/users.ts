@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/permissions";
 
@@ -9,10 +10,23 @@ export type UserActionState = {
   success?: boolean;
 };
 
+type ManageableRole = "QA" | "DEVELOPER" | "PRODUCT";
+
+/** Hash password user (bcrypt, cost 10). */
+function hashPassword(password: string): string {
+  return bcrypt.hashSync(password, 10);
+}
+
+function passwordError(password?: string): string | null {
+  if (!password || !password.trim()) return null;
+  if (password.length < 6) return "Password minimal 6 karakter.";
+  return null;
+}
+
 /** Ubah role user (hanya QA yang boleh). */
 export async function updateUserRole(
   userId: string,
-  role: "QA" | "DEVELOPER" | "PRODUCT"
+  role: ManageableRole
 ): Promise<UserActionState> {
   await requireRole("QA");
   try {
@@ -41,27 +55,33 @@ export async function removeUser(userId: string): Promise<UserActionState> {
   }
 }
 
-/** Pre-authorize email (Tambah User): buat User record sehingga pemilik
- *  email bisa login via Google OAuth. Hanya QA. */
-export async function addUserByEmail(
-  data: { name?: string; email: string; role: "QA" | "DEVELOPER" | "PRODUCT" }
-): Promise<UserActionState> {
+/** Tambah user baru dengan email + password (login credentials). Hanya QA. */
+export async function addUserByEmail(data: {
+  name?: string;
+  email: string;
+  role: ManageableRole;
+  password?: string;
+}): Promise<UserActionState> {
   await requireRole("QA");
   const normalized = data.email.trim().toLowerCase();
   if (!normalized.includes("@")) {
     return { error: "Email tidak valid." };
   }
+  const pwdErr = passwordError(data.password);
+  if (pwdErr) return { error: pwdErr };
+  const passwordHash = data.password ? hashPassword(data.password) : null;
+
   try {
-    await prisma.user.upsert({
-      where: { email: normalized },
-      create: {
+    const existing = await prisma.user.findUnique({ where: { email: normalized } });
+    if (existing) {
+      return { error: "User dengan email tersebut sudah ada." };
+    }
+    await prisma.user.create({
+      data: {
         email: normalized,
         name: data.name?.trim() || null,
         role: data.role,
-      },
-      update: {
-        name: data.name?.trim() || null,
-        role: data.role,
+        passwordHash,
       },
     });
     revalidatePath("/settings");
@@ -72,16 +92,24 @@ export async function addUserByEmail(
   }
 }
 
-/** Update data user (nama, email, role). Hanya QA. */
+/** Update data user (nama, email, role) & opsional reset password. Hanya QA. */
 export async function updateUser(
   userId: string,
-  data: { name?: string; email: string; role: "QA" | "DEVELOPER" | "PRODUCT" }
+  data: {
+    name?: string;
+    email: string;
+    role: ManageableRole;
+    password?: string;
+  }
 ): Promise<UserActionState> {
   await requireRole("QA");
   const normalized = data.email.trim().toLowerCase();
   if (!normalized.includes("@")) {
     return { error: "Email tidak valid." };
   }
+  const pwdErr = passwordError(data.password);
+  if (pwdErr) return { error: pwdErr };
+
   try {
     await prisma.user.update({
       where: { id: userId },
@@ -89,6 +117,7 @@ export async function updateUser(
         name: data.name?.trim() || null,
         email: normalized,
         role: data.role,
+        ...(data.password ? { passwordHash: hashPassword(data.password) } : {}),
       },
     });
     revalidatePath("/settings");

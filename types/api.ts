@@ -415,16 +415,73 @@ export type RunDetailPayload = {
   suites: { id: string; name: string }[];
 };
 
-/* ---------- /api/reports ---------- */
+/* ---------- /api/reports (Testing Inventory & Gap) ---------- */
+export type ReportsCompositionItem = {
+  key: string;
+  label: string;
+  count: number;
+  /** null bila total 0 (jangan tampilkan 0%). */
+  pct: number | null;
+};
+
+export type ReportsSuiteGapItem = {
+  suiteId: string;
+  name: string;
+  projectId: string;
+  projectName: string;
+  platform: PlatformCode | null;
+  total: number;
+  /** TC yang pernah punya hasil eksekusi (definisi sama dengan Dashboard). */
+  tested: number;
+  /** TC yang belum pernah di-test. */
+  untested: number;
+};
+
+export type ReportsSuiteWithoutTc = {
+  suiteId: string;
+  name: string;
+  projectId: string;
+  projectName: string;
+};
+
+export type ReportsOrphanTc = {
+  id: string;
+  tcId: string;
+  title: string;
+};
+
+/** Ringkasan repository yang sudah difilter (dihitung ulang di client dari
+ *  daftar suite + orphan, supaya responsif terhadap filter Platform/Project). */
+export type ReportsProjectOption = {
+  id: string;
+  name: string;
+  platform: PlatformCode | null;
+};
+
 export type ReportsPayload = {
-  summary: { totalTC: number; executed: number; passRate: number };
-  projects: { id: string; name: string; total: number; automated: number; coveragePct: number }[];
-  suites: {
-    suiteId: string;
-    name: string;
-    total: number;
+  inventory: {
+    totalTC: number;
+    /** TC yang punya suite; sisanya orphan (lihat orphanTc). */
+    inSuite: number;
+    suites: number;
+    projects: number;
+    /** TC yang belum pernah di-test menurut definisi bersama. */
+    untested: number;
+    /** null bila total TC 0. */
+    untestedPct: number | null;
+  };
+  priorityComposition: ReportsCompositionItem[];
+  statusComposition: ReportsCompositionItem[];
+  coverageGap: ReportsSuiteGapItem[];
+  automation: {
     automated: number;
-    coveragePct: number;
-  }[];
-  recentRuns: { id: string; name: string; projectName: string; status: string; createdAt: string }[];
+    /** null bila total TC 0. */
+    pct: number | null;
+  };
+  suitesWithoutTc: ReportsSuiteWithoutTc[];
+  orphanTc: ReportsOrphanTc[];
+  /** Opsi filter Project (semua project, tidak terpengaruh filter). */
+  projects: ReportsProjectOption[];
+  /** true bila belum ada eksekusi sama sekali di sistem. */
+  noExecutionYet: boolean;
 };

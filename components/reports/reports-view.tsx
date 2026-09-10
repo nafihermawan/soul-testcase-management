@@ -1,19 +1,64 @@
 "use client";
 
-import { Badge, Card, PanelHeader, ProgressBar } from "@/components/ui";
-import { TestRunStatusBadge } from "@/components/test-runs/test-run-status-badge";
-import {
-  ErrorBlock,
-  StatsCardsSkeleton,
-  TableCardSkeleton,
-} from "@/components/ui/data-states";
+import { useMemo, useState } from "react";
+import { ErrorBlock, StatsCardsSkeleton, TableCardSkeleton } from "@/components/ui/data-states";
+import { FilterSelect } from "@/components/ui/filter-select";
 import { useApi } from "@/lib/client/use-api";
+import { TC_PRIORITY_COLOR, TC_STATUS_COLOR, pct } from "@/lib/qa-metrics";
+import { InventorySummary } from "@/components/reports/inventory-summary";
+import { CompositionCard } from "@/components/reports/composition-card";
+import { CoverageGapTable } from "@/components/reports/coverage-gap-table";
+import { RepositoryHygiene } from "@/components/reports/repository-hygiene";
 import type { ReportsPayload } from "@/types/api";
 
-const barColor = (v: number) => (v >= 70 ? "var(--success)" : v >= 40 ? "var(--warning)" : "var(--danger)");
+const ALL = "ALL";
 
 export function ReportsView() {
   const { data, error, loading, reload } = useApi<ReportsPayload>("/api/reports");
+  const [platform, setPlatform] = useState<string>(ALL);
+  const [project, setProject] = useState<string>(ALL);
+
+  const isFiltered = platform !== ALL || project !== ALL;
+
+  // Semua section yang punya keterkaitan project/suite dihitung ulang di client
+  // dari daftar suite, supaya filter Platform/Project konsisten di seluruh halaman.
+  const view = useMemo(() => {
+    if (!data) return null;
+    const byPlatform = (p: string | null) =>
+      platform === ALL || (p ?? "").toUpperCase() === platform;
+
+    const suites = data.coverageGap.filter(
+      (s) => byPlatform(s.platform) && (project === ALL || s.projectId === project)
+    );
+    const platformOfProject = (projectId: string) =>
+      data.projects.find((p) => p.id === projectId)?.platform ?? null;
+    const suitesWithoutTc = data.suitesWithoutTc.filter(
+      (s) => (project === ALL || s.projectId === project) && byPlatform(platformOfProject(s.projectId))
+    );
+
+    const inSuite = suites.reduce((sum, s) => sum + s.total, 0);
+    const untested = suites.reduce((sum, s) => sum + s.untested, 0);
+    // TC tanpa suite tidak melekat pada project mana pun -> hanya muncul saat
+    // tidak ada filter aktif, agar angka tidak mengklaim milik satu project.
+    const orphanCount = isFiltered ? 0 : data.orphanTc.length;
+    const totalTC = inSuite + orphanCount;
+    const projectIds = new Set(suites.map((s) => s.projectId));
+
+    return {
+      suites,
+      suitesWithoutTc,
+      inventory: {
+        totalTC,
+        inSuite,
+        // Suite kosong tetap dihitung, kalau tidak jumlahnya menyesatkan
+        // (16 vs 20 suite yang benar-benar ada).
+        suites: suites.length + suitesWithoutTc.length,
+        projects: isFiltered ? projectIds.size : data.inventory.projects,
+        untested,
+        untestedPct: pct(untested, inSuite),
+      },
+    };
+  }, [data, platform, project, isFiltered]);
 
   if (error) {
     return (
@@ -23,12 +68,12 @@ export function ReportsView() {
     );
   }
 
-  if (loading || !data) {
+  if (loading || !data || !view) {
     return (
       <main style={{ fontFamily: "var(--font-sans, system-ui, sans-serif)", width: "100%" }}>
         <div style={{ marginBottom: "1.25rem" }}>
-          <div className="skeleton-block" style={{ width: 140, height: 22 }} />
-          <div className="skeleton-block" style={{ width: 260, height: 12, marginTop: "0.5rem" }} />
+          <div className="skeleton-block" style={{ width: 160, height: 22 }} />
+          <div className="skeleton-block" style={{ width: 320, height: 12, marginTop: "0.5rem" }} />
         </div>
         <StatsCardsSkeleton count={3} />
         <div style={{ height: "1.25rem" }} />
@@ -38,141 +83,88 @@ export function ReportsView() {
   }
 
   return (
-    <main style={{ fontFamily: "var(--font-sans, system-ui, sans-serif)", width: "100%" }}>
-      <h1 style={{ fontSize: "1.4rem", fontWeight: 800, margin: "0 0 0.25rem" }}>
-        Reports
-      </h1>
-      <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginBottom: "1.5rem" }}>
-        Ringkasan coverage otomasi dan hasil eksekusi.
-      </p>
-
-      {/* Summary cards */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "1rem", marginBottom: "1.25rem" }}>
-        <Card style={{ padding: "1rem 1.25rem" }}>
-          <div style={{ fontSize: "0.8rem", color: "var(--text-muted)", fontWeight: 600 }}>Total Test Cases</div>
-          <div style={{ fontSize: "1.6rem", fontWeight: 800 }}>{data.summary.totalTC}</div>
-        </Card>
-        <Card style={{ padding: "1rem 1.25rem" }}>
-          <div style={{ fontSize: "0.8rem", color: "var(--text-muted)", fontWeight: 600 }}>Executed</div>
-          <div style={{ fontSize: "1.6rem", fontWeight: 800 }}>{data.summary.executed}</div>
-        </Card>
-        <Card style={{ padding: "1rem 1.25rem" }}>
-          <div style={{ fontSize: "0.8rem", color: "var(--text-muted)", fontWeight: 600 }}>Pass Rate</div>
-          <div style={{ fontSize: "1.6rem", fontWeight: 800, color: "var(--success)" }}>{data.summary.passRate}%</div>
-        </Card>
+    <main
+      style={{
+        fontFamily: "var(--font-sans, system-ui, sans-serif)",
+        width: "100%",
+        display: "flex",
+        flexDirection: "column",
+        gap: "1.5rem",
+      }}
+    >
+      {/* Header + filter */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "flex-start",
+          justifyContent: "space-between",
+          gap: "1rem",
+          flexWrap: "wrap",
+        }}
+      >
+        <div>
+          <h1 style={{ fontSize: "1.4rem", fontWeight: 800, margin: 0 }}>Reports</h1>
+          <p style={{ margin: "0.25rem 0 0", fontSize: "0.85rem", color: "var(--text-muted)" }}>
+            Inventaris test case &amp; celah coverage repository.
+          </p>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+          <FilterSelect
+            label="Platform"
+            ariaLabel="Filter platform"
+            value={platform}
+            onChange={setPlatform}
+            options={[
+              { value: ALL, label: "Semua Platform" },
+              { value: "WEB", label: "Web" },
+              { value: "MOBILE", label: "Mobile" },
+              { value: "HARDWARE", label: "Hardware" },
+              { value: "API", label: "API" },
+            ]}
+          />
+          <FilterSelect
+            label="Project"
+            ariaLabel="Filter project"
+            value={project}
+            onChange={setProject}
+            options={[
+              { value: ALL, label: "Semua Project" },
+              ...data.projects
+                .filter((p) => platform === ALL || (p.platform ?? "").toUpperCase() === platform)
+                .map((p) => ({ value: p.id, label: p.name })),
+            ]}
+          />
+        </div>
       </div>
 
-      {/* Coverage per project */}
-      <Card style={{ marginBottom: "1.25rem" }}>
-        <PanelHeader title="Coverage per Project" />
-        <div style={{ padding: "0.75rem 1.25rem" }}>
-          {data.projects.length === 0 ? (
-            <p style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>Belum ada project.</p>
-          ) : (
-            data.projects.map((p) => (
-              <div key={p.id} style={{ padding: "0.6rem 0", borderBottom: "1px solid var(--border)" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                  <span style={{ fontWeight: 700, fontSize: "0.9rem", width: 200, flexShrink: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {p.name}
-                  </span>
-                  <span style={{ fontSize: "0.78rem", color: "var(--text-muted)", width: 80, textAlign: "right" }}>{p.total} TC</span>
-                  <span style={{ flex: 1, minWidth: 80 }}>
-                    <ProgressBar value={p.coveragePct} color={barColor(p.coveragePct)} />
-                  </span>
-                  <span style={{ fontSize: "0.85rem", fontWeight: 700, width: 48, textAlign: "right" }}>{p.coveragePct}%</span>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      </Card>
+      {/* Ringkasan inventaris (mengikuti filter) */}
+      <InventorySummary inventory={view.inventory} />
 
-      {/* Coverage per suite */}
-      <Card>
-        <PanelHeader title="Coverage per Suite" />
-        <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
-            <thead>
-              <tr style={{ color: "var(--text-muted)", textAlign: "left", background: "#F8FAFC" }}>
-                <th style={{ padding: "0.6rem 1.25rem", fontWeight: 600 }}>Suite</th>
-                <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600 }}>Total TC</th>
-                <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600 }}>Automated</th>
-                <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600 }}>Coverage</th>
-                <th style={{ padding: "0.6rem 1.25rem", fontWeight: 600 }}>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.suites.length === 0 ? (
-                <tr>
-                  <td colSpan={5} style={{ padding: "1.25rem", color: "var(--text-muted)", textAlign: "center" }}>
-                    Belum ada suite.
-                  </td>
-                </tr>
-              ) : (
-                data.suites.map((s) => (
-                  <tr key={s.suiteId} style={{ borderTop: "1px solid var(--border)" }}>
-                    <td style={{ padding: "0.6rem 1.25rem", fontWeight: 600 }}>{s.name}</td>
-                    <td style={{ padding: "0.6rem 0.5rem", color: "var(--text-secondary)" }}>{s.total}</td>
-                    <td style={{ padding: "0.6rem 0.5rem", color: "var(--text-secondary)" }}>{s.automated}</td>
-                    <td style={{ padding: "0.6rem 0.5rem" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                        <span style={{ flex: 1, minWidth: 80, maxWidth: 160 }}>
-                          <ProgressBar value={s.coveragePct} color={barColor(s.coveragePct)} />
-                        </span>
-                        <span style={{ fontWeight: 700, width: 42, textAlign: "right" }}>{s.coveragePct}%</span>
-                      </div>
-                    </td>
-                    <td style={{ padding: "0.6rem 1.25rem" }}>
-                      <Badge tone={s.coveragePct >= 70 ? "success" : s.coveragePct >= 40 ? "warning" : "danger"}>
-                        {s.coveragePct >= 70 ? "Baik" : s.coveragePct >= 40 ? "Sedang" : "Rendah"}
-                      </Badge>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </Card>
+      {/* Komposisi priority & status — repository-wide, ditandai eksplisit */}
+      <div className="dash-split dash-split-7-5">
+        <CompositionCard
+          title="Komposisi Priority"
+          hint={isFiltered ? "Seluruh repository" : undefined}
+          items={data.priorityComposition}
+          colors={TC_PRIORITY_COLOR}
+        />
+        <CompositionCard
+          title="Komposisi Status"
+          hint={isFiltered ? "Seluruh repository" : undefined}
+          items={data.statusComposition}
+          colors={TC_STATUS_COLOR}
+        />
+      </div>
 
-      {/* Recent runs */}
-      <Card style={{ marginTop: "1.25rem" }}>
-        <PanelHeader title="Run Terakhir" />
-        <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
-            <thead>
-              <tr style={{ color: "var(--text-muted)", textAlign: "left", background: "#F8FAFC" }}>
-                <th style={{ padding: "0.6rem 1.25rem", fontWeight: 600 }}>Nama Run</th>
-                <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600 }}>Project</th>
-                <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600 }}>Status</th>
-                <th style={{ padding: "0.6rem 1.25rem", fontWeight: 600 }}>Tanggal</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.recentRuns.length === 0 ? (
-                <tr>
-                  <td colSpan={4} style={{ padding: "1.25rem", color: "var(--text-muted)", textAlign: "center" }}>
-                    Belum ada test run.
-                  </td>
-                </tr>
-              ) : (
-                data.recentRuns.map((r) => (
-                  <tr key={r.id} style={{ borderTop: "1px solid var(--border)" }}>
-                    <td style={{ padding: "0.6rem 1.25rem", fontWeight: 600 }}>{r.name}</td>
-                    <td style={{ padding: "0.6rem 0.5rem", color: "var(--text-secondary)" }}>{r.projectName}</td>
-                    <td style={{ padding: "0.6rem 0.5rem" }}>
-                      <TestRunStatusBadge status={r.status} />
-                    </td>
-                    <td style={{ padding: "0.6rem 1.25rem", color: "var(--text-muted)" }}>
-                      {new Date(r.createdAt).toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" })}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </Card>
+      {/* Celah coverage */}
+      <CoverageGapTable suites={view.suites} noExecutionYet={data.noExecutionYet} />
+
+      {/* Higienitas repository */}
+      <RepositoryHygiene
+        suitesWithoutTc={view.suitesWithoutTc}
+        orphanTc={isFiltered ? [] : data.orphanTc}
+        automation={data.automation}
+      />
     </main>
   );
 }

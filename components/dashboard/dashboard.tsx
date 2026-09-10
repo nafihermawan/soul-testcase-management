@@ -17,7 +17,7 @@ import {
   DashboardFilters,
   type DashboardFilterState,
 } from "@/components/dashboard/dashboard-filters";
-import { KpiCard } from "@/components/dashboard/kpi-card";
+import { KpiCard } from "@/components/ui/kpi-card";
 import { TestingHealth } from "@/components/dashboard/testing-health";
 import { ExecutionSummary } from "@/components/dashboard/execution-summary";
 import { ActionRequired, type ActionItem } from "@/components/dashboard/action-required";

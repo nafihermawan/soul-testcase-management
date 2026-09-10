@@ -170,3 +170,41 @@ export const ACTIVE_BUG_STATUSES = ["OPEN", "IN_PROGRESS"] as const;
 
 /** Status bug yang menandakan sudah diperbaiki & menunggu retest QA. */
 export const RETEST_BUG_STATUS = "RESOLVED";
+
+/* ---------- Komposisi inventaris Test Case (Reports) ---------- */
+
+/** Urutan tampilan komposisi priority: paling berisiko dulu. */
+export const TC_PRIORITY_ORDER = ["CRITICAL", "HIGH", "MEDIUM", "LOW"] as const;
+export type TcPriority = (typeof TC_PRIORITY_ORDER)[number];
+
+/** Urutan tampilan komposisi status TC: siap dipakai dulu. */
+export const TC_STATUS_ORDER = ["ACTIVE", "DRAFT", "DEPRECATED"] as const;
+export type TcStatus = (typeof TC_STATUS_ORDER)[number];
+
+export const TC_PRIORITY_LABEL: Record<string, string> = {
+  CRITICAL: "Critical",
+  HIGH: "High",
+  MEDIUM: "Medium",
+  LOW: "Low",
+};
+
+export const TC_STATUS_LABEL: Record<string, string> = {
+  ACTIVE: "Active",
+  DRAFT: "Draft",
+  DEPRECATED: "Deprecated",
+};
+
+/** Warna bar komposisi priority (makin tinggi makin menonjol). */
+export const TC_PRIORITY_COLOR: Record<string, string> = {
+  CRITICAL: "var(--danger)",
+  HIGH: "var(--warning)",
+  MEDIUM: "var(--info)",
+  LOW: "var(--border-strong)",
+};
+
+export const TC_STATUS_COLOR: Record<string, string> = {
+  ACTIVE: "var(--success)",
+  DRAFT: "var(--info)",
+  DEPRECATED: "var(--border-strong)",
+};
+

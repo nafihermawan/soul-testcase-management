@@ -17,7 +17,7 @@ import { TestCasePageHeader } from "@/components/test-cases/detail-header";
 import { BugsTab } from "@/components/test-cases/bugs-tab";
 import { Tabs } from "@/components/test-cases/tabs";
 import { TestDataCodeblock } from "@/components/test-cases/test-data-codeblock";
-import { ErrorBlock, LoadingBlock, NotFoundBlock } from "@/components/ui/data-states";
+import { ErrorBlock, NotFoundBlock, SuiteSkeleton } from "@/components/ui/data-states";
 import { RefreshContext } from "@/lib/client/refresh-context";
 import { useApi } from "@/lib/client/use-api";
 import type { TestCaseDetailPayload } from "@/types/api";
@@ -224,7 +224,7 @@ export function TestCaseDetailView({
   if (loading || !data) {
     return (
       <main style={{ fontFamily: "var(--font-sans, system-ui, sans-serif)", width: "100%" }}>
-        <LoadingBlock label="Memuat test case…" />
+        <SuiteSkeleton />
       </main>
     );
   }

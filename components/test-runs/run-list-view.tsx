@@ -6,7 +6,7 @@ import { CreateRunButton } from "@/components/test-runs/create-run-button";
 import { DeleteRunButton } from "@/components/test-runs/delete-run-button";
 import { HistoryControls } from "@/components/test-runs/history-controls";
 import { HistoryPagination } from "@/components/test-runs/history-pagination";
-import { ErrorBlock, LoadingBlock } from "@/components/ui/data-states";
+import { ErrorBlock, TableCardSkeleton } from "@/components/ui/data-states";
 import { useApi } from "@/lib/client/use-api";
 import type { ActiveRunsPayload } from "@/types/api";
 
@@ -45,7 +45,7 @@ export function RunListView({ searchParams }: { searchParams: ActiveRunsSearchPa
   if (loading || !data) {
     return (
       <main style={{ fontFamily: "var(--font-sans, system-ui, sans-serif)", width: "100%" }}>
-        <LoadingBlock label="Memuat active runs…" />
+        <TableCardSkeleton />
       </main>
     );
   }

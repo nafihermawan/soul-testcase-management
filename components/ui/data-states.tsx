@@ -94,6 +94,56 @@ export function TableCardSkeleton() {
   );
 }
 
+/** Skeleton modular: baris kartu metrik/statistik (mis. summary cards dashboard). */
+export function StatsCardsSkeleton({ count = 3 }: { count?: number }) {
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: `repeat(${count}, minmax(0, 1fr))`, gap: "1rem" }}>
+      {Array.from({ length: count }).map((_, i) => (
+        <div key={i} style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", padding: "1rem 1.25rem" }}>
+          <div className="skeleton-block" style={{ width: "55%", height: 12 }} />
+          <div className="skeleton-block" style={{ width: "35%", height: 22, marginTop: "0.6rem" }} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Skeleton modular: meniru card form (beberapa baris label + input). */
+export function FormCardSkeleton() {
+  return (
+    <div
+      style={{
+        width: "100%",
+        background: "#fff",
+        border: "1px solid var(--border)",
+        borderRadius: "var(--radius-lg)",
+        boxShadow: "0 1px 3px rgba(15, 23, 42, 0.06)",
+        overflow: "hidden",
+      }}
+    >
+      <div
+        style={{
+          padding: "1rem 1.25rem",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+        }}
+      >
+        <div className="skeleton-block" style={{ width: 160, height: 16 }} />
+        <div className="skeleton-block" style={{ width: 80, height: 32, borderRadius: 8 }} />
+      </div>
+      <div style={{ padding: "0 1.25rem 1.25rem", display: "flex", flexDirection: "column", gap: "0.9rem" }}>
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} style={{ display: "flex", flexDirection: "column", gap: "0.35rem" }}>
+            <div className="skeleton-block" style={{ width: "30%", height: 10 }} />
+            <div className="skeleton-block" style={{ width: "100%", height: 38, borderRadius: 8 }} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /** Susunan 2-card main layout: HeaderDetailSkeleton + TableCardSkeleton vertikal.
  *  Digunakan untuk halaman detail suite yang menampilkan kartu header + daftar test case. */
 export function SuiteSkeleton() {

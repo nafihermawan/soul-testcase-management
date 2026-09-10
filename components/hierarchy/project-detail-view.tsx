@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { SuiteTree } from "@/components/hierarchy/suite-tree";
-import { ErrorBlock, LoadingBlock, NotFoundBlock } from "@/components/ui/data-states";
+import { ErrorBlock, NotFoundBlock, SuiteSkeleton } from "@/components/ui/data-states";
 import { RefreshContext } from "@/lib/client/refresh-context";
 import { useApi } from "@/lib/client/use-api";
 import type { ProjectTreePayload } from "@/types/api";
@@ -32,7 +32,7 @@ export function ProjectDetailView({ projectId }: { projectId: string }) {
   if (loading || !data) {
     return (
       <main style={{ fontFamily: "var(--font-sans, system-ui, sans-serif)", width: "100%" }}>
-        <LoadingBlock label="Memuat project…" />
+        <SuiteSkeleton />
       </main>
     );
   }

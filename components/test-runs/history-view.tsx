@@ -5,7 +5,7 @@ import { HistoryRunRow } from "@/components/test-runs/history-run-row";
 import { HistoryControls } from "@/components/test-runs/history-controls";
 import { HistoryPagination } from "@/components/test-runs/history-pagination";
 import { DeleteRunButton } from "@/components/test-runs/delete-run-button";
-import { ErrorBlock, LoadingBlock } from "@/components/ui/data-states";
+import { ErrorBlock, TableCardSkeleton } from "@/components/ui/data-states";
 import { useApi } from "@/lib/client/use-api";
 import type { HistoryPayload } from "@/types/api";
 
@@ -45,7 +45,7 @@ export function HistoryView({ searchParams }: { searchParams: HistorySearchParam
   if (loading || !data) {
     return (
       <main style={{ fontFamily: "var(--font-sans)", width: "100%" }}>
-        <LoadingBlock label="Memuat riwayat run…" />
+        <TableCardSkeleton />
       </main>
     );
   }

@@ -3,7 +3,11 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { AutomationPageClient } from "@/components/automation/automation-page-client";
-import { ErrorBlock, LoadingBlock } from "@/components/ui/data-states";
+import {
+  ErrorBlock,
+  StatsCardsSkeleton,
+  TableCardSkeleton,
+} from "@/components/ui/data-states";
 import { useApi } from "@/lib/client/use-api";
 import type { AutomationPayload, Me } from "@/types/api";
 
@@ -25,11 +29,15 @@ export default function AutomationPage() {
   return (
     <main style={{ fontFamily: "var(--font-sans, system-ui, sans-serif)", width: "100%" }}>
       {!me.data || blocked ? (
-        <LoadingBlock label="Memeriksa akses…" />
+        <TableCardSkeleton />
       ) : error ? (
         <ErrorBlock message={error.message} onRetry={reload} />
       ) : loading || !data ? (
-        <LoadingBlock label="Memuat data automation…" />
+        <>
+          <StatsCardsSkeleton count={4} />
+          <div style={{ height: "1.25rem" }} />
+          <TableCardSkeleton />
+        </>
       ) : (
         <AutomationPageClient
           canManage={role === "QA"}

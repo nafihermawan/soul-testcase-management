@@ -1,7 +1,7 @@
 "use client";
 
 import { BugsPageClient } from "@/components/bugs/bugs-table";
-import { ErrorBlock, LoadingBlock } from "@/components/ui/data-states";
+import { ErrorBlock, TableCardSkeleton } from "@/components/ui/data-states";
 import { useApi } from "@/lib/client/use-api";
 import type { BugsPayload } from "@/types/api";
 
@@ -13,7 +13,7 @@ export default function BugsPage() {
       {error ? (
         <ErrorBlock message={error.message} onRetry={reload} />
       ) : loading || !data ? (
-        <LoadingBlock label="Memuat daftar bug…" />
+        <TableCardSkeleton />
       ) : (
         <BugsPageClient bugs={data.bugs} reload={reload} />
       )}

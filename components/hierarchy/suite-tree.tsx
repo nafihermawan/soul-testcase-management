@@ -141,7 +141,19 @@ function SuiteRow({
         onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-muted)")}
         onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
       >
-        <td style={{ padding: "0.6rem 1.25rem" }}>
+        <td style={{ padding: "0.6rem 1.25rem", textAlign: "left" }}>
+          <span
+            style={{
+              fontFamily: "var(--font-mono, monospace)",
+              fontSize: 14,
+              fontWeight: 400,
+              color: "#4B5563",
+            }}
+          >
+            {suite.code}
+          </span>
+        </td>
+        <td style={{ padding: "0.6rem 0.5rem" }}>
           <Link
             href={`/suites/${suite.id}`}
             style={{
@@ -156,18 +168,6 @@ function SuiteRow({
           >
             {suite.name}
           </Link>
-        </td>
-        <td style={{ padding: "0.6rem 0.5rem", textAlign: "left" }}>
-          <span
-            style={{
-              fontFamily: "var(--font-mono, monospace)",
-              fontSize: 14,
-              fontWeight: 400,
-              color: "#4B5563",
-            }}
-          >
-            {suite.code}
-          </span>
         </td>
         <td
           style={{
@@ -397,8 +397,8 @@ export function SuiteTree({
                     borderBottom: "1px solid #E5E7EB",
                   }}
                 >
-                  <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600 }}>id Suite</th>
-                  <th style={{ padding: "0.6rem 1.25rem", fontWeight: 600 }}>Nama Suite</th>
+                  <th style={{ padding: "0.6rem 1.25rem", fontWeight: 600 }}>id Suite</th>
+                  <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600 }}>Nama Suite</th>
                   <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600 }}>Jumlah Test Case</th>
                   <th style={{ padding: "0.6rem 0.5rem", fontWeight: 500, color: "#6B7280" }}>
                     Last Updated

@@ -1,7 +1,7 @@
 "use client";
 
 import { RunExecutor } from "@/components/test-runs/run-executor";
-import { ErrorBlock, LoadingBlock, NotFoundBlock } from "@/components/ui/data-states";
+import { ErrorBlock, NotFoundBlock, SuiteSkeleton } from "@/components/ui/data-states";
 import { RefreshContext } from "@/lib/client/refresh-context";
 import { useApi } from "@/lib/client/use-api";
 import type { RunDetailPayload } from "@/types/api";
@@ -28,7 +28,7 @@ export function RunDetailView({ runId }: { runId: string }) {
   if (loading || !data) {
     return (
       <main style={{ fontFamily: "var(--font-sans)", width: "100%" }}>
-        <LoadingBlock label="Memuat detail run…" />
+        <SuiteSkeleton />
       </main>
     );
   }

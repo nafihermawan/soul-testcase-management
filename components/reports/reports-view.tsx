@@ -2,7 +2,11 @@
 
 import { Badge, Card, PanelHeader, ProgressBar } from "@/components/ui";
 import { TestRunStatusBadge } from "@/components/test-runs/test-run-status-badge";
-import { ErrorBlock, LoadingBlock } from "@/components/ui/data-states";
+import {
+  ErrorBlock,
+  StatsCardsSkeleton,
+  TableCardSkeleton,
+} from "@/components/ui/data-states";
 import { useApi } from "@/lib/client/use-api";
 import type { ReportsPayload } from "@/types/api";
 
@@ -22,7 +26,13 @@ export function ReportsView() {
   if (loading || !data) {
     return (
       <main style={{ fontFamily: "var(--font-sans, system-ui, sans-serif)", width: "100%" }}>
-        <LoadingBlock label="Memuat laporan…" />
+        <div style={{ marginBottom: "1.25rem" }}>
+          <div className="skeleton-block" style={{ width: 140, height: 22 }} />
+          <div className="skeleton-block" style={{ width: 260, height: 12, marginTop: "0.5rem" }} />
+        </div>
+        <StatsCardsSkeleton count={3} />
+        <div style={{ height: "1.25rem" }} />
+        <TableCardSkeleton />
       </main>
     );
   }

@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { ExpressRunForm } from "@/components/test-runs/express-run";
-import { ErrorBlock, LoadingBlock } from "@/components/ui/data-states";
+import { ErrorBlock, FormCardSkeleton, HeaderDetailSkeleton } from "@/components/ui/data-states";
 import { useApi } from "@/lib/client/use-api";
 import type { Me, RunOptionsPayload } from "@/types/api";
 
@@ -25,7 +25,7 @@ export function CreateRunView() {
   if (!me.data || blocked) {
     return (
       <main style={{ fontFamily: "var(--font-sans)", width: "100%" }}>
-        <LoadingBlock label="Memeriksa akses…" />
+        <HeaderDetailSkeleton />
       </main>
     );
   }
@@ -41,7 +41,8 @@ export function CreateRunView() {
   if (loading || !data) {
     return (
       <main style={{ fontFamily: "var(--font-sans)", width: "100%" }}>
-        <LoadingBlock label="Memuat data form…" />
+        <HeaderDetailSkeleton />
+        <FormCardSkeleton />
       </main>
     );
   }

@@ -1,7 +1,11 @@
 "use client";
 
 import { Dashboard } from "@/components/dashboard/dashboard";
-import { ErrorBlock, LoadingBlock } from "@/components/ui/data-states";
+import {
+  ErrorBlock,
+  StatsCardsSkeleton,
+  TableCardSkeleton,
+} from "@/components/ui/data-states";
 import { useApi } from "@/lib/client/use-api";
 import type { DashboardPayload } from "@/types/api";
 
@@ -19,7 +23,9 @@ export default function Home() {
   if (loading || !data) {
     return (
       <main style={{ fontFamily: "var(--font-sans, system-ui, sans-serif)", width: "100%" }}>
-        <LoadingBlock label="Memuat dashboard…" />
+        <StatsCardsSkeleton count={3} />
+        <div style={{ height: "1.25rem" }} />
+        <TableCardSkeleton />
       </main>
     );
   }

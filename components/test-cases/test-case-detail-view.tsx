@@ -13,6 +13,7 @@ import {
   UserRound,
 } from "lucide-react";
 import { AutomationTab } from "@/components/test-cases/automation-tab";
+import { AttachmentsPanel } from "@/components/attachments/attachments-panel";
 import { TestCasePageHeader } from "@/components/test-cases/detail-header";
 import { BugsTab } from "@/components/test-cases/bugs-tab";
 import { Tabs } from "@/components/test-cases/tabs";
@@ -712,12 +713,14 @@ export function TestCaseDetailView({
         borderRadius: "var(--radius-lg)",
         boxShadow: "var(--shadow-md)",
         padding: "1.5rem",
-        textAlign: "center",
-        color: "var(--text-muted)",
-        fontSize: "0.9rem",
       }}
     >
-      Belum ada attachment. (Fitur menyusul — Step 5)
+      <AttachmentsPanel
+        owner={{ testCaseId: tc.id }}
+        attachments={tc.attachments ?? []}
+        canEdit={tc.canEdit}
+        onChanged={reload}
+      />
     </div>
   );
 

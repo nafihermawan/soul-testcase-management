@@ -1,10 +1,12 @@
 "use client";
 
 import { useState, type CSSProperties } from "react";
-import { ExternalLink, Search, Trash2 } from "lucide-react";
+import { ExternalLink, Paperclip, Search, Trash2 } from "lucide-react";
 import { deleteBug, updateBugStatus } from "@/lib/actions/automation-bugs";
 import { ConfirmDialog, Toast, useToast } from "@/components/ui/feedback";
+import { BugAttachmentsModal } from "@/components/bugs/bug-attachments-modal";
 import { entityCode } from "@/lib/format";
+import type { AttachmentItem } from "@/types/api";
 
 export type BugRow = {
   id: string;
@@ -16,6 +18,7 @@ export type BugRow = {
   createdAt: string;
   testCase: { id: string; tcId: string; title: string } | null;
   createdBy: { name: string | null } | null;
+  attachments?: AttachmentItem[];
 };
 
 const statusStyle: Record<BugRow["status"], { bg: string; color: string }> = {
@@ -34,13 +37,17 @@ const severityStyle: Record<string, { bg: string; color: string }> = {
 
 export function BugsPageClient({
   bugs,
+  canAttach = false,
   reload,
 }: {
   bugs: BugRow[];
+  /** Upload/hapus attachment butuh role QA. */
+  canAttach?: boolean;
   reload?: () => void;
 }) {
   const [deleteTarget, setDeleteTarget] = useState<BugRow | null>(null);
   const [deletePending, setDeletePending] = useState(false);
+  const [evidenceBug, setEvidenceBug] = useState<BugRow | null>(null);
   const { toast, showToast, dismissToast } = useToast();
 
   // Filter pencarian header banner
@@ -254,6 +261,27 @@ export function BugsPageClient({
                             {b.description}
                           </div>
                         )}
+                        <button
+                          type="button"
+                          onClick={() => setEvidenceBug(b)}
+                          title="Screenshot / video evidence"
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "0.25rem",
+                            marginTop: 3,
+                            padding: "0.1rem 0.45rem",
+                            borderRadius: 999,
+                            border: "1px solid var(--border-strong)",
+                            background: "transparent",
+                            color: (b.attachments?.length ?? 0) > 0 ? "var(--brand-600)" : "var(--text-muted)",
+                            fontSize: "0.7rem",
+                            fontWeight: 600,
+                            cursor: "pointer",
+                          }}
+                        >
+                          <Paperclip size={11} /> {b.attachments?.length ?? 0}
+                        </button>
                       </td>
                       <td style={{ padding: "0.6rem 0.5rem" }}>
                         {sev ? (
@@ -313,6 +341,18 @@ export function BugsPageClient({
         onConfirm={removeBug}
         onCancel={() => setDeleteTarget(null)}
       />
+
+      {/* Modal evidence bug */}
+      {evidenceBug && (
+        <BugAttachmentsModal
+          bugId={evidenceBug.id}
+          bugTitle={evidenceBug.title}
+          attachments={evidenceBug.attachments ?? []}
+          canEdit={canAttach}
+          onClose={() => setEvidenceBug(null)}
+          onChanged={() => reload?.()}
+        />
+      )}
 
       <Toast toast={toast} onDismiss={dismissToast} />
     </>

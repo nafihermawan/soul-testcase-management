@@ -86,6 +86,7 @@ model User {
   runResultUpdates TestRunResult[]
   bugs    Bug[]
   activities ActivityLog[]
+  attachments Attachment[]
 }
 
 model Project {
@@ -176,6 +177,7 @@ model TestCase {
   automation AutomationLink?
   bugs       Bug[]
   activities ActivityLog[]
+  attachments Attachment[]
 
   @@index([suiteId, order])
   @@index([sectionId, order])
@@ -233,6 +235,7 @@ model TestRunResult {
   updatedBy  User?     @relation(fields: [updatedById], references: [id], onDelete: SetNull)
 
   bugs       Bug[]
+  attachments Attachment[]
 
   @@unique([runId, testCaseId])
   @@index([testCaseId, updatedAt])
@@ -271,6 +274,33 @@ model Bug {
   testRunResult TestRunResult? @relation(fields: [testRunResultId], references: [id], onDelete: SetNull)
   createdBy     User?          @relation(fields: [createdById], references: [id], onDelete: SetNull)
 
+  attachments   Attachment[]
+
   @@index([testCaseId, createdAt])
   @@index([testRunResultId, createdAt])
+}
+
+/// File evidence/reference. Metadata saja — byte disimpan di Cloudflare R2.
+/// Invariant "tepat satu pemilik" dijaga CHECK constraint di level DB
+/// (lihat migration 202609100002_add_attachment).
+model Attachment {
+  id              String   @id @default(cuid())
+  fileName        String
+  mimeType        String
+  size            Int
+  storageKey      String   @unique
+  testCaseId      String?
+  testRunResultId String?
+  bugId           String?
+  uploadedById    String?
+  createdAt       DateTime @default(now())
+
+  testCase      TestCase?      @relation(fields: [testCaseId], references: [id], onDelete: Cascade)
+  testRunResult TestRunResult? @relation(fields: [testRunResultId], references: [id], onDelete: Cascade)
+  bug           Bug?           @relation(fields: [bugId], references: [id], onDelete: Cascade)
+  uploadedBy    User?          @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  @@index([testCaseId])
+  @@index([testRunResultId])
+  @@index([bugId])
 }

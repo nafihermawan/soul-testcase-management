@@ -8,6 +8,18 @@ import type { ExecutionCounts } from "@/lib/qa-metrics";
 
 export type PlatformCode = "WEB" | "MOBILE" | "HARDWARE" | "API";
 
+/* ---------- Attachment (evidence) ---------- */
+export type AttachmentItem = {
+  id: string;
+  fileName: string;
+  mimeType: string;
+  size: number;
+  /** Presigned GET URL (kedaluwarsa ~1 jam); null bila presign gagal. */
+  url: string | null;
+  createdAt: string;
+  uploadedBy: { name: string | null } | null;
+};
+
 /* ---------- /api/me ---------- */
 export type Me = {
   id: string;
@@ -94,9 +106,11 @@ export type BugRow = {
   createdAt: string;
   testCase: { id: string; tcId: string; title: string } | null;
   createdBy: { name: string | null } | null;
+  /** Evidence yang menempel langsung ke bug ini. */
+  attachments: AttachmentItem[];
 };
 
-export type BugsPayload = { bugs: BugRow[] };
+export type BugsPayload = { bugs: BugRow[]; /** Upload attachment butuh role QA. */ canAttach: boolean };
 
 /* ---------- /api/automation ---------- */
 export type AutomationRowStatus =
@@ -276,6 +290,7 @@ export type TestCaseDetailPayload = {
   bugs: TestCaseBugItem[];
   activities: TestCaseActivityItem[];
   runResults: TestCaseRunHistoryItem[];
+  attachments: AttachmentItem[];
 };
 
 /* ---------- /api/test-runs (active) ---------- */
@@ -388,6 +403,8 @@ export type RunResultItem = {
   testCaseId: string;
   bugs: RunResultBug[];
   testCase: RunResultTestCase | null;
+  /** Evidence yang di-upload pada hasil eksekusi ini. */
+  attachments: AttachmentItem[];
 };
 
 export type RunDetailProjectGroup = {

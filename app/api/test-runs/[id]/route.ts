@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { apiSession, apiRoleAtLeast, json401, json404 } from "@/lib/api-auth";
+import { toAttachmentItems } from "@/lib/attachments";
 import type { RunDetailPayload, RunResultItem } from "@/types/api";
 
 export async function GET(
@@ -34,6 +35,10 @@ export async function GET(
             },
             orderBy: { createdAt: "asc" },
           },
+          attachments: {
+            orderBy: { createdAt: "desc" },
+            include: { uploadedBy: { select: { name: true } } },
+          },
           testCase: {
             select: {
               id: true,
@@ -66,37 +71,40 @@ export async function GET(
     return json404("Test run tidak ditemukan.");
   }
 
-  const results: RunResultItem[] = run.results.map((r) => ({
-    id: r.id,
-    status: r.status,
-    titleSnapshot: r.titleSnapshot,
-    actualResult: r.actualResult,
-    notes: r.notes,
-    testCaseId: r.testCaseId,
-    bugs: r.bugs.map((b) => ({
-      id: b.id,
-      title: b.title,
-      severity: b.severity,
-      status: b.status,
-      externalLink: b.externalLink,
-    })),
-    testCase: r.testCase
-      ? {
-          id: r.testCase.id,
-          tcId: r.testCase.tcId,
-          title: r.testCase.title,
-          priority: r.testCase.priority,
-          status: r.testCase.status,
-          scenario: r.testCase.scenario,
-          precondition: r.testCase.precondition,
-          steps: r.testCase.steps,
-          expectedResult: r.testCase.expectedResult,
-          createdAt: r.testCase.createdAt.toISOString(),
-          suite: r.testCase.suite,
-          createdBy: r.testCase.createdBy,
-        }
-      : null,
-  }));
+  const results: RunResultItem[] = await Promise.all(
+    run.results.map(async (r) => ({
+      id: r.id,
+      status: r.status,
+      titleSnapshot: r.titleSnapshot,
+      actualResult: r.actualResult,
+      notes: r.notes,
+      testCaseId: r.testCaseId,
+      bugs: r.bugs.map((b) => ({
+        id: b.id,
+        title: b.title,
+        severity: b.severity,
+        status: b.status,
+        externalLink: b.externalLink,
+      })),
+      attachments: await toAttachmentItems(r.attachments),
+      testCase: r.testCase
+        ? {
+            id: r.testCase.id,
+            tcId: r.testCase.tcId,
+            title: r.testCase.title,
+            priority: r.testCase.priority,
+            status: r.testCase.status,
+            scenario: r.testCase.scenario,
+            precondition: r.testCase.precondition,
+            steps: r.testCase.steps,
+            expectedResult: r.testCase.expectedResult,
+            createdAt: r.testCase.createdAt.toISOString(),
+            suite: r.testCase.suite,
+            createdBy: r.testCase.createdBy,
+          }
+        : null,
+    }))
+  );
 
   // Suite unik yang terlibat dalam run ini (dari test case yang dieksekusi)
   const suites = Array.from(

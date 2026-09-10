@@ -5,11 +5,13 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRefresh } from "@/lib/client/refresh-context";
-import { Bug, CheckCircle2, CircleSlash, ExternalLink, MinusCircle, X, XCircle } from "lucide-react";
+import { Bug, CheckCircle2, CircleSlash, ExternalLink, MinusCircle, Paperclip, X, XCircle } from "lucide-react";
 import { completeRun, completeRunWithSkip, deleteRun, updateRunResult } from "@/lib/actions/test-runs";
 import { createBug, unlinkBugFromRunResult } from "@/lib/actions/automation-bugs";
 import { ConfirmDialog, Spinner, Toast, useToast } from "@/components/ui/feedback";
 import { entityCode, runCodeOf } from "@/lib/format";
+import { AttachmentsPanel } from "@/components/attachments/attachments-panel";
+import type { AttachmentItem } from "@/types/api";
 
 export type RunResultItem = {
   id: string;
@@ -18,6 +20,8 @@ export type RunResultItem = {
   actualResult: string | null;
   notes: string | null;
   testCaseId: string;
+  /** Evidence yang di-upload pada hasil eksekusi ini. */
+  attachments?: AttachmentItem[];
   bugs?: {
     id: string;
     title: string;
@@ -1145,6 +1149,29 @@ function RunItemCard({
                 Actual: {item.actualResult}
               </div>
             )}
+            {(item.attachments?.length ?? 0) > 0 && (
+              <button
+                type="button"
+                onClick={onOpenDetail}
+                title="Lihat evidence"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "0.3rem",
+                  marginTop: "0.35rem",
+                  padding: "0.15rem 0.5rem",
+                  borderRadius: 999,
+                  border: "1px solid var(--border-strong)",
+                  background: "var(--surface-muted)",
+                  color: "var(--text-secondary)",
+                  fontSize: "0.72rem",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                <Paperclip size={12} /> {item.attachments!.length} evidence
+              </button>
+            )}
           </div>
           {/* Grup tombol aksi: layer teratas agar tidak tertutup elemen lain */}
           <div
@@ -1759,6 +1786,7 @@ function ExecutionModal({
   const [notes, setNotes] = useState(item.notes ?? "");
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const refresh = useRefresh();
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -2051,6 +2079,20 @@ function ExecutionModal({
                   resize: "vertical",
                   background: "#fff",
                 }}
+              />
+            </div>
+
+            {/* Evidence: screenshot/video untuk hasil eksekusi ini */}
+            <div style={{ marginTop: "0.9rem" }}>
+              <div style={{ fontSize: "0.72rem", fontWeight: 700, color: "#64748B", marginBottom: "0.4rem" }}>
+                EVIDENCE
+              </div>
+              <AttachmentsPanel
+                owner={{ testRunResultId: item.id }}
+                attachments={item.attachments ?? []}
+                canEdit={canEdit}
+                onChanged={refresh}
+                compact
               />
             </div>
 

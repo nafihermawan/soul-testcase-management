@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { apiSession, apiRoleAtLeast, json401, json404 } from "@/lib/api-auth";
+import { toAttachmentItems } from "@/lib/attachments";
 import type {
   TestCaseActivityItem,
   TestCaseBugItem,
@@ -44,6 +45,10 @@ export async function GET(
           run: { select: { id: true, name: true, createdAt: true, status: true } },
           updatedBy: { select: { name: true } },
         },
+      },
+      attachments: {
+        orderBy: { createdAt: "desc" },
+        include: { uploadedBy: { select: { name: true } } },
       },
     },
   });
@@ -113,6 +118,7 @@ export async function GET(
     bugs,
     activities,
     runResults,
+    attachments: await toAttachmentItems(tc.attachments),
   };
 
   return NextResponse.json(payload);

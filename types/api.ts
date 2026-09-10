@@ -178,7 +178,7 @@ export type ProjectSuiteNode = {
 };
 
 export type ProjectTreePayload = {
-  project: { id: string; name: string; code: string };
+  project: { id: string; name: string; code: string; platform: string | null };
   suites: ProjectSuiteNode[];
   canEdit: boolean;
 };

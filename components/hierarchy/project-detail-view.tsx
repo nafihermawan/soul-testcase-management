@@ -105,7 +105,12 @@ export function ProjectDetailView({ projectId }: { projectId: string }) {
       </div>
 
       <RefreshContext.Provider value={reload}>
-        <SuiteTree projectId={data.project.id} suites={data.suites} canEdit={data.canEdit} />
+        <SuiteTree
+          projectId={data.project.id}
+          platform={data.project.platform}
+          suites={data.suites}
+          canEdit={data.canEdit}
+        />
       </RefreshContext.Provider>
     </main>
   );

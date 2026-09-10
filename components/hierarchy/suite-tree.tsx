@@ -12,7 +12,7 @@ import {
   updateSuite,
 } from "@/lib/actions/hierarchy";
 import { useRefresh } from "@/lib/client/refresh-context";
-import { parseReferenceLines } from "@/lib/format";
+import { parseReferenceLines, platformPrefix } from "@/lib/format";
 import { useDragReorder } from "./collapse-provider";
 import { RowActionsMenu } from "@/components/settings/row-actions-menu";
 import { ConfirmDialog, Spinner, Toast, useToast } from "@/components/ui/feedback";
@@ -35,6 +35,30 @@ function reorderList<T extends string>(ids: T[], from: number, to: number): T[] 
   const [moved] = next.splice(from, 1);
   next.splice(to, 0, moved);
   return next;
+}
+
+/** Update nama/kode/docUrl satu suite di dalam tree (rekursif), tanpa refetch. */
+function patchSuiteInTree(
+  nodes: SuiteNode[],
+  id: string,
+  patch: Partial<SuiteNode>
+): SuiteNode[] {
+  return nodes.map((n) => {
+    if (n.id === id) return { ...n, ...patch };
+    if (n.children?.length) {
+      return { ...n, children: patchSuiteInTree(n.children, id, patch) };
+    }
+    return n;
+  });
+}
+
+/** Buang satu suite dari tree (rekursif) setelah dihapus. */
+function removeSuiteFromTree(nodes: SuiteNode[], id: string): SuiteNode[] {
+  return nodes
+    .filter((n) => n.id !== id)
+    .map((n) =>
+      n.children?.length ? { ...n, children: removeSuiteFromTree(n.children, id) } : n
+    );
 }
 
 /** Auto-generate kode suite: hilangkan vokal, spasi -> hyphen, buang karakter khusus. */
@@ -67,12 +91,16 @@ function SuiteRow({
   projectId,
   canEdit = true,
   showToast,
+  onSuiteUpdated,
+  onSuiteDeleted,
 }: {
   suite: SuiteNode;
   depth: number;
   projectId: string;
   canEdit?: boolean;
   showToast: (message: string, type?: "success" | "error") => void;
+  onSuiteUpdated: (id: string, patch: Partial<SuiteNode>) => void;
+  onSuiteDeleted: (id: string) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -89,8 +117,9 @@ function SuiteRow({
     await deleteSuite(formData);
     setDeletePending(false);
     setConfirmDelete(false);
+    onSuiteDeleted(suite.id);
     showToast(`Suite "${suite.name}" dihapus.`, "success");
-  }, [suite.id, suite.name, showToast]);
+  }, [suite.id, suite.name, showToast, onSuiteDeleted]);
 
   const handleMoveToRoot = useCallback(async () => {
     setMovePending(true);
@@ -222,8 +251,9 @@ function SuiteRow({
         <EditSuiteModal
           suite={suite}
           onClose={() => setEditing(false)}
-          onSaved={() => {
+          onSaved={(updated) => {
             setEditing(false);
+            onSuiteUpdated(updated.id, updated);
             showToast("Data suite berhasil diperbarui.", "success");
           }}
         />
@@ -245,6 +275,8 @@ function SuiteRow({
                     projectId={projectId}
                     canEdit={canEdit}
                     showToast={showToast}
+                    onSuiteUpdated={onSuiteUpdated}
+                    onSuiteDeleted={onSuiteDeleted}
                   />
                 ))}
               </tbody>
@@ -288,15 +320,23 @@ function SuiteRow({
 
 export function SuiteTree({
   projectId,
+  platform,
   suites,
   canEdit = true,
 }: {
   projectId: string;
+  platform?: string | null;
   suites: SuiteNode[];
   canEdit?: boolean;
 }) {
   const refresh = useRefresh();
   const [showCreate, setShowCreate] = useState(false);
+  // Cermin lokal tree suites: edit/delete di-update in-place (tanpa refetch),
+  // disinkronkan ulang dari prop saat parent me-refetch (prop server otoritatif).
+  const [localSuites, setLocalSuites] = useState<SuiteNode[]>(suites);
+  useEffect(() => {
+    setLocalSuites(suites);
+  }, [suites]);
   const { toast, showToast, dismissToast } = useToast();
   // Anchor untuk tombol "Tambah Suite" di header halaman (via portal)
   const [headerAnchor, setHeaderAnchor] = useState<HTMLElement | null>(null);
@@ -304,6 +344,14 @@ export function SuiteTree({
   useEffect(() => {
     const el = document.getElementById("project-header-actions");
     setHeaderAnchor(el);
+  }, []);
+
+  const handleSuiteUpdated = useCallback((id: string, patch: Partial<SuiteNode>) => {
+    setLocalSuites((prev) => patchSuiteInTree(prev, id, patch));
+  }, []);
+
+  const handleSuiteDeleted = useCallback((id: string) => {
+    setLocalSuites((prev) => removeSuiteFromTree(prev, id));
   }, []);
 
   return (
@@ -362,7 +410,7 @@ export function SuiteTree({
 
       {/* Card body */}
       <div style={{ padding: "1.25rem" }}>
-        {suites.length === 0 ? (
+        {localSuites.length === 0 ? (
           <div
             style={{
               display: "flex",
@@ -418,7 +466,7 @@ export function SuiteTree({
                 </tr>
               </thead>
               <tbody data-suite-list="root">
-                {suites.map((s) => (
+                {localSuites.map((s) => (
                   <SuiteRow
                     key={s.id}
                     suite={s}
@@ -426,6 +474,8 @@ export function SuiteTree({
                     projectId={projectId}
                     canEdit={canEdit}
                     showToast={showToast}
+                    onSuiteUpdated={handleSuiteUpdated}
+                    onSuiteDeleted={handleSuiteDeleted}
                   />
                 ))}
               </tbody>
@@ -438,6 +488,7 @@ export function SuiteTree({
       {showCreate && (
         <SuiteModal
           projectId={projectId}
+          platform={platform}
           onClose={() => setShowCreate(false)}
           onCreated={() => {
             setShowCreate(false);
@@ -460,7 +511,13 @@ function EditSuiteModal({
 }: {
   suite: SuiteNode;
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: (updated: {
+    id: string;
+    name: string;
+    code: string;
+    docUrl: string | null;
+    updatedAt: string;
+  }) => void;
 }) {
   // Controlled state — onChange selalu memperbarui state payload.
   const [name, setName] = useState(suite.name);
@@ -520,7 +577,8 @@ function EditSuiteModal({
       setError(res.error);
       return;
     }
-    onSaved();
+    if (res.suite) onSaved(res.suite);
+    else onClose();
   };
 
   const fieldStyle: React.CSSProperties = {
@@ -626,7 +684,7 @@ function EditSuiteModal({
                 setCode(e.target.value);
                 if (error) setError(null);
               }}
-              placeholder="e.g. lgn-ffcr-pp"
+              placeholder="e.g. web-lgn-ffcr"
               style={fieldStyle}
             />
           </div>
@@ -811,10 +869,12 @@ function EditSuiteModal({
 
 function SuiteModal({
   projectId,
+  platform,
   onClose,
   onCreated,
 }: {
   projectId: string;
+  platform?: string | null;
   onClose: () => void;
   onCreated: () => void;
 }) {
@@ -826,11 +886,13 @@ function SuiteModal({
   const [pending, setPending] = useState(false);
   const nameRef = useRef<HTMLInputElement>(null);
 
-  // Auto-generate kode dari nama selama user belum mengubah kode manual.
+  // Auto-generate kode dari nama (berprefix platform) selama user belum
+  // mengubah kode manual. Contoh: WEB + "Permission Leave" -> "web-prmssn-lv".
   const handleNameChange = (value: string) => {
     setName(value);
     if (!codeTouched) {
-      setCode(generateSuiteCode(value));
+      const base = generateSuiteCode(value);
+      setCode(base ? `${platformPrefix(platform)}-${base}` : "");
     }
   };
 
@@ -984,7 +1046,7 @@ function SuiteModal({
                 setCodeTouched(true);
                 setCode(e.target.value);
               }}
-              placeholder="e.g. lgn-ffcr-pp"
+              placeholder="e.g. web-lgn-ffcr"
               style={fieldStyle}
               onFocus={(e) => {
                 e.currentTarget.style.borderColor = "#F59E0B";

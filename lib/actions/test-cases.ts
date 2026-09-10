@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/permissions";
-import { featurePrefixFromName } from "@/lib/format";
+import { featurePrefixFromName, platformPrefix } from "@/lib/format";
 
 export type TestCaseActionState = {
   error?: string;
@@ -49,24 +49,27 @@ async function logActivity(
   }
 }
 
-/** Buat TC ID otomatis: `{prefix}-{seq}` — prefix dari nama suite/fitur
- *  (contoh "Attendance" -> atndc), urut mulai 001 per prefix, huruf kecil semua.
+/** Buat TC ID otomatis: `{platform}-{prefix}-{seq}` — prefix platform dari
+ *  Project.platform (mis. web/mob/hdw/api) dan prefix fitur dari nama suite
+ *  (contoh "Overtime" -> ovrtm), urut mulai 001 per kombinasi, huruf kecil.
  *  Override manual tetap dihormati (dikecilkan). */
 async function buildTcId(suiteId: string, override?: string): Promise<string> {
   if (override && override.trim()) return override.trim().toLowerCase();
 
   const suite = await prisma.suite.findUnique({
     where: { id: suiteId },
-    select: { name: true },
+    select: { name: true, project: { select: { platform: true } } },
   });
   if (!suite) throw new Error("Suite tidak ditemukan.");
 
-  const prefix = featurePrefixFromName(suite.name).toLowerCase();
+  const base = `${platformPrefix(suite.project.platform)}-${featurePrefixFromName(
+    suite.name
+  ).toLowerCase()}`;
   for (let attempt = 0; attempt < 20; attempt++) {
     const count = await prisma.testCase.count({
-      where: { tcId: { startsWith: `${prefix}-` } },
+      where: { tcId: { startsWith: `${base}-` } },
     });
-    const candidate = `${prefix}-${String(count + 1).padStart(3, "0")}`;
+    const candidate = `${base}-${String(count + 1 + attempt).padStart(3, "0")}`;
     const clash = await prisma.testCase.findUnique({
       where: { tcId: candidate },
       select: { id: true },
@@ -161,9 +164,13 @@ export async function updateTestCase(
       | "DRAFT"
       | "ACTIVE"
       | "DEPRECATED");
-    await prisma.testCase.update({
+    // TC ID bisa diubah manual; kosong = pertahankan yang lama. Normalisasi lowercase.
+    const tcIdInput = String(formData.get("tcId") ?? "").trim().toLowerCase();
+    const newTcId = tcIdInput || tc.tcId;
+    const updated = await prisma.testCase.update({
       where: { id },
       data: {
+        tcId: newTcId,
         title,
         suiteId,
         scenario,
@@ -178,15 +185,35 @@ export async function updateTestCase(
           | "CRITICAL"),
         status: newStatus,
       },
+      select: {
+        id: true,
+        tcId: true,
+        title: true,
+        scenario: true,
+        precondition: true,
+        steps: true,
+        testData: true,
+        expectedResult: true,
+        priority: true,
+        status: true,
+        sectionId: true,
+        createdAt: true,
+        createdBy: { select: { name: true } },
+      },
     });
 
-    if (newStatus !== tc.status) {
+    if (newTcId !== tc.tcId) {
+      await logActivity(id, "UPDATED", `TC ID berubah: ${tc.tcId} → ${newTcId}`, user.id);
+    } else if (newStatus !== tc.status) {
       await logActivity(id, "STATUS_CHANGED", `Status berubah: ${tc.status} → ${newStatus}`, user.id);
     } else {
       await logActivity(id, "UPDATED", "Detail test case diperbarui", user.id);
     }
-    revalidatePath(`/suites/${tc.suiteId}`);
-    return { success: true };
+    revalidatePath(`/suites/${suiteId ?? tc.suiteId}`);
+    return {
+      success: true,
+      testCase: { ...updated, createdAt: updated.createdAt.toISOString() },
+    };
   } catch (error) {
     return handleError(error);
   }

@@ -3,10 +3,18 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/permissions";
+import { platformPrefix } from "@/lib/format";
 
 export type HierarchyActionState = {
   error?: string;
   success?: boolean;
+  suite?: {
+    id: string;
+    name: string;
+    code: string;
+    docUrl: string | null;
+    updatedAt: string;
+  };
 };
 
 function handleError(error: unknown): HierarchyActionState {
@@ -117,6 +125,18 @@ export async function reorderProjects(orderedIds: string[]): Promise<void> {
 
 /* ------------------------- Suite (rekursif) ------------------------- */
 
+/** Pastikan kode suite diawali prefix platform project-nya (idempotent).
+ *  Contoh: WEB + "ovrtm" -> "web-ovrtm"; kode yang sudah berprefix dibiarkan. */
+async function suiteCodeWithPlatformPrefix(projectId: string, code: string): Promise<string> {
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { platform: true },
+  });
+  const prefix = platformPrefix(project?.platform);
+  const clean = code.trim().toLowerCase();
+  return clean.startsWith(`${prefix}-`) ? clean : `${prefix}-${clean}`;
+}
+
 export async function createSuite(formData: FormData): Promise<HierarchyActionState> {
   await requireRole("QA");
   const projectId = String(formData.get("projectId") ?? "");
@@ -129,11 +149,12 @@ export async function createSuite(formData: FormData): Promise<HierarchyActionSt
   if (!projectId || !name || !code) return { error: "Nama dan kode wajib diisi." };
 
   try {
+    const finalCode = await suiteCodeWithPlatformPrefix(projectId, code);
     const count = await prisma.suite.count({
       where: parentId ? { parentId } : { parentId: null, projectId },
     });
     await prisma.suite.create({
-      data: { projectId, parentId, name, code, docUrl: docUrl || null, order: count },
+      data: { projectId, parentId, name, code: finalCode, docUrl: docUrl || null, order: count },
     });
     revalidatePath("/");
     revalidatePath("/settings");
@@ -154,10 +175,20 @@ export async function updateSuite(formData: FormData): Promise<HierarchyActionSt
   if (!id || !name || !code) return { error: "Nama dan kode wajib diisi." };
 
   try {
-    await prisma.suite.update({ where: { id }, data: { name, code, docUrl: docUrl || null } });
+    const existing = await prisma.suite.findUnique({
+      where: { id },
+      select: { projectId: true },
+    });
+    if (!existing) return { error: "Suite tidak ditemukan." };
+    const finalCode = await suiteCodeWithPlatformPrefix(existing.projectId, code);
+    const updated = await prisma.suite.update({
+      where: { id },
+      data: { name, code: finalCode, docUrl: docUrl || null },
+      select: { id: true, name: true, code: true, docUrl: true, updatedAt: true },
+    });
     revalidatePath("/");
     revalidatePath("/settings");
-    return { success: true };
+    return { success: true, suite: { ...updated, updatedAt: updated.updatedAt.toISOString() } };
   } catch (error) {
     return handleError(error);
   }

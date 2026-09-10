@@ -35,7 +35,6 @@ import {
 } from "@/lib/actions/sections";
 import { RowActionsMenu } from "@/components/settings/row-actions-menu";
 import { ConfirmDialog } from "@/components/ui/feedback";
-import { shortTcId } from "@/lib/format";
 
 export type TestCase = {
   id: string;
@@ -924,7 +923,7 @@ function TestCaseTable({
                   onMouseEnter={(e) => (e.currentTarget.style.textDecoration = "underline")}
                   onMouseLeave={(e) => (e.currentTarget.style.textDecoration = "none")}
                 >
-                  {shortTcId(t.tcId)}
+                  {t.tcId}
                 </button>
               </td>
               <td
@@ -1502,7 +1501,11 @@ export function TestCasesManager({
                 onSubmit={async (fd) => {
                   fd.set("id", editingTc.id);
                   const res = await updateTestCase(fd);
-                  if (res.success) setEditingTcId(null);
+                  if (res.success && res.testCase) {
+                    const updated = res.testCase;
+                    setLocalTestCases((prev) => prev.map((tc) => (tc.id === updated.id ? updated : tc)));
+                    setEditingTcId(null);
+                  }
                   return res;
                 }}
               />

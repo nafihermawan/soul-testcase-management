@@ -101,7 +101,7 @@ export async function GET(
   const suites: ProjectSuiteNode[] = project.suites.map((s) => toNode(s as unknown as SuiteWithCount));
 
   const payload: ProjectTreePayload = {
-    project: { id: project.id, name: project.name, code: project.code },
+    project: { id: project.id, name: project.name, code: project.code, platform: project.platform },
     suites,
     canEdit: apiRoleAtLeast(user.role, "QA"),
   };

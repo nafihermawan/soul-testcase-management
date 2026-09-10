@@ -9,7 +9,7 @@ import { Bug, CheckCircle2, CircleSlash, ExternalLink, MinusCircle, X, XCircle }
 import { completeRun, completeRunWithSkip, deleteRun, updateRunResult } from "@/lib/actions/test-runs";
 import { createBug, unlinkBugFromRunResult } from "@/lib/actions/automation-bugs";
 import { ConfirmDialog, Spinner, Toast, useToast } from "@/components/ui/feedback";
-import { entityCode, runCodeOf, shortTcId } from "@/lib/format";
+import { entityCode, runCodeOf } from "@/lib/format";
 
 export type RunResultItem = {
   id: string;
@@ -1475,7 +1475,7 @@ function BugModal({
                     textOverflow: "ellipsis",
                   }}
                 >
-                  TC: {shortTcId(tcCode)}
+                  TC: {tcCode}
                 </span>
               ) : (
                 <span style={{ fontSize: "0.8rem", color: "#9CA3AF" }}>—</span>

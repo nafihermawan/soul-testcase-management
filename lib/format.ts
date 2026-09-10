@@ -2,15 +2,27 @@
  * Helper format/tampilan ringkas.
  */
 
+/* ---------- Prefix platform untuk ID (suite code & TC ID) ---------- */
+
 /**
- * TC ID pendek tanpa prefix Project Key (mis. "HRIS-SPNFNDR-APPEAL-026" -> "APPEAL-026").
- * Data lengkap tetap tersimpan di DB; versi pendek hanya untuk tampilan tabel.
+ * Kode platform yang dipakai sebagai prefix ID suite & test case.
+ * Diubah di satu tempat ini saja kalau mapping-nya berubah.
  */
-export function shortTcId(tcId: string): string {
-  // Format: PROJECT-SUITE[-SUBSUITE]-SEQ. Buang segmen pertama (project code).
-  const parts = tcId.split("-");
-  if (parts.length <= 2) return tcId;
-  return parts.slice(1).join("-");
+export const PLATFORM_PREFIXES = {
+  WEB: "web",
+  MOBILE: "mob",
+  HARDWARE: "hdw",
+  API: "api",
+} as const;
+
+/** Prefix fallback saat Project.platform belum diisi. */
+export const DEFAULT_PLATFORM_PREFIX = "gen";
+
+/** Prefix platform (lowercase) dari nilai enum Project.platform. */
+export function platformPrefix(platform: string | null | undefined): string {
+  if (!platform) return DEFAULT_PLATFORM_PREFIX;
+  const key = platform.toUpperCase() as keyof typeof PLATFORM_PREFIXES;
+  return PLATFORM_PREFIXES[key] ?? platform.toLowerCase();
 }
 
 /** Kode deterministik & human-readable dari id CUID: `PREFIX-YYYY-XXXX` (huruf kecil).

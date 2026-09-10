@@ -1032,6 +1032,13 @@ export function TestCasesManager({
   initialEditTcId?: string | null;
 }) {
   const refresh = useRefresh();
+  // Cermin lokal daftar test case: mutasi add/delete di-update in-place di
+  // state ini (tanpa refresh satu halaman penuh), disinkronkan ulang dari
+  // prop saat parent me-refetch (prop server otoritatif).
+  const [localTestCases, setLocalTestCases] = useState<TestCase[]>(testCases);
+  useEffect(() => {
+    setLocalTestCases(testCases);
+  }, [testCases]);
   // Anchor untuk toolbar di header halaman (diisi via useEffect setelah mount)
   const [headerAnchor, setHeaderAnchor] = useState<HTMLElement | null>(null);
 
@@ -1045,7 +1052,7 @@ export function TestCasesManager({
 
   // Deep-link ?edit=<tcId>: buka modal edit Test Case langsung saat mount
   useEffect(() => {
-    if (initialEditTcId && testCases.some((t) => t.id === initialEditTcId)) {
+    if (initialEditTcId && localTestCases.some((t) => t.id === initialEditTcId)) {
       setEditingTcId(initialEditTcId);
     }
   }, [initialEditTcId, testCases]);
@@ -1117,7 +1124,7 @@ export function TestCasesManager({
     }, 4000);
   };
 
-  const editingTc = testCases.find((t) => t.id === editingTcId) ?? null;
+  const editingTc = localTestCases.find((t) => t.id === editingTcId) ?? null;
 
   const isOpen = (id: string) => openSections[id] ?? true;
 
@@ -1233,20 +1240,25 @@ export function TestCasesManager({
     tcs: TestCase[];
   }[] = sections.map((s) => ({
     section: s,
-    tcs: testCases.filter((t) => t.sectionId === s.id),
+    tcs: localTestCases.filter((t) => t.sectionId === s.id),
   }));
-  const unassigned = testCases.filter((t) => !t.sectionId);
+  const unassigned = localTestCases.filter((t) => !t.sectionId);
 
   const handleDeleteTC = async (t: TestCase) => {
     const fd = new FormData();
     fd.set("id", t.id);
     await deleteTestCase(fd);
-    refresh();
+    setLocalTestCases((prev) => prev.filter((tc) => tc.id !== t.id));
+    setSelectedTcIds((prev) => {
+      const next = new Set(prev);
+      next.delete(t.id);
+      return next;
+    });
     showToast("Test Case dihapus.", "success");
   };
 
   const handleExport = async (format: "csv" | "xlsx") => {
-    const rows = testCases.map((t) => ({
+    const rows = localTestCases.map((t) => ({
       tcId: t.tcId,
       title: t.title,
       scenario: t.scenario ?? "",
@@ -1440,9 +1452,15 @@ export function TestCasesManager({
                   if (addingTcFor) fd.set("sectionId", addingTcFor);
                   const res = await createTestCase(fd);
                   if (res.success) {
+                    const created = res.testCase;
+                    if (created) {
+                      setLocalTestCases((prev) => [...prev, created]);
+                      setOpenSections((prev) =>
+                        created.sectionId ? { ...prev, [created.sectionId]: true } : prev
+                      );
+                    }
                     setAddingTc(false);
                     setAddingTcFor(null);
-                    refresh();
                   }
                   return res;
                 }}
@@ -1603,7 +1621,7 @@ export function TestCasesManager({
           )}
 
           {/* Empty state seluruh suite */}
-          {testCases.length === 0 && sections.length === 0 && (
+          {localTestCases.length === 0 && sections.length === 0 && (
             <TestCaseTable
               testCases={[]}
               onEdit={(t) => setEditingTcId(t.id)}
@@ -3021,7 +3039,7 @@ function DeleteTestCaseModal({
                 onMouseEnter={(e) => (e.currentTarget.style.background = "#B91C1C")}
                 onMouseLeave={(e) => (e.currentTarget.style.background = "#DC2626")}
               >
-                Ya, Hapus
+                Hapus
               </button>
             </div>
           </>

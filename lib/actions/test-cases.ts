@@ -8,6 +8,21 @@ import { featurePrefixFromName } from "@/lib/format";
 export type TestCaseActionState = {
   error?: string;
   success?: boolean;
+  testCase?: {
+    id: string;
+    tcId: string;
+    title: string;
+    scenario: string | null;
+    precondition: string | null;
+    steps: string | null;
+    testData: string | null;
+    expectedResult: string | null;
+    priority: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+    status: "DRAFT" | "ACTIVE" | "DEPRECATED";
+    sectionId: string | null;
+    createdAt: string;
+    createdBy?: { name: string | null } | null;
+  };
 };
 
 function handleError(error: unknown): TestCaseActionState {
@@ -100,11 +115,28 @@ export async function createTestCase(
           | "DEPRECATED"),
         createdById: user.id,
       },
-      select: { id: true },
+      select: {
+        id: true,
+        tcId: true,
+        title: true,
+        scenario: true,
+        precondition: true,
+        steps: true,
+        testData: true,
+        expectedResult: true,
+        priority: true,
+        status: true,
+        sectionId: true,
+        createdAt: true,
+        createdBy: { select: { name: true } },
+      },
     });
     await logActivity(created.id, "CREATED", `Test case dibuat (${tcId})`, user.id);
     revalidatePath(`/suites/${suiteId}`);
-    return { success: true };
+    return {
+      success: true,
+      testCase: { ...created, createdAt: created.createdAt.toISOString() },
+    };
   } catch (error) {
     return handleError(error);
   }

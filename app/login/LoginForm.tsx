@@ -9,7 +9,7 @@ import { Eye, EyeOff, Loader2 } from "lucide-react";
 const inputBase: CSSProperties = {
   width: "100%",
   padding: "0.65rem 0.9rem",
-  borderRadius: 12,
+  borderRadius: 6,
   border: "1px solid #495057",
   fontSize: "0.9rem",
   color: "#212529",
@@ -181,7 +181,7 @@ export function LoginForm() {
           marginTop: "1.5rem",
           padding: "0.7rem 1rem",
           border: "none",
-          borderRadius: 12,
+          borderRadius: 6,
           background: hovered ? "#e0a800" : "#ffc107",
           color: "#212529",
           fontSize: "0.9rem",

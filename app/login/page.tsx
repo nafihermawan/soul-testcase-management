@@ -42,7 +42,7 @@ export default function LoginPage() {
           background: "#343a40",
           backdropFilter: "blur(12px)",
           border: "1px solid rgba(51, 65, 85, 0.5)",
-          borderRadius: 16,
+          borderRadius: 12,
           boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.45), 0 4px 12px -4px rgba(0, 0, 0, 0.3)",
           padding: "2rem 1.5rem",
           textAlign: "center",

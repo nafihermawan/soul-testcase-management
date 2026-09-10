@@ -1,212 +1,201 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { apiSession, json401 } from "@/lib/api-auth";
+import { emptyCounts, type ExecutionCounts, type RunResultStatus } from "@/lib/qa-metrics";
 import type {
   DashboardPayload,
-  DashboardProjectMetric,
   DashboardRunItem,
   DashboardBugItem,
   DashboardSuiteCoverageItem,
 } from "@/types/api";
 
+/** Batas daftar run terbaru di dashboard (bagian "recent" + action required). */
+const RECENT_RUN_LIMIT = 100;
+
 export async function GET() {
   const user = await apiSession();
   if (!user) return json401();
 
-  const [
-    projects,
-    tcByProject,
-    autoByProject,
-    runs,
-    bugs,
-    runStats,
-    suites,
-    testedResults,
-  ] = await Promise.all([
-    prisma.project.findMany({
-      orderBy: [{ order: "asc" }, { createdAt: "asc" }],
-      select: { id: true, name: true, code: true, platform: true },
-    }),
-    // Total TC per project (via suite.projectId)
-    prisma.testCase.groupBy({
-      by: ["suiteId"],
-      _count: { _all: true },
-    }),
-    // TC automated per project
-    prisma.testCase.groupBy({
-      by: ["suiteId"],
-      where: {
-        automation: { is: { status: { in: ["AUTOMATED", "FAILING", "UNSTABLE"] } } },
-      },
-      _count: { _all: true },
-    }),
-    prisma.testRun.findMany({
-      orderBy: { createdAt: "desc" },
-      take: 20,
-      include: {
-        project: { select: { id: true, name: true } },
-        createdBy: { select: { name: true } },
-        _count: { select: { results: true } },
-      },
-    }),
-    prisma.bug.findMany({
-      orderBy: { createdAt: "desc" },
-      take: 20,
-      include: { testCase: { select: { suite: { select: { projectId: true } } } } },
-    }),
-    prisma.testRunResult.groupBy({
-      by: ["runId", "status"],
-      _count: { _all: true },
-    }),
-    prisma.suite.findMany({
-      orderBy: [{ order: "asc" }, { createdAt: "asc" }],
-      select: {
-        id: true,
-        name: true,
-        code: true,
-        projectId: true,
-        docUrl: true,
-        _count: { select: { testCases: true } },
-      },
-    }),
-    // TC yang pernah di-test: distinct testCaseId dengan hasil bukan NOT_RUN
-    // pada run yang sudah COMPLETED.
-    prisma.testRunResult.findMany({
-      where: { status: { not: "NOT_RUN" }, run: { is: { status: "COMPLETED" } } },
-      select: {
-        testCaseId: true,
-        testCase: { select: { suite: { select: { projectId: true } } } },
-      },
-    }),
-  ]);
+  const [projects, tcBySuite, autoBySuite, runs, bugs, runStats, suites, latestResults] =
+    await Promise.all([
+      prisma.project.findMany({
+        orderBy: [{ order: "asc" }, { createdAt: "asc" }],
+        select: { id: true, code: true, platform: true },
+      }),
+      // Total TC per suite
+      prisma.testCase.groupBy({ by: ["suiteId"], _count: { _all: true } }),
+      // TC automated per suite
+      prisma.testCase.groupBy({
+        by: ["suiteId"],
+        where: { automation: { is: { status: { in: ["AUTOMATED", "FAILING", "UNSTABLE"] } } } },
+        _count: { _all: true },
+      }),
+      prisma.testRun.findMany({
+        orderBy: { createdAt: "desc" },
+        take: RECENT_RUN_LIMIT,
+        include: {
+          project: { select: { id: true, name: true } },
+          createdBy: { select: { name: true } },
+          _count: { select: { results: true } },
+          results: { select: { testCase: { select: { suiteId: true } } } },
+        },
+      }),
+      prisma.bug.findMany({
+        orderBy: { createdAt: "desc" },
+        include: {
+          testCase: {
+            select: {
+              suite: {
+                select: {
+                  id: true,
+                  name: true,
+                  projectId: true,
+                  project: { select: { platform: true } },
+                },
+              },
+            },
+          },
+          testRunResult: { select: { run: { select: { environment: true } } } },
+        },
+      }),
+      // Distribusi hasil per run (untuk progress tiap run)
+      prisma.testRunResult.groupBy({ by: ["runId", "status"], _count: { _all: true } }),
+      prisma.suite.findMany({
+        orderBy: [{ order: "asc" }, { createdAt: "asc" }],
+        select: {
+          id: true,
+          name: true,
+          code: true,
+          projectId: true,
+          docUrl: true,
+          _count: { select: { testCases: true } },
+        },
+      }),
+      // Hasil TERAKHIR tiap TC pada run COMPLETED -> distribusi status per suite
+      // tanpa double counting lintas run.
+      prisma.testRunResult.findMany({
+        where: { run: { is: { status: "COMPLETED" } } },
+        orderBy: { updatedAt: "desc" },
+        select: {
+          testCaseId: true,
+          status: true,
+          testCase: { select: { suiteId: true } },
+        },
+      }),
+    ]);
 
-  // Map suiteId -> projectId
-  const suiteProject = new Map(suites.map((s) => [s.id, s.projectId]));
-  const projectEnv = new Map(projects.map((p) => [p.id, p.platform ?? null]));
+  const platformByProject = new Map(projects.map((p) => [p.id, p.platform ?? null]));
 
-  // Hitung total & automated TC per project
-  const totalByProject = new Map<string, number>();
-  const automatedByProject = new Map<string, number>();
-  const updateProjectCount = (map: Map<string, number>, projectId: string, n: number) =>
-    map.set(projectId, (map.get(projectId) ?? 0) + n);
-
-  for (const r of tcByProject) {
-    const pid = r.suiteId ? suiteProject.get(r.suiteId) : undefined;
-    if (pid) updateProjectCount(totalByProject, pid, r._count._all);
+  // --- total & automated TC per suite ---
+  const totalBySuite = new Map<string, number>();
+  for (const r of tcBySuite) {
+    if (!r.suiteId) continue;
+    totalBySuite.set(r.suiteId, (totalBySuite.get(r.suiteId) ?? 0) + r._count._all);
   }
-  for (const r of autoByProject) {
-    const pid = r.suiteId ? suiteProject.get(r.suiteId) : undefined;
-    if (pid) updateProjectCount(automatedByProject, pid, r._count._all);
+  const automatedBySuite = new Map<string, number>();
+  for (const r of autoBySuite) {
+    if (!r.suiteId) continue;
+    automatedBySuite.set(r.suiteId, (automatedBySuite.get(r.suiteId) ?? 0) + r._count._all);
   }
 
-  // Pass rate per project: runs -> projectId -> results
-  const runProject = new Map(runs.map((r) => [r.id, r.project.id]));
-  const passByProject = new Map<string, number>();
-  const execByProject = new Map<string, number>();
+  // --- distribusi status per suite (latest result per TC) ---
+  // Mulai dari semua TC = NOT_RUN, lalu timpa dengan hasil terakhir yang ditemukan.
+  const countsBySuite = new Map<string, ExecutionCounts>();
+  const seenTestCase = new Set<string>();
+
+  // Inisialisasi per suite memakai jumlah TC-nya (semuanya NOT_RUN di awal).
+  for (const s of suites) {
+    const c = emptyCounts();
+    c.notRun = totalBySuite.get(s.id) ?? 0;
+    c.total = c.notRun;
+    countsBySuite.set(s.id, c);
+  }
+
+  for (const res of latestResults) {
+    if (seenTestCase.has(res.testCaseId)) continue; // hanya hasil terbaru per TC
+    seenTestCase.add(res.testCaseId);
+    const suiteId = res.testCase?.suiteId;
+    if (!suiteId) continue;
+    const c = countsBySuite.get(suiteId);
+    if (!c) continue;
+    const status = res.status as RunResultStatus;
+    if (status === "NOT_RUN") continue;
+    // TC ini punya hasil -> pindahkan dari notRun ke bucket statusnya.
+    if (c.notRun > 0) c.notRun--;
+    if (status === "PASS") c.passed++;
+    else if (status === "FAIL") c.failed++;
+    else if (status === "BLOCKED") c.blocked++;
+    else if (status === "SKIPPED") c.skipped++;
+    c.executed++;
+  }
+
+  const suiteCoverage: DashboardSuiteCoverageItem[] = suites.map((s) => ({
+    id: s.id,
+    name: s.name,
+    code: s.code,
+    projectId: s.projectId,
+    platform: platformByProject.get(s.projectId) ?? null,
+    docUrl: s.docUrl,
+    total: totalBySuite.get(s.id) ?? 0,
+    automated: automatedBySuite.get(s.id) ?? 0,
+    counts: countsBySuite.get(s.id) ?? emptyCounts(),
+  }));
+
+  // --- distribusi hasil per run ---
+  const countsByRun = new Map<string, ExecutionCounts>();
   for (const r of runStats) {
-    const pid = runProject.get(r.runId);
-    if (!pid) continue;
-    if (r.status === "PASS") {
-      passByProject.set(pid, (passByProject.get(pid) ?? 0) + r._count._all);
-    }
-    if (r.status !== "NOT_RUN") {
-      execByProject.set(pid, (execByProject.get(pid) ?? 0) + r._count._all);
-    }
+    const c = countsByRun.get(r.runId) ?? emptyCounts();
+    const n = r._count._all;
+    const status = r.status as RunResultStatus;
+    c.total += n;
+    if (status === "PASS") c.passed += n;
+    else if (status === "FAIL") c.failed += n;
+    else if (status === "BLOCKED") c.blocked += n;
+    else if (status === "SKIPPED") c.skipped += n;
+    else c.notRun += n;
+    if (status !== "NOT_RUN") c.executed += n;
+    countsByRun.set(r.runId, c);
   }
 
-  // Bug counts per project (via testCase.suite.projectId; bugs tanpa TC masuk "all" saja)
-  const openByProject = new Map<string, number>();
-  const critByProject = new Map<string, number>();
-  const highByProject = new Map<string, number>();
-  for (const b of bugs) {
-    const pid = b.testCase?.suite?.projectId;
-    const isActive = b.status !== "CLOSED" && b.status !== "RESOLVED";
-    if (!isActive) continue;
-    if (b.status === "OPEN" || b.status === "IN_PROGRESS") {
-      if (pid) openByProject.set(pid, (openByProject.get(pid) ?? 0) + 1);
-    }
-    if (pid && b.severity === "CRITICAL") critByProject.set(pid, (critByProject.get(pid) ?? 0) + 1);
-    if (pid && b.severity === "HIGH") highByProject.set(pid, (highByProject.get(pid) ?? 0) + 1);
-  }
-
-  // Distinct TC yang pernah di-test (hasil != NOT_RUN pada run COMPLETED), per project
-  const testedByProject = new Map<string, Set<string>>();
-  for (const r of testedResults) {
-    const pid = r.testCase?.suite?.projectId;
-    if (!pid) continue;
-    let set = testedByProject.get(pid);
-    if (!set) {
-      set = new Set();
-      testedByProject.set(pid, set);
-    }
-    set.add(r.testCaseId);
-  }
-
-  const projectMetrics: DashboardProjectMetric[] = projects.map((p) => {
-    const total = totalByProject.get(p.id) ?? 0;
-    const automated = automatedByProject.get(p.id) ?? 0;
-    const executed = execByProject.get(p.id) ?? 0;
-    const passed = passByProject.get(p.id) ?? 0;
+  const runItems: DashboardRunItem[] = runs.map((r) => {
+    const suiteIds = Array.from(
+      new Set(r.results.map((res) => res.testCase?.suiteId).filter((id): id is string => !!id))
+    );
     return {
-      projectId: p.id,
-      environment: p.platform ?? null,
-      totalTC: total,
-      automatedTC: automated,
-      testedTC: testedByProject.get(p.id)?.size ?? 0,
-      coveragePct: total > 0 ? Math.round((automated / total) * 100) : 0,
-      passRate: executed > 0 ? Math.round((passed / executed) * 100) : 0,
-      executed,
-      passed,
-      openBugs: openByProject.get(p.id) ?? 0,
-      criticalBugs: critByProject.get(p.id) ?? 0,
-      highBugs: highByProject.get(p.id) ?? 0,
+      id: r.id,
+      name: r.name,
+      project: r.project.name,
+      projectId: r.project.id,
+      platform: platformByProject.get(r.project.id) ?? null,
+      environment: r.environment ?? null,
+      status: r.status,
+      executedBy: r.createdBy?.name ?? "—",
+      createdAt: r.createdAt.toISOString(),
+      updatedAt: r.updatedAt.toISOString(),
+      completedAt: r.completedAt?.toISOString() ?? null,
+      suiteIds,
+      counts: countsByRun.get(r.id) ?? emptyCounts(),
     };
   });
 
-  const suiteCoverage: DashboardSuiteCoverageItem[] = suites.map((s) => {
-    const total = s._count.testCases;
-    const automated = autoByProject
-      .filter((r) => r.suiteId === s.id)
-      .reduce((sum, r) => sum + r._count._all, 0);
+  const bugItems: DashboardBugItem[] = bugs.map((b) => {
+    const suite = b.testCase?.suite ?? null;
     return {
-      id: s.id,
-      name: s.name,
-      code: s.code,
-      projectId: s.projectId,
-      environment: projectEnv.get(s.projectId) ?? null,
-      docUrl: s.docUrl,
-      total,
-      automated,
-      coveragePct: total > 0 ? Math.round((automated / total) * 100) : 0,
+      id: b.id,
+      title: b.title,
+      severity: b.severity ?? "",
+      status: b.status,
+      projectId: suite?.projectId ?? null,
+      platform: suite ? platformByProject.get(suite.projectId) ?? null : null,
+      environment: b.testRunResult?.run?.environment ?? null,
+      suiteId: suite?.id ?? null,
+      suiteName: suite?.name ?? null,
+      createdAt: b.createdAt.toISOString(),
     };
   });
-
-  const runItems: DashboardRunItem[] = runs.map((r) => ({
-    id: r.id,
-    name: r.name,
-    project: r.project.name,
-    projectId: r.project.id,
-    environment: projectEnv.get(r.project.id) ?? null,
-    status: r.status,
-    executedBy: r.createdBy?.name ?? "—",
-    total: r._count.results,
-    createdAt: r.createdAt.toISOString(),
-  }));
-
-  const bugItems: DashboardBugItem[] = bugs.map((b) => ({
-    id: b.id,
-    title: b.title,
-    severity: b.severity ?? "",
-    status: b.status,
-    projectId: b.testCase?.suite?.projectId ?? null,
-    environment:
-      (b.testCase?.suite?.projectId && projectEnv.get(b.testCase.suite.projectId)) ?? null,
-    createdAt: b.createdAt.toISOString(),
-  }));
 
   const payload: DashboardPayload = {
     user: { name: user.name, email: user.email, image: user.image },
-    projectMetrics,
     runs: runItems,
     bugs: bugItems,
     suiteCoverage,

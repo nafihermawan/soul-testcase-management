@@ -4,6 +4,7 @@
  * Bentuk tiap payload meniru props yang dipakai komponen client eksisting.
  */
 import type { Role } from "@/lib/permissions";
+import type { ExecutionCounts } from "@/lib/qa-metrics";
 
 export type PlatformCode = "WEB" | "MOBILE" | "HARDWARE" | "API";
 
@@ -26,31 +27,23 @@ export type SidebarProject = {
 export type SidebarProjectsPayload = SidebarProject[];
 
 /* ---------- /api/dashboard ---------- */
-export type DashboardProjectMetric = {
-  projectId: string;
-  environment: string | null;
-  totalTC: number;
-  automatedTC: number;
-  testedTC: number;
-  coveragePct: number;
-  passRate: number;
-  executed: number;
-  passed: number;
-  openBugs: number;
-  criticalBugs: number;
-  highBugs: number;
-};
-
 export type DashboardRunItem = {
   id: string;
   name: string;
   project: string;
   projectId: string;
+  platform: PlatformCode | null;
+  /** TestRun.environment: DEV | STG | PRE-PROD | PROD */
   environment: string | null;
   status: string;
   executedBy: string;
-  total: number;
   createdAt: string;
+  updatedAt: string;
+  completedAt: string | null;
+  /** Suite yang tercakup di run ini (untuk filter Module). */
+  suiteIds: string[];
+  /** Distribusi hasil run ini sendiri (PASS/FAIL/BLOCKED/SKIPPED/NOT_RUN). */
+  counts: ExecutionCounts;
 };
 
 export type DashboardBugItem = {
@@ -59,7 +52,11 @@ export type DashboardBugItem = {
   severity: string;
   status: string;
   projectId: string | null;
+  platform: PlatformCode | null;
   environment: string | null;
+  /** Module = suite tempat test case bug berada. */
+  suiteId: string | null;
+  suiteName: string | null;
   createdAt: string;
 };
 
@@ -68,16 +65,17 @@ export type DashboardSuiteCoverageItem = {
   name: string;
   code: string;
   projectId: string;
-  environment: string | null;
+  platform: PlatformCode | null;
   docUrl: string | null;
   total: number;
   automated: number;
-  coveragePct: number;
+  /** Distribusi TC suite ini menurut hasil TERAKHIR pada run COMPLETED
+   *  (latest per TC, tanpa double count). counts.executed = jumlah TC tested. */
+  counts: ExecutionCounts;
 };
 
 export type DashboardPayload = {
   user: { name: string | null; email: string | null; image: string | null };
-  projectMetrics: DashboardProjectMetric[];
   runs: DashboardRunItem[];
   bugs: DashboardBugItem[];
   suiteCoverage: DashboardSuiteCoverageItem[];

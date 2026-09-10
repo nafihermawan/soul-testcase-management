@@ -34,7 +34,6 @@ export default function Home() {
     <main style={{ fontFamily: "var(--font-sans, system-ui, sans-serif)", width: "100%" }}>
       <Dashboard
         user={data.user}
-        projectMetrics={data.projectMetrics}
         runs={data.runs}
         bugs={data.bugs}
         suiteCoverage={data.suiteCoverage}

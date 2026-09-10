@@ -1442,6 +1442,7 @@ export function TestCasesManager({
                   if (res.success) {
                     setAddingTc(false);
                     setAddingTcFor(null);
+                    refresh();
                   }
                   return res;
                 }}

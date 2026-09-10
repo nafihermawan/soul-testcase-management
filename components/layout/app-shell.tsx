@@ -1,9 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Sidebar } from "@/components/layout/sidebar";
+import { Sidebar, SidebarSkeleton } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
-import { Spinner } from "@/components/ui/feedback";
 import { useApi } from "@/lib/client/use-api";
 import type { Me } from "@/types/api";
 import type { SidebarProject } from "@/types/api";
@@ -43,21 +42,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {shellReady ? (
           <Sidebar projects={projects} collapsed={collapsed} userRole={user?.role} />
         ) : (
-          <div
-            style={{
-              width: collapsed ? 64 : 240,
-              height: "100vh",
-              borderRight: "1px solid #E5E7EB",
-              background: "var(--surface)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              color: "var(--text-muted)",
-              transition: "width 0.3s ease",
-            }}
-          >
-            <Spinner size={18} />
-          </div>
+          <SidebarSkeleton collapsed={collapsed} />
         )}
       </div>
       <div

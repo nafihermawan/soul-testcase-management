@@ -83,7 +83,7 @@ export function SidebarItem({
             marginLeft: "auto",
             opacity: 0.6,
             transform: open ? "rotate(180deg)" : "rotate(0deg)",
-            transition: "transform 0.2s ease",
+            transition: "transform 300ms ease-in-out",
           }}
         />
       )}

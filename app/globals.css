@@ -134,6 +134,15 @@ button,
   margin-left: 0 !important;
 }
 
+/* Sub-menu accordion: animasi collapse via grid-template-rows (1fr <-> 0fr) */
+.sidebar-submenu-collapse {
+  will-change: grid-template-rows;
+}
+
+.sidebar-submenu-collapse > * {
+  min-height: 0;
+}
+
 /* Samakan styling item sub-menu */
 .sidebar-submenu-item {
   font-family: inherit !important;

@@ -143,13 +143,13 @@ export function ReportsView() {
       {/* Komposisi priority & status — repository-wide, ditandai eksplisit */}
       <div className="dash-split dash-split-7-5">
         <CompositionCard
-          title="Komposisi Priority"
+          title="Priority Composition"
           hint={isFiltered ? "Seluruh repository" : undefined}
           items={data.priorityComposition}
           colors={TC_PRIORITY_COLOR}
         />
         <CompositionCard
-          title="Komposisi Status"
+          title="Status Composition"
           hint={isFiltered ? "Seluruh repository" : undefined}
           items={data.statusComposition}
           colors={TC_STATUS_COLOR}

@@ -166,7 +166,9 @@ model TestCase {
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 
-  suite     Suite? @relation(fields: [suiteId], references: [id], onDelete: SetNull)
+  // Hapus suite = test case di dalamnya ikut terhapus (sesuai peringatan UI).
+  // Relasi section tetap SetNull: hapus section hanya melepas TC jadi "unassigned".
+  suite     Suite? @relation(fields: [suiteId], references: [id], onDelete: Cascade)
   section   Section? @relation(fields: [sectionId], references: [id], onDelete: SetNull)
   createdBy User?  @relation(fields: [createdById], references: [id], onDelete: SetNull)
 

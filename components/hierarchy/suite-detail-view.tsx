@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { TestCasesManager } from "@/components/hierarchy/test-cases-manager";
-import { ErrorBlock, LoadingBlock, NotFoundBlock } from "@/components/ui/data-states";
+import { ErrorBlock, NotFoundBlock, SuiteSkeleton } from "@/components/ui/data-states";
 import { RefreshContext } from "@/lib/client/refresh-context";
 import { useApi } from "@/lib/client/use-api";
 import { parseReferenceLines } from "@/lib/format";
@@ -38,7 +38,7 @@ export function SuiteDetailView({
   if (loading || !data) {
     return (
       <main style={{ fontFamily: "var(--font-sans, system-ui, sans-serif)", width: "100%" }}>
-        <LoadingBlock label="Memuat suite…" />
+        <SuiteSkeleton />
       </main>
     );
   }
@@ -64,7 +64,10 @@ export function SuiteDetailView({
   };
 
   return (
-    <main style={{ fontFamily: "var(--font-sans, system-ui, sans-serif)", width: "100%" }}>
+    <main
+      className="content-fade-in"
+      style={{ fontFamily: "var(--font-sans, system-ui, sans-serif)", width: "100%" }}
+    >
       {/* Kartu header utama */}
       <div
         style={{

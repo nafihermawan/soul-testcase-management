@@ -29,6 +29,82 @@ export function LoadingBlock({ label = "Memuat data…" }: { label?: string }) {
   );
 }
 
+/** Skeleton modular: meniru Card Header/Metadata (card atas). */
+export function HeaderDetailSkeleton() {
+  return (
+    <div
+      style={{
+        width: "100%",
+        background: "#fff",
+        border: "1px solid #E5E7EB",
+        borderRadius: "var(--radius-lg)",
+        padding: "1.5rem",
+        boxShadow: "0 1px 3px rgba(15, 23, 42, 0.06)",
+        marginBottom: "1.5rem",
+      }}
+    >
+      <div className="skeleton-block" style={{ width: 180, height: 12 }} />
+      <div style={{ marginTop: "1rem" }}>
+        <div className="skeleton-block" style={{ width: "45%", height: 24 }} />
+        <div className="skeleton-block" style={{ width: "30%", height: 12, marginTop: "0.6rem" }} />
+      </div>
+      <div style={{ marginTop: "0.9rem" }}>
+        <div className="skeleton-block" style={{ width: 90, height: 10 }} />
+        <div className="skeleton-block" style={{ width: 140, height: 10, marginTop: "0.45rem" }} />
+        <div className="skeleton-block" style={{ width: 120, height: 10, marginTop: "0.45rem" }} />
+      </div>
+    </div>
+  );
+}
+
+/** Skeleton modular: meniru Card Tabel Test Case (card bawah). */
+export function TableCardSkeleton() {
+  return (
+    <div
+      style={{
+        width: "100%",
+        background: "#fff",
+        border: "1px solid var(--border)",
+        borderRadius: "var(--radius-lg)",
+        boxShadow: "0 1px 3px rgba(15, 23, 42, 0.06)",
+        overflow: "hidden",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "0.5rem",
+          padding: "0.6rem 0.9rem",
+          background: "#F8FAFC",
+          borderBottom: "1px solid var(--border)",
+        }}
+      >
+        <div className="skeleton-block" style={{ width: 14, height: 14, borderRadius: 4 }} />
+        <div className="skeleton-block" style={{ width: 140, height: 12 }} />
+        <div className="skeleton-block" style={{ width: 70, height: 10, marginLeft: "auto" }} />
+      </div>
+      <div style={{ padding: "0.75rem" }}>
+        <div className="skeleton-block" style={{ width: "100%", height: 34 }} />
+        <div className="skeleton-block" style={{ width: "100%", height: 34, marginTop: "0.5rem" }} />
+        <div className="skeleton-block" style={{ width: "100%", height: 34, marginTop: "0.5rem" }} />
+        <div className="skeleton-block" style={{ width: "100%", height: 34, marginTop: "0.5rem" }} />
+      </div>
+    </div>
+  );
+}
+
+/** Susunan 2-card main layout: HeaderDetailSkeleton + TableCardSkeleton vertikal.
+ *  Digunakan untuk halaman detail suite yang menampilkan kartu header + daftar test case. */
+export function SuiteSkeleton() {
+  return (
+    <div style={{ width: "100%", fontFamily: "var(--font-sans, system-ui, sans-serif)" }}>
+      <HeaderDetailSkeleton />
+      <TableCardSkeleton />
+    </div>
+  );
+}
+
 /** Blok error fetch dengan tombol coba lagi. */
 export function ErrorBlock({
   message = "Gagal memuat data.",

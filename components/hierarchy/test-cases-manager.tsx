@@ -507,6 +507,7 @@ function SectionCard({
   selectedTcIds,
   onToggleTc,
   onToggleAll,
+  onQuickUpdate,
 }: {
   section: Section;
   tcs: TestCase[];
@@ -528,6 +529,10 @@ function SectionCard({
   selectedTcIds: Set<string>;
   onToggleTc: (tcId: string) => void;
   onToggleAll: (tcList: TestCase[]) => void;
+  onQuickUpdate: (
+    t: TestCase,
+    data: { priority?: TestCase["priority"]; status?: TestCase["status"] }
+  ) => void;
 }) {
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState(section.name);
@@ -748,6 +753,7 @@ function SectionCard({
               selectedTcIds={selectedTcIds}
               onToggleTc={onToggleTc}
               onToggleAll={onToggleAll}
+              onQuickUpdate={onQuickUpdate}
             />
           )}
         </div>
@@ -768,6 +774,7 @@ function TestCaseTable({
   selectedTcIds,
   onToggleTc,
   onToggleAll,
+  onQuickUpdate,
 }: {
   testCases: TestCase[];
   onEdit: (t: TestCase) => void;
@@ -780,8 +787,11 @@ function TestCaseTable({
   selectedTcIds?: Set<string>;
   onToggleTc?: (tcId: string) => void;
   onToggleAll?: (tcList: TestCase[]) => void;
+  onQuickUpdate: (
+    t: TestCase,
+    data: { priority?: TestCase["priority"]; status?: TestCase["status"] }
+  ) => void;
 }) {
-  const refresh = useRefresh();
   if (testCases.length === 0) {
     return (
       <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", margin: "0.25rem 0" }}>
@@ -939,8 +949,7 @@ function TestCaseTable({
                   disabled={!canEdit}
                   onChange={async (e) => {
                     const val = e.target.value as TestCase["priority"];
-                    const res = await quickUpdateTestCase(t.id, { priority: val });
-                    if (res.success) refresh();
+                    onQuickUpdate(t, { priority: val });
                   }}
                   style={{
                     ...badgeStyle(priorityTone(t.priority)),
@@ -962,8 +971,7 @@ function TestCaseTable({
                   disabled={!canEdit}
                   onChange={async (e) => {
                     const val = e.target.value as TestCase["status"];
-                    const res = await quickUpdateTestCase(t.id, { status: val });
-                    if (res.success) refresh();
+                    onQuickUpdate(t, { status: val });
                   }}
                   style={{
                     ...badgeStyle(statusTone(t.status)),
@@ -1257,6 +1265,19 @@ export function TestCasesManager({
     showToast("Test Case dihapus.", "success");
   };
 
+  /** Update prioritas/status cepat dari dropdown — update in-place, tanpa refresh penuh. */
+  const handleQuickUpdate = async (
+    t: TestCase,
+    data: { priority?: TestCase["priority"]; status?: TestCase["status"] }
+  ) => {
+    const res = await quickUpdateTestCase(t.id, data);
+    if (!res.success) {
+      showToast(res.error ?? "Gagal mengubah test case.", "error");
+      return;
+    }
+    setLocalTestCases((prev) => prev.map((tc) => (tc.id === t.id ? { ...tc, ...data } : tc)));
+  };
+
   const handleExport = async (format: "csv" | "xlsx") => {
     const rows = localTestCases.map((t) => ({
       tcId: t.tcId,
@@ -1515,6 +1536,7 @@ export function TestCasesManager({
               selectedTcIds={selectedTcIds}
               onToggleTc={toggleTcSelection}
               onToggleAll={(list) => toggleAllInList(list)}
+              onQuickUpdate={handleQuickUpdate}
             />
           ))}
 
@@ -1615,6 +1637,7 @@ export function TestCasesManager({
                   selectedTcIds={selectedTcIds}
                   onToggleTc={toggleTcSelection}
                   onToggleAll={toggleAllInList}
+                  onQuickUpdate={handleQuickUpdate}
                 />
               </div>
             </div>
@@ -1627,6 +1650,7 @@ export function TestCasesManager({
               onEdit={(t) => setEditingTcId(t.id)}
               onDelete={(t) => setDeleteTcTarget(t)}
               canEdit={canEdit}
+              onQuickUpdate={handleQuickUpdate}
             />
           )}
         </div>

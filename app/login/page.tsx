@@ -38,19 +38,19 @@ export default function LoginPage() {
       <div
         style={{
           width: "100%",
-          maxWidth: 448,
-          background: "rgba(255, 255, 255, 0.8)",
+          maxWidth: 360,
+          background: "#343a40",
           backdropFilter: "blur(12px)",
-          border: "1px solid rgba(229, 231, 235, 0.8)",
+          border: "1px solid rgba(51, 65, 85, 0.5)",
           borderRadius: 16,
-          boxShadow: "0 10px 25px -5px rgba(226, 232, 240, 0.6), 0 4px 12px -4px rgba(15, 23, 42, 0.08)",
-          padding: "2rem",
+          boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.45), 0 4px 12px -4px rgba(0, 0, 0, 0.3)",
+          padding: "2rem 1.5rem",
           textAlign: "center",
         }}
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src="/images/spn-logo.png"
+          src="/icn.png"
           alt="Soulparking logo"
           width={56}
           height={56}
@@ -63,11 +63,12 @@ export default function LoginPage() {
         />
         <h1
           style={{
-            fontSize: "1.5rem",
+            fontSize: "1.125rem",
             fontWeight: 800,
-            lineHeight: 1.3,
+            letterSpacing: "-0.01em",
+            lineHeight: 1.35,
             marginBottom: "0.375rem",
-            color: "#111827",
+            color: "#ffffff",
           }}
         >
           Soul Test Case Management
@@ -75,22 +76,15 @@ export default function LoginPage() {
         <p
           style={{
             marginBottom: "1.5rem",
-            fontSize: "0.875rem",
-            color: "#4B5563",
+            fontSize: "0.6875rem",
+            lineHeight: 1.6,
+            color: "#ced4da",
           }}
         >
           Masuk dengan email &amp; password akun internal
         </p>
         <LoginForm />
-        <p style={{ marginTop: "1.25rem", fontSize: "0.75rem", color: "#6B7280" }}>
-          <a
-            href="/onboarding.md"
-            target="_blank"
-            rel="noreferrer"
-            style={{ textDecoration: "underline", color: "inherit" }}
-          >
-            Panduan Penggunaan
-          </a>
+        <p style={{ marginTop: "1.25rem", fontSize: "0.75rem", color: "#e0e0e0" }}>
         </p>
       </div>
     </main>

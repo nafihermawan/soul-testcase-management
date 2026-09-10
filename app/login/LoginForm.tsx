@@ -10,9 +10,10 @@ const inputBase: CSSProperties = {
   width: "100%",
   padding: "0.65rem 0.9rem",
   borderRadius: 12,
-  border: "1px solid #D1D5DB",
+  border: "1px solid #495057",
   fontSize: "0.9rem",
-  background: "#fff",
+  color: "#212529",
+  background: "#f8f9fa",
   outline: "none",
   boxSizing: "border-box",
   transition: "border-color 0.15s ease, box-shadow 0.15s ease",
@@ -29,11 +30,11 @@ export function LoginForm() {
   const [pressed, setPressed] = useState(false);
 
   const focusStyle = (e: React.FocusEvent<HTMLInputElement>) => {
-    e.currentTarget.style.borderColor = "#2563EB";
-    e.currentTarget.style.boxShadow = "0 0 0 3px rgba(37, 99, 235, 0.15)";
+    e.currentTarget.style.borderColor = "#ffc107";
+    e.currentTarget.style.boxShadow = "0 0 0 3px rgba(255, 193, 7, 0.18)";
   };
   const blurStyle = (e: React.FocusEvent<HTMLInputElement>) => {
-    e.currentTarget.style.borderColor = "#D1D5DB";
+    e.currentTarget.style.borderColor = "#495057";
     e.currentTarget.style.boxShadow = "none";
   };
 
@@ -82,12 +83,13 @@ export function LoginForm() {
       <div style={{ textAlign: "left" }}>
         <label
           htmlFor="login-email"
-          style={{ display: "block", fontSize: "0.8rem", fontWeight: 600, color: "#374151", marginBottom: "0.35rem" }}
+          style={{ display: "block", fontSize: "0.8rem", fontWeight: 600, color: "#ffffff", marginBottom: "0.35rem" }}
         >
           Email
         </label>
         <input
           id="login-email"
+          className="login-input"
           type="email"
           autoComplete="email"
           value={email}
@@ -102,13 +104,14 @@ export function LoginForm() {
       <div style={{ textAlign: "left" }}>
         <label
           htmlFor="login-password"
-          style={{ display: "block", fontSize: "0.8rem", fontWeight: 600, color: "#374151", marginBottom: "0.35rem" }}
+          style={{ display: "block", fontSize: "0.8rem", fontWeight: 600, color: "#ffffff", marginBottom: "0.35rem" }}
         >
           Password
         </label>
         <div style={{ position: "relative" }}>
           <input
             id="login-password"
+            className="login-input"
             type={showPassword ? "text" : "password"}
             autoComplete="current-password"
             value={password}
@@ -123,6 +126,7 @@ export function LoginForm() {
             aria-label={showPassword ? "Sembunyikan password" : "Tampilkan password"}
             title={showPassword ? "Sembunyikan password" : "Tampilkan password"}
             onClick={() => setShowPassword((v) => !v)}
+            className="login-eye-btn"
             style={{
               position: "absolute",
               top: "50%",
@@ -135,7 +139,6 @@ export function LoginForm() {
               height: 34,
               border: "none",
               background: "transparent",
-              color: "#6B7280",
               borderRadius: 8,
               cursor: "pointer",
             }}
@@ -175,15 +178,16 @@ export function LoginForm() {
           justifyContent: "center",
           gap: "0.5rem",
           width: "100%",
+          marginTop: "1.5rem",
           padding: "0.7rem 1rem",
           border: "none",
           borderRadius: 12,
-          background: hovered ? "#1D4ED8" : "#2563EB",
-          color: "#ffffff",
+          background: hovered ? "#e0a800" : "#ffc107",
+          color: "#212529",
           fontSize: "0.9rem",
           fontWeight: 700,
           cursor: pending ? "wait" : "pointer",
-          boxShadow: "0 4px 12px rgba(37, 99, 235, 0.25)",
+          boxShadow: "0 4px 12px rgba(255, 193, 7, 0.3)",
           transform: pressed ? "scale(0.99)" : "scale(1)",
           transition: "background-color 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease",
         }}

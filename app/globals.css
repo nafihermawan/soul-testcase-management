@@ -269,3 +269,31 @@ button,
     grid-template-columns: repeat(5, minmax(0, 1fr));
   }
 }
+
+/* Login: field terang di dalam card gelap — placeholder, autofill, & eye-toggle */
+.login-input {
+  color-scheme: light;
+}
+
+.login-input::placeholder {
+  color: #6c757d;
+  opacity: 1;
+}
+
+.login-input:-webkit-autofill,
+.login-input:-webkit-autofill:hover,
+.login-input:-webkit-autofill:focus {
+  -webkit-text-fill-color: #212529;
+  -webkit-box-shadow: 0 0 0 1000px #f8f9fa inset;
+  box-shadow: 0 0 0 1000px #f8f9fa inset;
+  transition: background-color 9999s ease-in-out 0s;
+}
+
+.login-eye-btn {
+  color: #64748b;
+  transition: color 0.15s ease;
+}
+
+.login-eye-btn:hover {
+  color: #334155;
+}

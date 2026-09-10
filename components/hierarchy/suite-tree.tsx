@@ -398,7 +398,7 @@ export function SuiteTree({
                   }}
                 >
                   <th style={{ padding: "0.6rem 1.25rem", fontWeight: 600 }}>Nama Suite</th>
-                  <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600 }}>Kode</th>
+                  <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600 }}>id Suite</th>
                   <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600 }}>Jumlah Test Case</th>
                   <th style={{ padding: "0.6rem 0.5rem", fontWeight: 500, color: "#6B7280" }}>
                     Last Updated

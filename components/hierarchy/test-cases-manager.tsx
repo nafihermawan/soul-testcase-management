@@ -3829,10 +3829,10 @@ function BulkUploadProgressModal({
                 color: "#111827",
               }}
             >
-              Mengunggah Test Cases...
+              Uploading Test Case...
             </h3>
             <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", margin: "0 0 1.25rem" }}>
-              Mohon tunggu, sedang memproses data ({upload.processed}/{upload.total})
+              Processing Data ({upload.processed}/{upload.total})
             </p>
 
             <div

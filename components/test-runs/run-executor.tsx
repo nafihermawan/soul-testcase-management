@@ -144,14 +144,7 @@ export function RunExecutor({
         return;
       }
       if (res?.success) {
-        setItems((prev) => prev.map((r) => (r.id === item.id ? { ...r, status } : r)));
-        setGroups((prev) =>
-          prev.map((g) =>
-            g.items.some((it) => it.id === item.id)
-              ? { ...g, items: g.items.map((it) => (it.id === item.id ? { ...it, status } : it)) }
-              : g
-          )
-        );
+        patchResult(item.id, { status });
       }
     } catch (err) {
       console.error("Gagal update status run result:", err);
@@ -159,6 +152,27 @@ export function RunExecutor({
     } finally {
       setPendingId(null);
     }
+  };
+
+  /**
+   * Patch satu hasil run di SEMUA cermin lokal sekaligus: flat list (`items`),
+   * mirror per-project yang benar-benar dirender kartunya (`groups`), dan item
+   * yang sedang dibuka di modal. Tanpa ini, perubahan bisa tersimpan ke server
+   * tapi tidak terlihat di UI (kartu & statistik memakai `groups`).
+   */
+  const patchResult = (resultId: string, patch: Partial<RunResultItem>) => {
+    setItems((prev) => prev.map((r) => (r.id === resultId ? { ...r, ...patch } : r)));
+    setGroups((prev) =>
+      prev.map((g) =>
+        g.items.some((it) => it.id === resultId)
+          ? {
+              ...g,
+              items: g.items.map((it) => (it.id === resultId ? { ...it, ...patch } : it)),
+            }
+          : g
+      )
+    );
+    setModalItem((prev) => (prev && prev.id === resultId ? { ...prev, ...patch } : prev));
   };
 
   const saveBug = async () => {
@@ -721,6 +735,7 @@ export function RunExecutor({
           item={modalItem}
           canEdit={canEdit}
           onClose={() => setModalItem(null)}
+          onAttachmentsChange={(list) => patchResult(modalItem.id, { attachments: list })}
           onSave={async (data) => {
             const res = await updateRunResult(modalItem.id, {
               status: data.status,
@@ -728,11 +743,8 @@ export function RunExecutor({
               notes: data.notes,
             });
             if (res.success) {
-              setItems((prev) =>
-                prev.map((r) =>
-                  r.id === modalItem.id ? { ...r, ...data } : r
-                )
-              );
+              // Patch cermin lokal (termasuk `groups` yang dirender kartunya).
+              patchResult(modalItem.id, data);
             }
             return res;
           }}
@@ -1774,11 +1786,14 @@ function ExecutionModal({
   item,
   canEdit,
   onClose,
+  onAttachmentsChange,
   onSave,
 }: {
   item: RunResultItem;
   canEdit: boolean;
   onClose: () => void;
+  /** Teruskan daftar attachment terbaru ke parent (update in-place). */
+  onAttachmentsChange?: (list: AttachmentItem[]) => void;
   onSave: (data: { status: RunResultItem["status"]; actualResult?: string; notes?: string }) => Promise<{ success?: boolean; error?: string }>;
 }) {
   const [status, setStatus] = useState<RunResultItem["status"]>(item.status);
@@ -1786,7 +1801,6 @@ function ExecutionModal({
   const [notes, setNotes] = useState(item.notes ?? "");
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
-  const refresh = useRefresh();
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -1820,15 +1834,17 @@ function ExecutionModal({
   };
 
   const save = async () => {
+    if (saving) return; // penjaga double-click
     setSaving(true);
     setMsg(null);
     const res = await onSave({ status, actualResult, notes });
-    setSaving(false);
     if (res.error) {
+      setSaving(false);
       setMsg(res.error);
-    } else {
-      setMsg("Detail disimpan.");
+      return;
     }
+    // Sukses: tutup modal otomatis (data sudah dipatch ke daftar induk).
+    onClose();
   };
 
   return createPortal(
@@ -2019,7 +2035,8 @@ function ExecutionModal({
                       gap: "0.3rem",
                       padding: "0.35rem 0.9rem",
                       borderRadius: 6,
-                      border: `1px solid ${isActive ? s.color : "#D1D5DB"}`,
+                      // Tidak aktif: border tipis senada (lembut). Aktif: solid penuh.
+                      border: `1px solid ${isActive ? s.color : `${s.color}4D`}`,
                       background: isActive ? s.activeBg : s.bg,
                       color: isActive ? "#fff" : s.color,
                       fontSize: "0.75rem",
@@ -2091,13 +2108,13 @@ function ExecutionModal({
                 owner={{ testRunResultId: item.id }}
                 attachments={item.attachments ?? []}
                 canEdit={canEdit}
-                onChanged={refresh}
+                onChange={onAttachmentsChange}
                 compact
               />
             </div>
 
             {msg && (
-              <div style={{ fontSize: "0.75rem", color: msg === "Detail disimpan." ? "#047857" : "#B91C1C" }}>{msg}</div>
+              <div style={{ fontSize: "0.75rem", color: "#B91C1C" }}>{msg}</div>
             )}
 
             {canEdit && (
@@ -2110,15 +2127,15 @@ function ExecutionModal({
                     padding: "0.45rem 1.1rem",
                     border: "none",
                     borderRadius: 3,
-                    background: "#F59E0B",
-                    color: "#000000",
+                    background: "#FFC107",
+                    color: "#0F172A",
                     fontSize: "0.78rem",
-                    fontWeight: 600,
+                    fontWeight: 700,
                     cursor: saving ? "wait" : "pointer",
                     transition: "background-color 0.15s ease",
                   }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = "#D97706")}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = "#F59E0B")}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = "#E0A800")}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = "#FFC107")}
                 >
                   {saving ? "Menyimpan..." : "Simpan Detail"}
                 </button>

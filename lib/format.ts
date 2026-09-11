@@ -88,6 +88,73 @@ export function featurePrefixFromName(name: string): string {
   return words.map(make).join("");
 }
 
+/* ---------- Rentang bulan untuk filter (format "YYYY-MM") ---------- */
+
+const MONTH_SHORT_ID = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "Mei",
+  "Jun",
+  "Jul",
+  "Agu",
+  "Sep",
+  "Okt",
+  "Nov",
+  "Des",
+];
+
+/** Validasi & normalisasi "YYYY-MM". Mengembalikan null bila tidak valid. */
+export function parseMonthKey(value: string | null | undefined): { year: number; month: number } | null {
+  const m = /^(\d{4})-(\d{2})$/.exec((value ?? "").trim());
+  if (!m) return null;
+  const year = Number(m[1]);
+  const month = Number(m[2]);
+  if (month < 1 || month > 12 || year < 1970 || year > 9999) return null;
+  return { year, month };
+}
+
+/** Label singkat sebuah bulan, mis. "Sep 2026". */
+export function monthLabel(key: string): string {
+  const p = parseMonthKey(key);
+  if (!p) return key;
+  return `${MONTH_SHORT_ID[p.month - 1]} ${p.year}`;
+}
+
+/**
+ * Ubah rentang bulan jadi rentang tanggal [gte, lt) untuk filter createdAt.
+ * - from & to sama / hanya from → satu bulan penuh.
+ * - from & to berbeda → dari awal bulan `from` sampai akhir bulan `to`.
+ * `from`/`to` yang tidak valid diabaikan.
+ */
+export function monthRangeToDateRange(
+  from?: string | null,
+  to?: string | null
+): { gte: Date; lt: Date } | null {
+  const f = parseMonthKey(from);
+  const t = parseMonthKey(to) ?? f;
+  if (!f || !t) return null;
+  // Tukar bila urutan terbalik agar rentang selalu valid.
+  const [start, end] =
+    f.year * 12 + f.month <= t.year * 12 + t.month ? [f, t] : [t, f];
+  return {
+    gte: new Date(Date.UTC(start.year, start.month - 1, 1)),
+    // Awal bulan setelah `end` (eksklusif).
+    lt: new Date(Date.UTC(end.year, end.month, 1)),
+  };
+}
+
+/** Geser "YYYY-MM" sebanyak delta bulan. */
+export function shiftMonthKey(key: string, delta: number): string {
+  const p = parseMonthKey(key);
+  if (!p) return key;
+  const total = p.year * 12 + (p.month - 1) + delta;
+  const year = Math.floor(total / 12);
+  const month = (total % 12) + 1;
+  return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}`;
+}
+
 /* ---------- Parsing referensi dokumentasi (multi-baris) ---------- */
 
 export type DocRefLine = {

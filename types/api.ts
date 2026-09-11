@@ -307,10 +307,18 @@ export type ActiveRunRow = {
   createdAt: string;
 };
 
+/** Opsi project untuk filter — `platform` dipakai untuk cascading
+ *  (daftar project menyempit mengikuti Platform yang dipilih). */
+export type ProjectFilterOption = {
+  id: string;
+  name: string;
+  platform: PlatformCode | null;
+};
+
 export type ActiveRunsPayload = {
   runs: ActiveRunRow[];
   canEdit: boolean;
-  allProjects: { id: string; name: string }[];
+  allProjects: ProjectFilterOption[];
   total: number;
   page: number;
   perPage: number;
@@ -332,7 +340,7 @@ export type HistoryRunRow = {
 };
 
 export type HistoryPayload = {
-  allProjects: { id: string; name: string }[];
+  allProjects: ProjectFilterOption[];
   runs: HistoryRunRow[];
   total: number;
   page: number;

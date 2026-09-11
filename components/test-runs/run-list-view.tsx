@@ -15,6 +15,9 @@ export type ActiveRunsSearchParams = {
   platforms?: string;
   projects?: string;
   project?: string;
+  /** Rentang bulan "YYYY-MM". */
+  from?: string;
+  to?: string;
   page?: string;
   perPage?: string;
 };
@@ -26,6 +29,8 @@ export function RunListView({ searchParams }: { searchParams: ActiveRunsSearchPa
     if (searchParams.platforms) sp.set("platforms", searchParams.platforms);
     if (searchParams.projects) sp.set("projects", searchParams.projects);
     if (searchParams.project) sp.set("project", searchParams.project);
+    if (searchParams.from) sp.set("from", searchParams.from);
+    if (searchParams.to) sp.set("to", searchParams.to);
     if (searchParams.page) sp.set("page", searchParams.page);
     if (searchParams.perPage) sp.set("perPage", searchParams.perPage);
     const qs = sp.toString();
@@ -52,7 +57,14 @@ export function RunListView({ searchParams }: { searchParams: ActiveRunsSearchPa
 
   const { runs, total, page, perPage, allProjects } = data;
 
-  const hasFilter = !!(searchParams.q || searchParams.platforms || searchParams.projects || searchParams.project);
+  const hasFilter = !!(
+    searchParams.q ||
+    searchParams.platforms ||
+    searchParams.projects ||
+    searchParams.project ||
+    searchParams.from ||
+    searchParams.to
+  );
   const projectIds = (searchParams.projects ?? "")
     .split(",")
     .map((s) => s.trim())
@@ -113,8 +125,14 @@ export function RunListView({ searchParams }: { searchParams: ActiveRunsSearchPa
                   .map((s) => s.trim())
                   .filter(Boolean),
                 projectIds,
+                from: searchParams.from ?? null,
+                to: searchParams.to ?? null,
               }}
-              activeCount={(searchParams.platforms ? 1 : 0) + (projectIds.length > 0 ? 1 : 0)}
+              activeCount={
+                (searchParams.platforms ? 1 : 0) +
+                (projectIds.length > 0 ? 1 : 0) +
+                (searchParams.from || searchParams.to ? 1 : 0)
+              }
             />
             {data.canEdit && <CreateRunButton />}
           </div>

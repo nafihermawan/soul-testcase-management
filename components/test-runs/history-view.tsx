@@ -14,6 +14,12 @@ export type HistorySearchParams = {
   q?: string;
   platforms?: string;
   projects?: string;
+  /** Rentang bulan "YYYY-MM". */
+  from?: string;
+  to?: string;
+  /** Urutan tabel. Default: completed_at desc. */
+  sort_by?: string;
+  order?: string;
   page?: string;
   perPage?: string;
 };
@@ -26,8 +32,13 @@ export function HistoryView({ searchParams }: { searchParams: HistorySearchParam
     if (searchParams.platforms) sp.set("platforms", searchParams.platforms);
     if (searchParams.projects) sp.set("projects", searchParams.projects);
     if (searchParams.project) sp.set("project", searchParams.project);
+    if (searchParams.from) sp.set("from", searchParams.from);
+    if (searchParams.to) sp.set("to", searchParams.to);
     if (searchParams.page) sp.set("page", searchParams.page);
     if (searchParams.perPage) sp.set("perPage", searchParams.perPage);
+    // Urutan default: run terbaru selesai di atas.
+    sp.set("sort_by", searchParams.sort_by ?? "completed_at");
+    sp.set("order", searchParams.order ?? "desc");
     const qs = sp.toString();
     return `/api/test-runs/history${qs ? `?${qs}` : ""}`;
   }, [searchParams]);
@@ -58,6 +69,8 @@ export function HistoryView({ searchParams }: { searchParams: HistorySearchParam
       .map((s) => s.trim())
       .filter(Boolean),
     projectIds: ((searchParams.projects ?? "").split(",").map((s) => s.trim()).filter(Boolean)),
+    from: searchParams.from ?? null,
+    to: searchParams.to ?? null,
   };
   // Parameter lama `project` tunggal juga dianggap filter project aktif.
   if (searchParams.project) {

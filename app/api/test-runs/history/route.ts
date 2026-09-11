@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { runCodeOf } from "@/lib/format";
+import { runCodeOf, monthRangeToDateRange } from "@/lib/format";
 import { apiSession, apiRoleAtLeast, json401 } from "@/lib/api-auth";
 import type { HistoryPayload, HistoryRunRow } from "@/types/api";
 
@@ -23,12 +23,24 @@ export async function GET(req: NextRequest) {
   const allProjectIds = legacyProject
     ? [legacyProject, ...projectList.filter((p) => p !== legacyProject)]
     : projectList;
+  // Rentang bulan "YYYY-MM" (from & to inklusif).
+  const monthRange = monthRangeToDateRange(sp.get("from"), sp.get("to"));
+  // Sorting: default completed_at desc (semua run di sini berstatus COMPLETED,
+  // jadi waktu selesai adalah urutan yang paling bermakna).
+  const sortBy = sp.get("sort_by") === "created_at" ? "createdAt" : "completedAt";
+  const order = sp.get("order") === "asc" ? "asc" : "desc";
+  // `nulls` hanya berlaku untuk kolom nullable; createdAt non-nullable sehingga
+  // memakai bentuk orderBy biasa.
+  const orderBy =
+    sortBy === "completedAt"
+      ? { completedAt: { sort: order as "asc" | "desc", nulls: "last" as const } }
+      : { createdAt: order as "asc" | "desc" };
   const page = Math.max(1, parseInt(sp.get("page") ?? "1", 10) || 1);
   const perPage = Math.min(100, Math.max(10, parseInt(sp.get("perPage") ?? "10", 10) || 10));
 
   const allProjects = await prisma.project.findMany({
     orderBy: [{ order: "asc" }, { createdAt: "asc" }],
-    select: { id: true, name: true },
+    select: { id: true, name: true, platform: true },
   });
 
   // Query where — kombinasi AND antar kriteria, OR di dalam kriteria
@@ -54,13 +66,16 @@ export async function GET(req: NextRequest) {
       },
     });
   }
+  if (monthRange) {
+    andClauses.push({ createdAt: { gte: monthRange.gte, lt: monthRange.lt } });
+  }
   if (andClauses.length > 0) where.AND = andClauses;
 
   const [total, runs] = await Promise.all([
     prisma.testRun.count({ where }),
     prisma.testRun.findMany({
       where,
-      orderBy: { createdAt: "desc" },
+      orderBy,
       skip: (page - 1) * perPage,
       take: perPage,
       include: {
@@ -142,7 +157,9 @@ export async function GET(req: NextRequest) {
 
   // Count filter aktif (untuk label tombol)
   const activeCount =
-    (platformList.length > 0 ? 1 : 0) + (allProjectIds.length > 0 ? 1 : 0);
+    (platformList.length > 0 ? 1 : 0) +
+    (allProjectIds.length > 0 ? 1 : 0) +
+    (monthRange ? 1 : 0);
 
   const payload: HistoryPayload = {
     allProjects,

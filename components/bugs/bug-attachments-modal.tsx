@@ -14,14 +14,15 @@ export function BugAttachmentsModal({
   attachments,
   canEdit,
   onClose,
-  onChanged,
+  onChange,
 }: {
   bugId: string;
   bugTitle: string;
   attachments: AttachmentItem[];
   canEdit: boolean;
   onClose: () => void;
-  onChanged?: () => void;
+  /** Daftar attachment terbaru — dipakai parent untuk update in-place. */
+  onChange?: (items: AttachmentItem[]) => void;
 }) {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -107,7 +108,7 @@ export function BugAttachmentsModal({
             owner={{ bugId }}
             attachments={attachments}
             canEdit={canEdit}
-            onChanged={onChanged}
+            onChange={onChange}
           />
         </div>
       </div>

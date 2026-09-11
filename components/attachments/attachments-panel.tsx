@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { FileVideo, Image as ImageIcon, Loader2, Paperclip, Trash2, X } from "lucide-react";
 import {
   confirmAttachment,
@@ -23,7 +23,11 @@ const isVideo = (mime: string) => mime.startsWith("video/");
 
 /**
  * Panel attachment reusable: pilih file → presign → PUT langsung ke R2
- * (byte tidak lewat server) → konfirmasi metadata → refresh.
+ * (byte tidak lewat server) → konfirmasi metadata.
+ *
+ * Daftar attachment dicerminkan ke state lokal dan di-update IN-PLACE setelah
+ * upload/hapus — tidak memanggil refetch halaman, supaya modal/tab tidak
+ * ter-remount (dan posisi scroll tidak melompat).
  *
  * Dipakai di: tab Attachments Test Case, ExecutionModal (evidence run result),
  * dan modal evidence Bug.
@@ -32,13 +36,15 @@ export function AttachmentsPanel({
   owner,
   attachments,
   canEdit = true,
-  onChanged,
+  onChange,
   compact = false,
 }: {
   owner: AttachmentOwner;
   attachments: AttachmentItem[];
   canEdit?: boolean;
-  onChanged?: () => void;
+  /** Dipanggil dengan daftar terbaru agar parent bisa ikut memperbarui
+   *  penghitung/badge-nya tanpa refetch. */
+  onChange?: (items: AttachmentItem[]) => void;
   /** Tampilan lebih rapat untuk di dalam modal. */
   compact?: boolean;
 }) {
@@ -48,13 +54,27 @@ export function AttachmentsPanel({
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<AttachmentItem | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
+  // Cermin lokal daftar attachment; prop tetap otoritatif saat berubah.
+  const [items, setItems] = useState<AttachmentItem[]>(attachments);
+  useEffect(() => {
+    setItems(attachments);
+  }, [attachments]);
+
+  /** Update state lokal lalu beri tahu parent — tanpa refetch. */
+  const applyItems = (next: AttachmentItem[]) => {
+    setItems(next);
+    onChange?.(next);
+  };
 
   const pick = () => inputRef.current?.click();
 
   const handleFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     setError(null);
-    let uploadedCount = 0;
+    // Kumpulkan hasil upload, baru terapkan sekali di akhir agar tidak
+    // menimpa state dengan snapshot yang basi saat multi-file.
+    const created: AttachmentItem[] = [];
 
     for (const file of Array.from(files)) {
       // Validasi awal di klien supaya tidak perlu round-trip untuk file jelas invalid.
@@ -109,7 +129,7 @@ export function AttachmentsPanel({
           setError(confirmed.error);
           continue;
         }
-        uploadedCount++;
+        if (confirmed.attachment) created.push(confirmed.attachment);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Upload gagal.");
       } finally {
@@ -119,9 +139,16 @@ export function AttachmentsPanel({
     }
 
     if (inputRef.current) inputRef.current.value = "";
-    // Hanya reload bila ada yang benar-benar ter-upload — memanggil reload saat
-    // file ditolak akan me-remount panel dan menghapus pesan errornya.
-    if (uploadedCount > 0) onChanged?.();
+    // Tambahkan ke daftar lokal — TANPA refetch halaman.
+    if (created.length > 0) applyItems([...created, ...items]);
+  };
+
+  /** Terima file yang di-drop ke area dashed. */
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragging(false);
+    if (!canEdit || uploading) return;
+    void handleFiles(e.dataTransfer.files);
   };
 
   const remove = async (att: AttachmentItem) => {
@@ -133,21 +160,24 @@ export function AttachmentsPanel({
       setError(res.error);
       return;
     }
-    onChanged?.();
+    // Buang dari daftar lokal — TANPA refetch halaman.
+    applyItems(items.filter((a) => a.id !== att.id));
   };
 
-  const tileStyle: CSSProperties = {
+  /** Thumbnail ringkas 64×64 (w-16 h-16) — anchor tombol hapus melayang. */
+  const thumbStyle: CSSProperties = {
     position: "relative",
-    width: compact ? 84 : 104,
-    height: compact ? 84 : 104,
+    width: 64,
+    height: 64,
+    flexShrink: 0,
+  };
+  const thumbMediaStyle: CSSProperties = {
+    width: 64,
+    height: 64,
     borderRadius: 8,
     border: "1px solid var(--border)",
-    background: "var(--surface-muted)",
-    overflow: "hidden",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
+    display: "block",
+    objectFit: "cover",
   };
 
   return (
@@ -161,42 +191,87 @@ export function AttachmentsPanel({
         onChange={(e) => void handleFiles(e.target.files)}
       />
 
-      <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", flexWrap: "wrap" }}>
-        {canEdit && (
-          <button
-            type="button"
-            onClick={pick}
-            disabled={uploading}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "0.35rem",
-              padding: "0.45rem 0.9rem",
-              borderRadius: 8,
-              border: "none",
-              background: "#F59E0B",
-              color: "#1F2937",
-              fontWeight: 600,
-              fontSize: "0.82rem",
-              cursor: uploading ? "wait" : "pointer",
-            }}
-          >
-            {uploading ? (
-              <>
-                <Loader2 size={14} style={{ animation: "spin 0.8s linear infinite" }} />
+      {/* Dropzone hanya tampil saat belum ada file. Setelah ada file, yang
+          tampil cukup preview + tombol "Ubah file" yang ringkas. */}
+      {canEdit && items.length === 0 && (
+        <div
+          role="button"
+          tabIndex={0}
+          aria-label="Upload evidence"
+          onClick={pick}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              pick();
+            }
+          }}
+          onDragOver={(e) => {
+            e.preventDefault();
+            if (!uploading) setDragging(true);
+          }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={handleDrop}
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: "0.3rem",
+            padding: compact ? "0.9rem 1rem" : "1.25rem 1rem",
+            borderRadius: 8,
+            border: `2px dashed ${dragging ? "#94A3B8" : "#CBD5E1"}`,
+            background: dragging ? "#F1F5F9" : "#F8FAFC",
+            cursor: uploading ? "wait" : "pointer",
+            textAlign: "center",
+            transition: "background-color 0.15s ease, border-color 0.15s ease",
+          }}
+          onMouseEnter={(e) => {
+            if (!dragging && !uploading) e.currentTarget.style.background = "#F1F5F9";
+          }}
+          onMouseLeave={(e) => {
+            if (!dragging) e.currentTarget.style.background = "#F8FAFC";
+          }}
+        >
+          {uploading ? (
+            <>
+              <Loader2
+                size={18}
+                style={{ color: "#64748B", animation: "spin 0.8s linear infinite" }}
+              />
+              <span style={{ fontSize: "0.78rem", fontWeight: 600, color: "#334155" }}>
                 Mengunggah… {progress}%
-              </>
-            ) : (
-              <>
-                <Paperclip size={14} /> Attach File
-              </>
-            )}
-          </button>
-        )}
-        <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
-          Gambar atau video · maks {MAX_MB} MB per file
-        </span>
-      </div>
+              </span>
+            </>
+          ) : (
+            <>
+              <Paperclip size={18} style={{ color: "#94A3B8" }} />
+              <span style={{ fontSize: "0.78rem", fontWeight: 600, color: "#334155" }}>
+                Klik atau tarik file ke sini
+              </span>
+              <span style={{ fontSize: "0.7rem", color: "#94A3B8" }}>
+                Gambar atau video · maks {MAX_MB} MB per file
+              </span>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Sedang mengunggah file tambahan saat daftar sudah berisi. */}
+      {canEdit && items.length > 0 && uploading && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "0.4rem",
+            fontSize: "0.76rem",
+            fontWeight: 600,
+            color: "#334155",
+          }}
+        >
+          <Loader2 size={14} style={{ color: "#64748B", animation: "spin 0.8s linear infinite" }} />
+          Mengunggah… {progress}%
+        </div>
+      )}
 
       {error && (
         <div
@@ -213,82 +288,154 @@ export function AttachmentsPanel({
         </div>
       )}
 
-      {attachments.length === 0 ? (
-        <p style={{ margin: 0, fontSize: "0.82rem", color: "var(--text-muted)" }}>
-          Belum ada attachment.
-        </p>
+      {items.length === 0 ? (
+        // Untuk pengunggah, dropzone di atas sudah menjelaskan keadaannya —
+        // tidak perlu teks tambahan. Teks ini untuk yang hanya bisa melihat.
+        !canEdit && (
+          <p style={{ margin: 0, fontSize: "0.82rem", color: "var(--text-muted)" }}>
+            Belum ada attachment.
+          </p>
+        )
       ) : (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.6rem" }}>
-          {attachments.map((att) => (
-            <div key={att.id} style={tileStyle}>
-              {att.url && !isVideo(att.mimeType) ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={att.url}
-                  alt={att.fileName}
-                  onClick={() => setPreview(att)}
-                  style={{ width: "100%", height: "100%", objectFit: "cover", cursor: "zoom-in" }}
-                />
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => (att.url ? window.open(att.url, "_blank") : undefined)}
-                  title={att.url ? att.fileName : "URL tidak tersedia"}
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    gap: "0.25rem",
-                    border: "none",
-                    background: "transparent",
-                    cursor: att.url ? "pointer" : "default",
-                    color: "var(--text-muted)",
-                    padding: "0.25rem",
-                  }}
-                >
-                  {isVideo(att.mimeType) ? <FileVideo size={22} /> : <ImageIcon size={22} />}
-                  <span
-                    style={{
-                      fontSize: "0.62rem",
-                      maxWidth: 78,
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {att.fileName}
-                  </span>
-                  <span style={{ fontSize: "0.6rem" }}>{humanSize(att.size)}</span>
-                </button>
-              )}
-
-              {canEdit && (
-                <button
-                  type="button"
-                  onClick={() => void remove(att)}
-                  disabled={deletingId === att.id}
-                  title="Hapus attachment"
-                  style={{
-                    position: "absolute",
-                    top: 3,
-                    right: 3,
-                    width: 22,
-                    height: 22,
-                    borderRadius: 6,
-                    border: "none",
-                    background: "rgba(17,24,39,0.72)",
-                    color: "#fff",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    cursor: deletingId === att.id ? "wait" : "pointer",
-                  }}
-                >
-                  <Trash2 size={12} />
-                </button>
-              )}
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.55rem" }}>
+          {/* Tombol ringkas untuk menambah/mengganti file — dropzone besar
+              sudah disembunyikan karena daftar sudah berisi. */}
+          {canEdit && (
+            <div>
+              <button
+                type="button"
+                onClick={pick}
+                disabled={uploading}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "0.3rem",
+                  padding: 0,
+                  border: "none",
+                  background: "transparent",
+                  color: "#2563EB",
+                  fontSize: "0.76rem",
+                  fontWeight: 600,
+                  cursor: uploading ? "wait" : "pointer",
+                }}
+              >
+                <Paperclip size={12} /> Tambah / ubah file
+              </button>
             </div>
-          ))}
+          )}
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: compact ? "0.7rem" : "0.85rem",
+              // Ruang untuk tombol hapus yang melayang di atas thumbnail.
+              paddingTop: 8,
+            }}
+          >
+            {items.map((att) => {
+              const video = isVideo(att.mimeType);
+              const openable = Boolean(att.url);
+              return (
+                <div key={att.id} style={{ display: "flex", alignItems: "center", gap: "0.9rem" }}>
+                  <div style={thumbStyle}>
+                    {openable && !video ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={att.url!}
+                        alt={att.fileName}
+                        onClick={() => setPreview(att)}
+                        style={{ ...thumbMediaStyle, cursor: "zoom-in" }}
+                      />
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => (att.url ? window.open(att.url, "_blank") : undefined)}
+                        title={att.url ? att.fileName : "URL tidak tersedia"}
+                        style={{
+                          ...thumbMediaStyle,
+                          background: "var(--surface-muted)",
+                          cursor: openable ? "pointer" : "default",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          color: "#94A3B8",
+                          // `display: block` dari thumbMediaStyle diganti agar ikon terpusat.
+                          display: "flex",
+                        }}
+                      >
+                        {video ? <FileVideo size={22} /> : <ImageIcon size={22} />}
+                      </button>
+                    )}
+
+                    {canEdit && (
+                      <button
+                        type="button"
+                        onClick={() => void remove(att)}
+                        disabled={deletingId === att.id}
+                        title="Hapus attachment"
+                        aria-label={`Hapus ${att.fileName}`}
+                        className="icon-btn-circle"
+                        style={{
+                          position: "absolute",
+                          top: -8,
+                          right: -8,
+                          width: 24,
+                          height: 24,
+                          padding: 4,
+                          borderRadius: "50%",
+                          border: "none",
+                          background: "#F43F5E",
+                          color: "#fff",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          boxShadow: "0 1px 4px rgba(15, 23, 42, 0.25)",
+                          cursor: deletingId === att.id ? "wait" : "pointer",
+                        }}
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Nama file + ukuran, di samping thumbnail */}
+                  <div style={{ minWidth: 0 }}>
+                    <div
+                      title={att.fileName}
+                      style={{
+                        fontSize: "0.82rem",
+                        fontWeight: 600,
+                        color: "#1F2937",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                        maxWidth: compact ? 200 : 280,
+                      }}
+                    >
+                      {att.fileName}
+                      <span style={{ fontWeight: 400, color: "var(--text-muted)" }}>
+                        {" · "}
+                        {humanSize(att.size)}
+                      </span>
+                    </div>
+                    {video && openable && (
+                      <a
+                        href={att.url!}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{
+                          fontSize: "0.72rem",
+                          color: "#2563EB",
+                          textDecoration: "none",
+                        }}
+                      >
+                        Buka video
+                      </a>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 

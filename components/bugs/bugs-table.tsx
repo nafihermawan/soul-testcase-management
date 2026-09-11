@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type CSSProperties } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { ExternalLink, Paperclip, Search, Trash2 } from "lucide-react";
 import { deleteBug, updateBugStatus } from "@/lib/actions/automation-bugs";
 import { ConfirmDialog, Toast, useToast } from "@/components/ui/feedback";
@@ -49,6 +49,18 @@ export function BugsPageClient({
   const [deletePending, setDeletePending] = useState(false);
   const [evidenceBug, setEvidenceBug] = useState<BugRow | null>(null);
   const { toast, showToast, dismissToast } = useToast();
+  // Cermin lokal daftar bug: upload/hapus evidence cukup memperbarui barisnya
+  // sendiri (tanpa refetch halaman, supaya modal & posisi scroll tidak hilang).
+  const [localBugs, setLocalBugs] = useState<BugRow[]>(bugs);
+  useEffect(() => {
+    setLocalBugs(bugs);
+  }, [bugs]);
+
+  /** Patch daftar attachment satu bug di state lokal. */
+  const patchBugAttachments = (bugId: string, list: AttachmentItem[]) => {
+    setLocalBugs((prev) => prev.map((b) => (b.id === bugId ? { ...b, attachments: list } : b)));
+    setEvidenceBug((prev) => (prev && prev.id === bugId ? { ...prev, attachments: list } : prev));
+  };
 
   // Filter pencarian header banner
   const [query, setQuery] = useState("");
@@ -56,7 +68,7 @@ export function BugsPageClient({
   const [statusFilter, setStatusFilter] = useState<string>("");
 
   const q = query.trim().toLowerCase();
-  const visibleBugs = bugs.filter((b) => {
+  const visibleBugs = localBugs.filter((b) => {
     if (sevFilter && b.severity !== sevFilter) return false;
     if (statusFilter && b.status !== statusFilter) return false;
     if (!q) return true;
@@ -350,7 +362,7 @@ export function BugsPageClient({
           attachments={evidenceBug.attachments ?? []}
           canEdit={canAttach}
           onClose={() => setEvidenceBug(null)}
-          onChanged={() => reload?.()}
+          onChange={(list) => patchBugAttachments(evidenceBug.id, list)}
         />
       )}
 

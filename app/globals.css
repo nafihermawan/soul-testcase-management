@@ -93,6 +93,17 @@ button,
   border-radius: 3px !important;
 }
 
+/* Pengecualian: tombol ikon bulat (mis. hapus attachment melayang).
+   Perlu !important agar menang dari aturan radius global di atas. */
+.icon-btn-circle {
+  border-radius: 50% !important;
+}
+
+/* Pengecualian: tombol dengan sudut 6px (rounded-md) sesuai spesifikasi UI. */
+.btn-rounded-md {
+  border-radius: 6px !important;
+}
+
 /* Sidebar menu item: unified base + hover state */
 .sidebar-item {
   color: var(--text-secondary);
@@ -173,6 +184,70 @@ button,
     opacity: 1;
     transform: scale(1);
   }
+}
+
+/* ---------------- Modal filter & dropdown (transisi halus) ---------------- */
+
+/* Overlay memudar masuk */
+@keyframes overlayIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Konten modal muncul membesar: scale 95% -> 100% */
+@keyframes modalPopIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Panel dropdown mengembang turun dari atas (opacity + translateY) */
+@keyframes dropdownIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.overlay-in {
+  animation: overlayIn 300ms ease-out;
+}
+
+.modal-pop-in {
+  animation: modalPopIn 300ms ease-out;
+}
+
+.dropdown-panel {
+  animation: dropdownIn 200ms ease-in-out;
+}
+
+/* Field filter: umpan balik fokus kuning lembut (#FFC348).
+   `!important` diperlukan karena warna border di-set inline (inline menang
+   atas class biasa). */
+.filter-field {
+  transition:
+    border-color 200ms ease,
+    box-shadow 200ms ease;
+}
+
+.filter-field:focus,
+.filter-field:focus-visible {
+  outline: none;
+  border-color: #ffc348 !important;
+  box-shadow: 0 0 0 2px rgba(255, 195, 72, 0.2) !important;
 }
 
 /* Spinner rotation */

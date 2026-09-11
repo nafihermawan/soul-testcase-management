@@ -719,7 +719,6 @@ export function TestCaseDetailView({
         owner={{ testCaseId: tc.id }}
         attachments={tc.attachments ?? []}
         canEdit={tc.canEdit}
-        onChanged={reload}
       />
     </div>
   );

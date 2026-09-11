@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/permissions";
+import { toAttachmentItems } from "@/lib/attachments";
+import type { AttachmentItem } from "@/types/api";
 import {
   MAX_ATTACHMENT_BYTES,
   buildStorageKey,
@@ -19,6 +21,8 @@ export type AttachmentActionState = {
   /** URL presigned untuk browser PUT langsung ke R2. */
   uploadUrl?: string;
   storageKey?: string;
+  /** Attachment yang baru dibuat (untuk update lokal tanpa refetch). */
+  attachment?: AttachmentItem;
 };
 
 export type AttachmentOwner = {
@@ -147,13 +151,25 @@ export async function confirmAttachment(input: {
         ...owner.data,
         uploadedById: user.id,
       },
-      select: { id: true },
+      select: {
+        id: true,
+        fileName: true,
+        mimeType: true,
+        size: true,
+        storageKey: true,
+        createdAt: true,
+        uploadedBy: { select: { name: true } },
+      },
     });
 
     if (owner.data.testCaseId) revalidatePath(`/test-cases/${owner.data.testCaseId}`);
     if (owner.data.testRunResultId) revalidatePath(`/test-runs`);
     if (owner.data.bugId) revalidatePath(`/bugs`);
-    return { success: true, storageKey: created.id };
+
+    // Kembalikan item lengkap (dengan URL presigned) supaya klien bisa
+    // menambahkannya ke daftar secara lokal — tanpa refetch seluruh halaman.
+    const [item] = await toAttachmentItems([created]);
+    return { success: true, attachment: item };
   } catch (error) {
     console.error(error);
     return { error: "Gagal menyimpan metadata attachment." };

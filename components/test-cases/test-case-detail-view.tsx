@@ -18,6 +18,7 @@ import { TestCasePageHeader } from "@/components/test-cases/detail-header";
 import { BugsTab } from "@/components/test-cases/bugs-tab";
 import { Tabs } from "@/components/test-cases/tabs";
 import { TestDataCodeblock } from "@/components/test-cases/test-data-codeblock";
+import { runStatusLabel } from "@/components/test-runs/test-run-status-badge";
 import { ErrorBlock, NotFoundBlock, SuiteSkeleton } from "@/components/ui/data-states";
 import { RefreshContext } from "@/lib/client/refresh-context";
 import { useApi } from "@/lib/client/use-api";
@@ -71,17 +72,6 @@ const formatDateTime = (iso: string): string =>
     hour: "2-digit",
     minute: "2-digit",
   });
-
-const runStatusLabel = (s: string) =>
-  s === "COMPLETED"
-    ? "Completed"
-    : s === "IN_PROGRESS"
-      ? "In Progress"
-      : s === "DRAFT"
-        ? "Draft"
-        : s === "ABORTED"
-          ? "Aborted"
-          : s;
 
 const actionLabel: Record<string, string> = {
   CREATED: "Dibuat",

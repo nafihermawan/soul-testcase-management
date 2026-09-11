@@ -4,7 +4,10 @@
  *
  * Konvensi penting:
  * - "Executed" = hasil run dengan status != NOT_RUN.
- * - "Tested"  = TC unik yang punya hasil executed pada run yang sudah COMPLETED.
+ * - "Tested"  = TC unik yang punya hasil executed pada run yang sudah pernah
+ *               tuntas (COMPLETED atau RE_OPEN — run yang dibuka ulang tetap
+ *               dihitung agar angka coverage tidak turun palsu).
+ *               Lihat `EXECUTED_RUN_STATUSES` di lib/run-status.ts.
  * - Persentase HANYA ditampilkan bila penyebutnya > 0; selain itu "—".
  */
 

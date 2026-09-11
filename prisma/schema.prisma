@@ -33,9 +33,17 @@ enum TCStatus {
   DEPRECATED
 }
 
+/// Status sebuah TestRun.
+/// - PENDING      : run sudah dibuat, testing belum dimulai
+/// - IN_PROGRESS  : sedang dieksekusi
+/// - COMPLETED    : selesai (punya completedAt)
+/// - RE_OPEN      : pernah COMPLETED, dibuka lagi untuk retest/regresi
+/// "Belum selesai" (tampil di halaman Active Runs) = PENDING | IN_PROGRESS | RE_OPEN.
 enum RunStatus {
+  PENDING
   IN_PROGRESS
   COMPLETED
+  RE_OPEN
 }
 
 enum RunResultStatus {

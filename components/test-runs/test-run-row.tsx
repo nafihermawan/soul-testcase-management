@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { TestRunStatusBadge } from "@/components/test-runs/test-run-status-badge";
+import { RunStatusSelect } from "@/components/test-runs/run-status-select";
 
 export function TestRunRow({
   id,
@@ -15,6 +16,8 @@ export function TestRunRow({
   createdByName,
   createdAt,
   extraAction,
+  onStatusChange,
+  statusPending,
 }: {
   id: string;
   runCode: string;
@@ -27,6 +30,9 @@ export function TestRunRow({
   createdByName: string | null;
   createdAt: string;
   extraAction?: ReactNode;
+  /** Bila diberikan, kolom Status jadi dropdown (bukan badge read-only). */
+  onStatusChange?: (status: string) => void;
+  statusPending?: boolean;
 }) {
   return (
     <tr
@@ -80,9 +86,18 @@ export function TestRunRow({
       <td style={{ padding: "0.6rem 0.5rem", color: "var(--text-secondary)" }}>
         {sprint ?? "—"}
       </td>
-      {/* 6. Status */}
+      {/* 6. Status — dropdown bila bisa diubah, badge bila read-only */}
       <td style={{ padding: "0.6rem 0.5rem" }}>
-        <TestRunStatusBadge status={status} />
+        {onStatusChange ? (
+          <RunStatusSelect
+            runCode={runCode}
+            status={status}
+            pending={statusPending}
+            onChange={onStatusChange}
+          />
+        ) : (
+          <TestRunStatusBadge status={status} />
+        )}
       </td>
       {/* 7. Pass Rate */}
       <td style={{ padding: "0.6rem 0.5rem", fontWeight: 700 }}>{pct}%</td>

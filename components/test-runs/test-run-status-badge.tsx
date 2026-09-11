@@ -1,17 +1,31 @@
 "use client";
 
+import { RUN_STATUS_LABEL, type RunStatusValue } from "@/lib/run-status";
+
 const statusConfig: Record<string, { label: string; color: string; bg: string; border: string }> = {
+  PENDING: {
+    label: RUN_STATUS_LABEL.PENDING,
+    color: "#475569",
+    bg: "#F1F5F9",
+    border: "#E2E8F0",
+  },
   IN_PROGRESS: {
-    label: "In Progress",
+    label: RUN_STATUS_LABEL.IN_PROGRESS,
     color: "#B45309",
     bg: "#FFFBEB",
     border: "#FDE68A",
   },
   COMPLETED: {
-    label: "Completed",
+    label: RUN_STATUS_LABEL.COMPLETED,
     color: "#047857",
     bg: "#ECFDF5",
     border: "#A7F3D0",
+  },
+  RE_OPEN: {
+    label: RUN_STATUS_LABEL.RE_OPEN,
+    color: "#1D4ED8",
+    bg: "#EFF6FF",
+    border: "#BFDBFE",
   },
   DRAFT: {
     label: "Draft",
@@ -26,6 +40,11 @@ const statusConfig: Record<string, { label: string; color: string; bg: string; b
     border: "#FECDD3",
   },
 };
+
+/** Label tampilan untuk status run (dipakai juga di luar komponen badge). */
+export function runStatusLabel(status: string): string {
+  return statusConfig[status]?.label ?? String(status as RunStatusValue);
+}
 
 export function TestRunStatusBadge({ status, className }: { status: string; className?: string }) {
   const cfg = statusConfig[status] ?? {

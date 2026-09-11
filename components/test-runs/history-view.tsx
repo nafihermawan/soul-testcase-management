@@ -1,12 +1,14 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { HistoryRunRow } from "@/components/test-runs/history-run-row";
 import { HistoryControls } from "@/components/test-runs/history-controls";
 import { HistoryPagination } from "@/components/test-runs/history-pagination";
 import { DeleteRunButton } from "@/components/test-runs/delete-run-button";
 import { ErrorBlock, TableCardSkeleton } from "@/components/ui/data-states";
+import { Toast, useToast } from "@/components/ui/feedback";
 import { useApi } from "@/lib/client/use-api";
+import { setRunStatus } from "@/lib/actions/test-runs";
 import type { HistoryPayload } from "@/types/api";
 
 export type HistorySearchParams = {
@@ -44,6 +46,75 @@ export function HistoryView({ searchParams }: { searchParams: HistorySearchParam
   }, [searchParams]);
 
   const { data, error, loading, reload } = useApi<HistoryPayload>(apiPath);
+  const [pendingStatusId, setPendingStatusId] = useState<string | null>(null);
+  const { toast, showToast, dismissToast } = useToast();
+
+  /**
+   * Salinan lokal daftar run + total, supaya mutasi baris (ubah status, hapus)
+   * tampil seketika TANPA refetch. Perhatikan: halaman History selalu hanya
+   * berisi run COMPLETED, sehingga membuka kembali sebuah run (IN_PROGRESS /
+   * RE_OPEN / PENDING) berarti barisnya keluar dari daftar ini.
+   *
+   * `source` menyimpan payload server terakhir yang sudah disalin. Selama belum
+   * ada payload baru, hasil patch lokal dipertahankan; begitu server mengirim
+   * payload baru (ganti filter, retry, dll) salinan ini ditimpa. Sinkronisasi
+   * sengaja dilakukan SAAT RENDER, bukan di useEffect, agar tidak ada satu
+   * frame pun yang sempat menampilkan daftar kosong sebelum data tersalin.
+   */
+  const [list, setList] = useState<{
+    source: HistoryPayload | null;
+    runs: HistoryPayload["runs"];
+    total: number;
+  }>({ source: null, runs: [], total: 0 });
+
+  if (list.source !== data) {
+    setList(
+      data
+        ? { source: data, runs: data.runs, total: data.total }
+        : { source: null, runs: [], total: 0 }
+    );
+  }
+
+  /**
+   * Ubah status run dari baris History — terutama untuk membuka lagi (RE_OPEN)
+   * run yang sudah selesai.
+   *
+   * Sengaja TIDAK memanggil reload(): reload menyalakan `loading`, sehingga
+   * seluruh halaman sempat tertukar ke skeleton (terasa seperti refresh total).
+   * Cukup barisnya dipindah/dibuang di daftar lokal — server tetap menulis
+   * statusnya. Bila gagal, daftar dikembalikan ke kondisi semula.
+   */
+  const changeStatus = async (runId: string, status: string) => {
+    const snapshot = list;
+    const nextRuns =
+      status === "COMPLETED"
+        ? list.runs.map((r) => (r.id === runId ? { ...r, status } : r))
+        : list.runs.filter((r) => r.id !== runId);
+    const removed = list.runs.length - nextRuns.length;
+
+    setPendingStatusId(runId);
+    setList({ ...list, runs: nextRuns, total: Math.max(0, list.total - removed) });
+
+    const res = await setRunStatus(runId, status as Parameters<typeof setRunStatus>[1]);
+    setPendingStatusId(null);
+    if (res.error) {
+      setList(snapshot);
+      showToast(res.error, "error");
+      return;
+    }
+    showToast("Status run diperbarui.", "success");
+  };
+
+  /**
+   * Buang baris dari daftar lokal setelah run benar-benar terhapus di server.
+   * Dipakai sebagai pengganti reload() agar tabel tidak berkedip skeleton.
+   */
+  const removeRunLocally = (runId: string) =>
+    setList((prev) => ({
+      ...prev,
+      runs: prev.runs.filter((r) => r.id !== runId),
+      total: Math.max(0, prev.total - 1),
+    }));
 
   if (error) {
     return (
@@ -61,7 +132,9 @@ export function HistoryView({ searchParams }: { searchParams: HistorySearchParam
     );
   }
 
-  const { runs, total, page, perPage, activeCount, allProjects, canDelete } = data;
+  const { page, perPage, activeCount, allProjects, canDelete } = data;
+  // `runs`/`total` diambil dari salinan lokal (lihat komentar state `list`).
+  const { runs, total } = list;
   const initial = {
     q: searchParams.q ?? "",
     platforms: (searchParams.platforms ?? "")
@@ -158,6 +231,9 @@ export function HistoryView({ searchParams }: { searchParams: HistorySearchParam
                     Platform
                   </th>
                   <th style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#64748B", padding: "14px 16px", textAlign: "left" }}>
+                    Status
+                  </th>
+                  <th style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#64748B", padding: "14px 16px", textAlign: "left" }}>
                     Sprint
                   </th>
                   <th style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#64748B", padding: "14px 16px", textAlign: "left" }}>
@@ -176,9 +252,17 @@ export function HistoryView({ searchParams }: { searchParams: HistorySearchParam
                   <HistoryRunRow
                     key={run.id}
                     {...run}
+                    onStatusChange={
+                      canDelete ? (next) => void changeStatus(run.id, next) : undefined
+                    }
+                    statusPending={pendingStatusId === run.id}
                     extraAction={
                       canDelete ? (
-                        <DeleteRunButton runId={run.id} runName={run.name} onDeleted={reload} />
+                        <DeleteRunButton
+                          runId={run.id}
+                          runName={run.name}
+                          onDeleted={() => removeRunLocally(run.id)}
+                        />
                       ) : undefined
                     }
                   />
@@ -191,6 +275,8 @@ export function HistoryView({ searchParams }: { searchParams: HistorySearchParam
         {/* Pagination footer */}
         <HistoryPagination total={total} page={page} perPage={perPage} baseUrl="/test-runs/history" />
       </div>
+
+      <Toast toast={toast} onDismiss={dismissToast} />
     </main>
   );
 }

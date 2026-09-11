@@ -1,8 +1,17 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { runCodeOf } from "@/lib/format";
+import { RUN_STATUS_LABEL, type RunStatusValue } from "@/lib/run-status";
 import { requireUser } from "@/lib/hierarchy";
 import { ReportActionBar } from "@/components/test-runs/report-action-bar";
+
+/** Warna pill status untuk versi cetak (server component — tanpa modul client). */
+const PRINT_RUN_STATUS_TONE: Record<string, { color: string; bg: string; border: string }> = {
+  PENDING: { color: "#475569", bg: "#F1F5F9", border: "#E2E8F0" },
+  IN_PROGRESS: { color: "#B45309", bg: "#FFFBEB", border: "#FDE68A" },
+  COMPLETED: { color: "#047857", bg: "#ECFDF5", border: "#A7F3D0" },
+  RE_OPEN: { color: "#1D4ED8", bg: "#EFF6FF", border: "#BFDBFE" },
+};
 
 export default async function RunReportPage({
   params,
@@ -104,12 +113,18 @@ export default async function RunReportPage({
               borderRadius: 999,
               fontSize: 11,
               fontWeight: 700,
-              background: run.status === "COMPLETED" ? "#ECFDF5" : "#FFFBEB",
-              color: run.status === "COMPLETED" ? "#047857" : "#B45309",
-              border: `1px solid ${run.status === "COMPLETED" ? "#A7F3D0" : "#FDE68A"}`,
+              ...(() => {
+                const tone =
+                  PRINT_RUN_STATUS_TONE[run.status] ?? PRINT_RUN_STATUS_TONE.IN_PROGRESS;
+                return {
+                  background: tone.bg,
+                  color: tone.color,
+                  border: `1px solid ${tone.border}`,
+                };
+              })(),
             }}
           >
-            {run.status === "COMPLETED" ? "Completed" : "In Progress"}
+            {RUN_STATUS_LABEL[run.status as RunStatusValue] ?? run.status}
           </span>
         </div>
       </div>

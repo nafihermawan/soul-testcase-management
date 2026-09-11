@@ -683,12 +683,15 @@ export function HistoryControls({
   activeCount,
   baseUrl = "/test-runs/history",
   dialogTitle = "Filter Run History",
+  showFilterButton = true,
 }: {
   projects: ProjectFilterOption[];
   initial: HistoryFilterState;
   activeCount: number;
   baseUrl?: string;
   dialogTitle?: string;
+  /** Halaman Active Runs memakai pencarian saja, tanpa tombol & modal filter. */
+  showFilterButton?: boolean;
 }) {
   const router = useRouter();
   const [q, setQ] = useState(initial.q);
@@ -844,29 +847,32 @@ export function HistoryControls({
         />
       </div>
 
-      {/* Filter button */}
-      <button
-        type="button"
-        onClick={openModal}
-        style={{
-          display: "inline-flex",
-          alignItems: "center",
-          gap: "0.4rem",
-          padding: "0.5rem 0.9rem",
-          borderRadius: 8,
-          border: "1px solid #D1D5DB",
-          background: "#fff",
-          color: "#374151",
-          fontWeight: 600,
-          fontSize: "0.83rem",
-          cursor: "pointer",
-        }}
-      >
-        <SlidersHorizontal size={14} />
-        {activeCount > 0 ? `Filter (${activeCount})` : "Filter"}
-      </button>
+      {/* Filter button — disembunyikan di halaman yang hanya memakai pencarian */}
+      {showFilterButton && (
+        <button
+          type="button"
+          onClick={openModal}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "0.4rem",
+            padding: "0.5rem 0.9rem",
+            borderRadius: 8,
+            border: "1px solid #D1D5DB",
+            background: "#fff",
+            color: "#374151",
+            fontWeight: 600,
+            fontSize: "0.83rem",
+            cursor: "pointer",
+          }}
+        >
+          <SlidersHorizontal size={14} />
+          {activeCount > 0 ? `Filter (${activeCount})` : "Filter"}
+        </button>
+      )}
 
-      {modalOpen &&
+      {showFilterButton &&
+        modalOpen &&
         portalRoot &&
         createPortal(
           <div

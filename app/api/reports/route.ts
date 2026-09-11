@@ -8,6 +8,7 @@ import {
   TC_STATUS_LABEL,
   TC_STATUS_ORDER,
 } from "@/lib/qa-metrics";
+import { EXECUTED_RUN_STATUSES } from "@/lib/run-status";
 import type {
   ReportsCompositionItem,
   ReportsPayload,
@@ -61,9 +62,11 @@ export async function GET() {
     prisma.testCase.count({
       where: { automation: { is: { status: { in: ["AUTOMATED", "FAILING", "UNSTABLE"] } } } },
     }),
-    // TC unik yang pernah dieksekusi (status != NOT_RUN) pada run COMPLETED.
+    // TC unik yang pernah dieksekusi (status != NOT_RUN) pada run yang sudah
+    // pernah tuntas (COMPLETED atau RE_OPEN — run yang dibuka ulang tetap
+    // dihitung, agar angka coverage tidak turun palsu).
     prisma.testRunResult.findMany({
-      where: { status: { not: "NOT_RUN" }, run: { is: { status: "COMPLETED" } } },
+      where: { status: { not: "NOT_RUN" }, run: { is: { status: { in: EXECUTED_RUN_STATUSES } } } },
       select: { testCaseId: true, testCase: { select: { suiteId: true } } },
     }),
   ]);

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { apiSession, json401 } from "@/lib/api-auth";
 import { emptyCounts, type ExecutionCounts, type RunResultStatus } from "@/lib/qa-metrics";
+import { EXECUTED_RUN_STATUSES } from "@/lib/run-status";
 import type {
   DashboardPayload,
   DashboardRunItem,
@@ -71,10 +72,11 @@ export async function GET() {
           _count: { select: { testCases: true } },
         },
       }),
-      // Hasil TERAKHIR tiap TC pada run COMPLETED -> distribusi status per suite
-      // tanpa double counting lintas run.
+      // Hasil TERAKHIR tiap TC pada run yang sudah pernah tuntas
+      // (COMPLETED atau RE_OPEN) -> distribusi status per suite, tanpa
+      // double counting lintas run.
       prisma.testRunResult.findMany({
-        where: { run: { is: { status: "COMPLETED" } } },
+        where: { run: { is: { status: { in: EXECUTED_RUN_STATUSES } } } },
         orderBy: { updatedAt: "desc" },
         select: {
           testCaseId: true,

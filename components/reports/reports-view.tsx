@@ -6,6 +6,7 @@ import { FilterSelect } from "@/components/ui/filter-select";
 import { useApi } from "@/lib/client/use-api";
 import { TC_PRIORITY_COLOR, TC_STATUS_COLOR, pct } from "@/lib/qa-metrics";
 import { InventorySummary } from "@/components/reports/inventory-summary";
+import { WeeklyReportSection } from "@/components/reports/weekly-report-section";
 import { CompositionCard } from "@/components/reports/composition-card";
 import { CoverageGapTable } from "@/components/reports/coverage-gap-table";
 import { RepositoryHygiene } from "@/components/reports/repository-hygiene";
@@ -136,6 +137,9 @@ export function ReportsView() {
           />
         </div>
       </div>
+
+      {/* Laporan mingguan (dikirim tiap Jumat) */}
+      <WeeklyReportSection />
 
       {/* Ringkasan inventaris (mengikuti filter) */}
       <InventorySummary inventory={view.inventory} />

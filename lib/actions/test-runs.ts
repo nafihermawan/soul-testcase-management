@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/permissions";
+import { ACTIVE_RUN_STATUSES, type RunStatusValue } from "@/lib/run-status";
 
 export type TestRunActionState = {
   error?: string;
@@ -118,7 +119,7 @@ export async function updateRunResult(
   try {
     const result = await prisma.testRunResult.findUnique({
       where: { id: resultId },
-      include: { run: { select: { id: true } } },
+      include: { run: { select: { id: true, status: true } } },
     });
     if (!result) return { error: "Hasil run tidak ditemukan." };
 
@@ -131,7 +132,56 @@ export async function updateRunResult(
         updatedById: user.id,
       },
     });
+
+    // Begitu ada eksekusi, run yang tadinya PENDING memang "sedang berjalan".
+    if (result.run.status === "PENDING") {
+      await prisma.testRun.update({
+        where: { id: result.run.id },
+        data: { status: "IN_PROGRESS" },
+      });
+      revalidatePath("/test-runs");
+    }
+
     revalidatePath(`/test-runs/${result.run.id}`);
+    return { success: true };
+  } catch (error) {
+    return handleError(error);
+  }
+}
+
+/**
+ * Ubah status sebuah TestRun (dipakai kontrol status di halaman Active Runs).
+ *
+ * `completedAt` dijaga konsisten:
+ * - COMPLETED  -> diisi waktu sekarang
+ * - selain itu -> dikosongkan kembali
+ * (Sebelumnya `completedAt` tidak pernah dikosongkan, sehingga run yang
+ * dibuka ulang tetap tampak punya waktu selesai.)
+ */
+export async function setRunStatus(
+  runId: string,
+  status: RunStatusValue
+): Promise<TestRunActionState> {
+  await requireRole("QA");
+  try {
+    const run = await prisma.testRun.findUnique({
+      where: { id: runId },
+      select: { id: true },
+    });
+    if (!run) return { error: "Test run tidak ditemukan." };
+
+    await prisma.testRun.update({
+      where: { id: runId },
+      data: {
+        status,
+        completedAt: status === "COMPLETED" ? new Date() : null,
+      },
+    });
+
+    revalidatePath("/test-runs");
+    revalidatePath("/test-runs/history");
+    revalidatePath("/reports");
+    revalidatePath(`/test-runs/${runId}`);
     return { success: true };
   } catch (error) {
     return handleError(error);
@@ -178,8 +228,9 @@ export async function completeRunWithSkip(runId: string): Promise<TestRunActionS
 
 /**
  * Simpan hasil eksekusi untuk satu TestCase dari modal detail.
- * Update TestRunResult di run IN_PROGRESS terbaru yang berisi TC ini;
- * kalau belum ada, buat TestRunResult baru di run IN_PROGRESS terbaru.
+ * Update TestRunResult di run aktif terbaru yang berisi TC ini;
+ * kalau belum ada, buat TestRunResult baru di run aktif terbaru.
+ * Run aktif = IN_PROGRESS atau RE_OPEN (PENDING belum dimulai).
  */
 export async function saveExecutionForTestCase(
   testCaseId: string,
@@ -201,7 +252,7 @@ export async function saveExecutionForTestCase(
     const existing = await prisma.testRunResult.findFirst({
       where: {
         testCaseId,
-        run: { status: "IN_PROGRESS" },
+        run: { status: { in: ACTIVE_RUN_STATUSES } },
       },
       orderBy: { updatedAt: "desc" },
       include: { run: { select: { id: true } } },
@@ -221,7 +272,7 @@ export async function saveExecutionForTestCase(
     } else {
       // Buat run baru (Express Run satu TC) kalau belum ada run aktif
       const activeRun = await prisma.testRun.findFirst({
-        where: { status: "IN_PROGRESS", projectId: tc.suite?.projectId },
+        where: { status: { in: ACTIVE_RUN_STATUSES }, projectId: tc.suite?.projectId },
         orderBy: { createdAt: "desc" },
         select: { id: true },
       });

@@ -319,9 +319,6 @@ export type ActiveRunsPayload = {
   runs: ActiveRunRow[];
   canEdit: boolean;
   allProjects: ProjectFilterOption[];
-  total: number;
-  page: number;
-  perPage: number;
 };
 
 /* ---------- /api/test-runs/history ---------- */
@@ -438,6 +435,47 @@ export type RunDetailPayload = {
   platforms: string | null;
   environment: string | null;
   suites: { id: string; name: string }[];
+};
+
+/* ---------- /api/reports/weekly (Weekly Testing Report) ---------- */
+export type WeeklyReportTask = {
+  id: string;
+  runCode: string;
+  name: string;
+  project: string;
+  sprint: string | null;
+  environment: string | null;
+  activityType: string | null;
+  platforms: string | null;
+  taskLink: string | null;
+  /** "berjalan" (PENDING/IN_PROGRESS/RE_OPEN) atau "selesai" (COMPLETED). */
+  bucket: "running" | "done";
+  status: string;
+  completedAt: string | null;
+  createdAt: string;
+  counts: ExecutionCounts;
+  /** executed / total dalam persen; null bila total 0. */
+  progressPct: number | null;
+  openBugs: number;
+  criticalHighBugs: number;
+};
+
+export type WeeklyReportPayload = {
+  /** Rentang tanggal laporan (ISO), inklusif. */
+  period: { from: string; to: string };
+  running: WeeklyReportTask[];
+  done: WeeklyReportTask[];
+  summary: {
+    runningTasks: number;
+    doneTasks: number;
+    totalTC: number;
+    executed: number;
+    passed: number;
+    failed: number;
+    openBugs: number;
+    /** null bila belum ada eksekusi. */
+    passRate: number | null;
+  };
 };
 
 /* ---------- /api/reports (Testing Inventory & Gap) ---------- */

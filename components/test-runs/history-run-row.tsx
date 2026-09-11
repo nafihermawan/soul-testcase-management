@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { FileText } from "lucide-react";
 import Link from "next/link";
+import { RunStatusSelect } from "@/components/test-runs/run-status-select";
 
 export function HistoryRunRow({
   id,
@@ -12,9 +13,12 @@ export function HistoryRunRow({
   suites,
   platforms,
   sprint,
+  status,
   qaName,
   createdAt,
   extraAction,
+  onStatusChange,
+  statusPending,
 }: {
   id: string;
   runCode: string;
@@ -23,9 +27,13 @@ export function HistoryRunRow({
   suites: { id: string; name: string }[];
   platforms: string | null;
   sprint: string | null;
+  status: string;
   qaName: string | null;
   createdAt: string;
   extraAction?: ReactNode;
+  /** Bila diberikan, kolom Status jadi dropdown (untuk membuka run lagi). */
+  onStatusChange?: (status: string) => void;
+  statusPending?: boolean;
 }) {
   const projectLabel =
     projects.length > 1 ? (
@@ -109,7 +117,20 @@ export function HistoryRunRow({
       <td style={{ padding: "0.7rem 0.5rem", color: "#475569" }}>{suiteLabel}</td>
       {/* 5. Platform */}
       <td style={{ padding: "0.7rem 0.5rem", color: "#475569" }}>{platforms ?? "—"}</td>
-      {/* 6. Sprint */}
+      {/* 6. Status — dropdown bila boleh diubah (mis. buka lagi run selesai) */}
+      <td style={{ padding: "0.7rem 0.5rem" }}>
+        {onStatusChange ? (
+          <RunStatusSelect
+            runCode={runCode}
+            status={status}
+            pending={statusPending}
+            onChange={onStatusChange}
+          />
+        ) : (
+          <span style={{ fontSize: "0.78rem", color: "#475569" }}>{status}</span>
+        )}
+      </td>
+      {/* 7. Sprint */}
       <td style={{ padding: "0.7rem 0.5rem", color: "#475569" }}>{sprint ?? "—"}</td>
       {/* QA & Tanggal Execution (terpisah) */}
       <td style={{ padding: "0.7rem 0.5rem", color: "#475569", fontSize: "0.82rem", whiteSpace: "nowrap" }}>

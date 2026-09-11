@@ -38,24 +38,31 @@ export function DeleteRunButton({
       <button
         type="button"
         title="Hapus run"
+        aria-label={`Hapus run ${runName}`}
         onClick={(e) => {
           e.stopPropagation();
           setOpen(true);
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.color = "#DC2626";
+          e.currentTarget.style.background = "#FEF2F2";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.color = "#94A3B8";
+          e.currentTarget.style.background = "transparent";
         }}
         style={{
           display: "inline-flex",
           alignItems: "center",
           justifyContent: "center",
-          width: 30,
-          height: 30,
-          borderRadius: 6,
-          border: "1px solid #FECACA",
-          background: "#FEF2F2",
-          color: "#B91C1C",
-          cursor: "pointer",
+          padding: 4,
+          border: "none",
+          background: "transparent",
+          color: "#94A3B8",
+          transition: "color 0.15s ease, background-color 0.15s ease",
         }}
       >
-        <Trash2 size={13} />
+        <Trash2 size={16} />
       </button>
 
       <ConfirmDialog

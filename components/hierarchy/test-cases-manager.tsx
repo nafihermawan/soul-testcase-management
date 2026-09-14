@@ -1043,6 +1043,12 @@ export function TestCasesManager({
   // state ini (tanpa refresh satu halaman penuh), disinkronkan ulang dari
   // prop saat parent me-refetch (prop server otoritatif).
   const [localTestCases, setLocalTestCases] = useState<TestCase[]>(testCases);
+  // Cermin lokal daftar Section: rename/pindah TC di-update in-place supaya
+  // tidak memicu reload halaman (prop server tetap otoritatif saat berubah).
+  const [localSections, setLocalSections] = useState(sections);
+  useEffect(() => {
+    setLocalSections(sections);
+  }, [sections]);
   useEffect(() => {
     setLocalTestCases(testCases);
   }, [testCases]);
@@ -1135,9 +1141,18 @@ export function TestCasesManager({
 
   const isOpen = (id: string) => openSections[id] ?? true;
 
+  /**
+   * Patch `sectionId` TC di state lokal — pengganti refresh() supaya tabel
+   * tidak berkedip ke skeleton setelah memindahkan TC.
+   */
+  const patchTcSection = (ids: string[], sectionId: string | null) =>
+    setLocalTestCases((prev) =>
+      prev.map((t) => (ids.includes(t.id) ? { ...t, sectionId } : t))
+    );
+
   const moveTc = async (tcId: string, sectionId: string | null) => {
     const res = await assignTestCaseToSection(tcId, sectionId);
-    if (res.success) refresh();
+    if (res.success) patchTcSection([tcId], sectionId);
   };
 
   /** Drop handler: pindahkan 1 TC (drag biasa) atau semua TC terpilih (bulk drag). */
@@ -1154,7 +1169,7 @@ export function TestCasesManager({
         return;
       }
       if (isBulk) clearSelection();
-      refresh();
+      patchTcSection(targetIds, sectionId);
       showToast(
         isBulk
           ? `${targetIds.length} Test Cases berhasil dipindahkan ke ${sectionName}`
@@ -1190,8 +1205,13 @@ export function TestCasesManager({
   };
 
   const renameSection = async (id: string, title: string) => {
-    await renameSectionAction(id, title);
-    refresh();
+    const res = await renameSectionAction(id, title);
+    if (res.error) {
+      showToast(res.error, "error");
+      return;
+    }
+    // Update nama di state lokal — tidak perlu reload halaman.
+    setLocalSections((prev) => prev.map((s) => (s.id === id ? { ...s, name: title } : s)));
   };
 
   // --- Bulk selection helpers ---
@@ -1220,13 +1240,14 @@ export function TestCasesManager({
   const clearSelection = () => setSelectedTcIds(new Set());
 
   const bulkMove = async (sectionId: string | null) => {
-    for (const tcId of Array.from(selectedTcIds)) {
+    const ids = Array.from(selectedTcIds);
+    for (const tcId of ids) {
       await assignTestCaseToSection(tcId, sectionId);
     }
+    patchTcSection(ids, sectionId);
     clearSelection();
     setBulkMoveOpen(false);
-    refresh();
-    showToast(`${selectedTcIds.size} Test Case dipindahkan!`, "success");
+    showToast(`${ids.length} Test Case dipindahkan!`, "success");
   };
 
   const bulkDelete = async () => {
@@ -1245,7 +1266,7 @@ export function TestCasesManager({
   const grouped: {
     section: { id: string; name: string; description: string | null };
     tcs: TestCase[];
-  }[] = sections.map((s) => ({
+  }[] = localSections.map((s) => ({
     section: s,
     tcs: localTestCases.filter((t) => t.sectionId === s.id),
   }));
@@ -1647,7 +1668,7 @@ export function TestCasesManager({
           )}
 
           {/* Empty state seluruh suite */}
-          {localTestCases.length === 0 && sections.length === 0 && (
+          {localTestCases.length === 0 && localSections.length === 0 && (
             <TestCaseTable
               testCases={[]}
               onEdit={(t) => setEditingTcId(t.id)}

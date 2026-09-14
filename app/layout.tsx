@@ -19,9 +19,22 @@ export const metadata: Metadata = {
     template: "%s — Soul Test Case Management",
   },
   description: "Dashboard manajemen test case SoulParking",
+  /**
+   * Ikon dilayani dari /public (bukan konvensi app/) dengan query versi `?v=`.
+   *
+   * Alasannya: favicon di-cache sangat agresif oleh browser dan URL-nya tidak
+   * pernah berubah, sehingga ikon lama — segitiga bawaan "Create Next App" —
+   * bisa tertahan lama di browser meski file di server sudah diganti.
+   * Dengan mengubah URL, browser dipaksa mengambil ulang.
+   *
+   * Setiap kali file ikon diganti, naikkan angka versinya.
+   */
   icons: {
-    icon: "/icon.png",
-    apple: "/apple-icon.png",
+    icon: [
+      { url: "/favicon.ico?v=2", type: "image/x-icon", sizes: "32x32" },
+      { url: "/icon.png?v=2", type: "image/png" },
+    ],
+    apple: [{ url: "/apple-icon.png?v=2" }],
   },
 };
 

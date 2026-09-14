@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Play, RotateCcw, Search, X } from "lucide-react";
+import { FolderOpen, Play, RotateCcw, Search, X } from "lucide-react";
 import { createTestRun, updateTestRun } from "@/lib/actions/test-runs";
 import { getJSON, invalidateApiCache } from "@/lib/client/use-api";
 import type { PlatformCode, RunOptionsPayload } from "@/types/api";
@@ -47,6 +47,11 @@ type Props = {
   runId?: string;
   /** Nilai awal — dipakai mode edit untuk pre-fill seluruh field. */
   initial?: ExpressRunInitial;
+  /**
+   * Bila diberikan, dipanggil setelah simpan sukses dan MENGGANTIKAN navigasi
+   * bawaan — dipakai saat form dirender di dalam modal.
+   */
+  onSaved?: (runId: string) => void;
 };
 
 const inputStyle: React.CSSProperties = {
@@ -79,7 +84,14 @@ const PLATFORM_ENUM_TO_LABEL: Record<string, string> = {
   API: "API",
 };
 
-export function ExpressRunForm({ projectId, projects, mode = "create", runId, initial }: Props) {
+export function ExpressRunForm({
+  projectId,
+  projects,
+  mode = "create",
+  runId,
+  initial,
+  onSaved,
+}: Props) {
   const router = useRouter();
   const isEdit = mode === "edit";
   const [selectedProjectIds, setSelectedProjectIds] = useState<Set<string>>(
@@ -435,6 +447,11 @@ export function ExpressRunForm({ projectId, projects, mode = "create", runId, in
               payload
             );
       if (res.success && res.runId) {
+        // Dirender di dalam modal: serahkan ke pemanggil, jangan navigasi.
+        if (onSaved) {
+          onSaved(res.runId);
+          return;
+        }
         if (isEdit) {
           // Selesai mengedit: halaman Active Runs harus menampilkan data terbaru,
           // jadi buang cache client dulu (bukan mengandalkan TTL).
@@ -488,6 +505,26 @@ export function ExpressRunForm({ projectId, projects, mode = "create", runId, in
     () => testCases.filter((t) => selectedTCs.has(t.id)),
     [testCases, selectedTCs]
   );
+
+  // Preview juga dikelompokkan per Section, konsisten dengan panel kanan.
+  const previewSectionGroups = useMemo(() => {
+    const nameById = new Map(sections.map((s) => [s.id, s.name]));
+    const groups = new Map<string, { key: string; name: string; items: TCOption[] }>();
+    for (const t of selectedTCList) {
+      const key = t.sectionId ?? "__none__";
+      let g = groups.get(key);
+      if (!g) {
+        g = {
+          key,
+          name: t.sectionId ? nameById.get(t.sectionId) ?? "Section" : "Tanpa Section",
+          items: [],
+        };
+        groups.set(key, g);
+      }
+      g.items.push(t);
+    }
+    return Array.from(groups.values());
+  }, [selectedTCList, sections]);
 
   return (
     <div style={{ width: "100%", display: "flex", flexDirection: "column" }}>
@@ -843,20 +880,25 @@ export function ExpressRunForm({ projectId, projects, mode = "create", runId, in
               ) : (
                 tcSectionGroups.map((g) => (
                   <div key={g.key}>
-                    {/* Header Section: mengelompokkan TC agar tidak membingungkan. */}
+                    {/* Header Section: folder + teks, pengelompok daftar TC */}
                     <div
                       style={{
-                        padding: "0.35rem 0.55rem",
-                        margin: "0.2rem 0 0.3rem",
-                        background: "var(--surface-muted)",
-                        borderRadius: 6,
-                        fontSize: "0.66rem",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6,
+                        padding: "4px 8px",
+                        marginTop: 8,
+                        marginBottom: 4,
+                        background: "rgba(241, 245, 249, 0.7)",
+                        borderRadius: 4,
+                        fontSize: 11,
                         fontWeight: 700,
+                        color: "#475569",
                         textTransform: "uppercase",
                         letterSpacing: "0.05em",
-                        color: "#94A3B8",
                       }}
                     >
+                      <FolderOpen size={12} style={{ flexShrink: 0 }} />
                       {g.name}
                     </div>
                     {g.items.map((t) => {
@@ -864,7 +906,7 @@ export function ExpressRunForm({ projectId, projects, mode = "create", runId, in
                   return (
                     <label
                       key={t.id}
-                      style={itemStyle(checked)}
+                      style={{ ...itemStyle(checked), paddingLeft: 12 }}
                       onMouseEnter={(e) => {
                         if (!checked) e.currentTarget.style.background = "var(--surface-muted)";
                       }}
@@ -932,7 +974,32 @@ export function ExpressRunForm({ projectId, projects, mode = "create", runId, in
                   </tr>
                 </thead>
                 <tbody>
-                  {selectedTCList.map((t) => (
+                  {previewSectionGroups.map((g) => (
+                    <Fragment key={g.key}>
+                      {/* Baris header Section di dalam tabel preview */}
+                      <tr>
+                        <td colSpan={4} style={{ padding: "4px 8px 0" }}>
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 6,
+                              padding: "4px 8px",
+                              background: "rgba(241, 245, 249, 0.7)",
+                              borderRadius: 4,
+                              fontSize: 11,
+                              fontWeight: 700,
+                              color: "#475569",
+                              textTransform: "uppercase",
+                              letterSpacing: "0.05em",
+                            }}
+                          >
+                            <FolderOpen size={12} style={{ flexShrink: 0 }} />
+                            {g.name}
+                          </div>
+                        </td>
+                      </tr>
+                      {g.items.map((t) => (
                     <tr key={t.id} style={{ borderTop: "1px solid var(--border)" }}>
                       <td style={{ padding: "0.45rem 0.75rem" }}>
                         <span
@@ -975,6 +1042,8 @@ export function ExpressRunForm({ projectId, projects, mode = "create", runId, in
                         </button>
                       </td>
                     </tr>
+                      ))}
+                    </Fragment>
                   ))}
                 </tbody>
               </table>
@@ -987,16 +1056,22 @@ export function ExpressRunForm({ projectId, projects, mode = "create", runId, in
         )}
       </div>
 
-      {/* Footer / action bar */}
+      {/* Footer / action bar — sticky di dasar area scroll supaya tombol selalu
+          terlihat tanpa perlu scroll (termasuk saat form dipakai di dalam modal). */}
       <div
         style={{
+          position: "sticky",
+          bottom: 0,
+          zIndex: 10,
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
           gap: "0.6rem",
           padding: "0.9rem 1.25rem",
           borderTop: "1px solid var(--border)",
-          background: "var(--surface-muted)",
+          background: "rgba(248, 250, 252, 0.9)",
+          backdropFilter: "blur(6px)",
+          flexWrap: "wrap",
         }}
       >
         {/* Summary counter (kiri) */}
@@ -1005,7 +1080,7 @@ export function ExpressRunForm({ projectId, projects, mode = "create", runId, in
           {selectedProjectIds.size} Project{selectedProjectIds.size === 1 ? "" : "s"}
         </span>
 
-        <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <button
             type="button"
             onClick={reset}
@@ -1013,16 +1088,24 @@ export function ExpressRunForm({ projectId, projects, mode = "create", runId, in
             style={{
               display: "inline-flex",
               alignItems: "center",
-              gap: "0.35rem",
-              padding: "0.5rem 1rem",
+              justifyContent: "center",
+              gap: 8,
+              height: 40,
+              minWidth: 170,
+              padding: "0 16px",
               borderRadius: 8,
-              border: "1px solid var(--border-strong)",
+              border: "1px solid #CBD5E1",
               background: "#fff",
-              color: "var(--text-secondary)",
+              color: "#334155",
               fontWeight: 600,
-              fontSize: "0.85rem",
-              cursor: "pointer",
+              fontSize: 12,
+              cursor: pending ? "not-allowed" : "pointer",
+              transition: "background-color 0.15s ease",
             }}
+            onMouseEnter={(e) => {
+              if (!pending) e.currentTarget.style.background = "#F1F5F9";
+            }}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "#fff")}
           >
             <RotateCcw size={14} /> Reset
           </button>
@@ -1033,23 +1116,27 @@ export function ExpressRunForm({ projectId, projects, mode = "create", runId, in
             style={{
               display: "inline-flex",
               alignItems: "center",
-              gap: "0.4rem",
-              padding: "0.55rem 1.25rem",
+              justifyContent: "center",
+              gap: 8,
+              height: 40,
+              minWidth: 170,
+              padding: "0 16px",
               borderRadius: 8,
               border: "none",
-              background: "#FFB622",
-              color: "#1F2937",
-              fontWeight: 700,
-              fontSize: "0.88rem",
+              background: "#FFC348",
+              color: "#0F172A",
+              fontWeight: 600,
+              fontSize: 12,
               cursor: pending || !isFormValid ? "not-allowed" : "pointer",
               opacity: !isFormValid ? 0.5 : 1,
+              boxShadow: "0 1px 2px rgba(15, 23, 42, 0.08)",
               transition: "background-color 0.15s ease",
             }}
             onMouseEnter={(e) => {
-              if (isFormValid && !pending) e.currentTarget.style.background = "#E0A01E";
+              if (isFormValid && !pending) e.currentTarget.style.background = "#F0B53D";
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.background = "#FFB622";
+              e.currentTarget.style.background = "#FFC348";
             }}
           >
             <Play size={15} />{" "}

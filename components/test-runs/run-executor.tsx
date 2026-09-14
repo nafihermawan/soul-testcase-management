@@ -1,16 +1,18 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRefresh } from "@/lib/client/refresh-context";
-import { Bug, CheckCircle2, ChevronRight, CircleSlash, ExternalLink, FolderOpen, MinusCircle, Paperclip, X, XCircle } from "lucide-react";
+import { Bug, CheckCircle2, ChevronRight, CircleSlash, ExternalLink, FolderOpen, MinusCircle, Paperclip, Pencil, X, XCircle } from "lucide-react";
 import { completeRun, completeRunWithSkip, deleteRun, updateRunResult } from "@/lib/actions/test-runs";
 import { createBug, unlinkBugFromRunResult } from "@/lib/actions/automation-bugs";
 import { ConfirmDialog, Spinner, Toast, useToast } from "@/components/ui/feedback";
 import { entityCode, runCodeOf } from "@/lib/format";
 import { AttachmentsPanel } from "@/components/attachments/attachments-panel";
+import { EditRunModal } from "@/components/test-runs/edit-run-modal";
+import type { ExpressRunInitial } from "@/components/test-runs/express-run";
 import type { AttachmentItem } from "@/types/api";
 
 export type RunResultItem = {
@@ -127,6 +129,24 @@ export function RunExecutor({
   useEffect(() => {
     setGroups(projects);
   }, [projects]);
+
+  // Nilai awal untuk modal Edit Run, diturunkan dari data run yang sedang tampil.
+  const editInitial: ExpressRunInitial = useMemo(
+    () => ({
+      name: runName,
+      activityType: activityType ?? "",
+      environment: environment ?? "",
+      platforms: (platforms ?? "")
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean),
+      sprint: sprint ?? "",
+      taskLink: taskLink ?? "",
+      projectIds: Array.from(new Set(groups.map((g) => g.projectId).filter(Boolean))),
+      testCaseIds: groups.flatMap((g) => g.items.map((it) => it.testCaseId)),
+    }),
+    [runName, activityType, environment, platforms, sprint, taskLink, groups]
+  );
   // Accordion per project: default semua expanded
   const [openProjects, setOpenProjects] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(projects.map((p) => [p.projectId, true]))
@@ -155,6 +175,7 @@ export function RunExecutor({
   const [deletePending, setDeletePending] = useState(false);
   // Modal konfirmasi complete dgn untested
   const [completeWarnOpen, setCompleteWarnOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const [completing, setCompleting] = useState(false);
   // Modal report
   const [reportOpen, setReportOpen] = useState(false);
@@ -378,6 +399,23 @@ export function RunExecutor({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+      {/* Modal Edit Run — setelah simpan, data run di halaman ini disegarkan
+          (refresh dari RefreshContext) sehingga daftar TC & metadata ikut
+          berubah tanpa reload halaman. */}
+      {editOpen && (
+        <EditRunModal
+          runId={runId}
+          runName={runName}
+          initial={editInitial}
+          onClose={() => setEditOpen(false)}
+          onSaved={() => {
+            setEditOpen(false);
+            showToast("Run diperbarui.", "success");
+            refresh();
+          }}
+        />
+      )}
+
       {/* Summary / Page Header Card */}
       <div
         style={{
@@ -403,20 +441,64 @@ export function RunExecutor({
               {runName}
             </div>
           </div>
-          {!isCompleted && canEdit ? (
+          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            {/* Aksi sekunder: buka modal Edit Run, tepat di kiri Complete Run.
+                Base style kedua tombol sengaja identik (tinggi, radius, padding,
+                font) — bedanya hanya warna/border. */}
+            {!isCompleted && canEdit && (
+              <button
+                type="button"
+                onClick={() => setEditOpen(true)}
+                title="Edit run ini"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 8,
+                  height: 40,
+                  padding: "0 16px",
+                  borderRadius: 8,
+                  border: "1px solid #CBD5E1",
+                  background: "#fff",
+                  color: "#334155",
+                  fontWeight: 600,
+                  fontSize: 14,
+                  cursor: "pointer",
+                  transition: "background-color 0.15s ease, color 0.15s ease",
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = "#F8FAFC")}
+                onMouseLeave={(e) => (e.currentTarget.style.background = "#fff")}
+              >
+                <Pencil size={15} /> Edit
+              </button>
+            )}
+            {!isCompleted && canEdit ? (
             <button
               type="button"
               onClick={handleCompleteClick}
               disabled={completing}
               style={{
-                padding: "0.55rem 1.25rem",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 8,
+                height: 40,
+                padding: "0 16px",
                 borderRadius: 8,
                 border: "none",
                 background: "#2563EB",
                 color: "#fff",
-                fontWeight: 700,
-                fontSize: "0.88rem",
+                fontWeight: 600,
+                fontSize: 14,
                 cursor: completing ? "wait" : "pointer",
+                boxShadow: "0 1px 2px rgba(15, 23, 42, 0.08)",
+                transition: "background-color 0.15s ease",
+              }}
+              onMouseEnter={(e) => {
+                if (!completing) e.currentTarget.style.background = "#1D4ED8";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = "#2563EB";
               }}
             >
               {completing ? "Menyelesaikan..." : "Complete Run"}
@@ -457,6 +539,7 @@ export function RunExecutor({
               </button>
             </div>
           )}
+          </div>
         </div>
 
         {/* Row 2: Overall Execution Bar */}

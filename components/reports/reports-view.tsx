@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ErrorBlock, StatsCardsSkeleton, TableCardSkeleton } from "@/components/ui/data-states";
-import { FilterSelect } from "@/components/ui/filter-select";
+import { FilterModal } from "@/components/ui/filter-modal";
+import { CustomSelect, filterLabelStyle } from "@/components/ui/custom-select";
 import { useApi } from "@/lib/client/use-api";
 import { TC_PRIORITY_COLOR, TC_STATUS_COLOR, pct } from "@/lib/qa-metrics";
 import { InventorySummary } from "@/components/reports/inventory-summary";
@@ -18,6 +19,13 @@ export function ReportsView() {
   const { data, error, loading, reload } = useApi<ReportsPayload>("/api/reports");
   const [platform, setPlatform] = useState<string>(ALL);
   const [project, setProject] = useState<string>(ALL);
+  // Draft filter untuk popover: baru diterapkan saat tombol Terapkan diklik.
+  const [draftPlatform, setDraftPlatform] = useState<string>(ALL);
+  const [draftProject, setDraftProject] = useState<string>(ALL);
+  useEffect(() => {
+    setDraftPlatform(platform);
+    setDraftProject(project);
+  }, [platform, project]);
 
   const isFiltered = platform !== ALL || project !== ALL;
 
@@ -109,33 +117,61 @@ export function ReportsView() {
             Inventaris test case &amp; celah coverage repository.
           </p>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
-          <FilterSelect
-            label="Platform"
-            ariaLabel="Filter platform"
-            value={platform}
-            onChange={setPlatform}
-            options={[
-              { value: ALL, label: "Semua Platform" },
-              { value: "WEB", label: "Web" },
-              { value: "MOBILE", label: "Mobile" },
-              { value: "HARDWARE", label: "Hardware" },
-              { value: "API", label: "API" },
-            ]}
-          />
-          <FilterSelect
-            label="Project"
-            ariaLabel="Filter project"
-            value={project}
-            onChange={setProject}
-            options={[
-              { value: ALL, label: "Semua Project" },
-              ...data.projects
-                .filter((p) => platform === ALL || (p.platform ?? "").toUpperCase() === platform)
-                .map((p) => ({ value: p.id, label: p.name })),
-            ]}
-          />
-        </div>
+        <FilterModal
+          title="Filter Reports"
+          activeCount={(platform !== ALL ? 1 : 0) + (project !== ALL ? 1 : 0)}
+          onReset={() => {
+            setDraftPlatform(ALL);
+            setDraftProject(ALL);
+          }}
+          onApply={() => {
+            setPlatform(draftPlatform);
+            setProject(draftProject);
+          }}
+        >
+          <div>
+            <span style={filterLabelStyle}>Platform</span>
+            <CustomSelect
+              ariaLabel="Filter platform"
+              value={draftPlatform}
+              onChange={(v) => {
+                setDraftPlatform(v);
+                // Cascading: project yang tidak cocok dengan Platform baru dibuang.
+                const stillValid = data.projects.some(
+                  (p) =>
+                    p.id === draftProject &&
+                    (v === ALL || (p.platform ?? "").toUpperCase() === v)
+                );
+                if (!stillValid) setDraftProject(ALL);
+              }}
+              options={[
+                { value: ALL, label: "Semua Platform" },
+                { value: "WEB", label: "Web" },
+                { value: "MOBILE", label: "Mobile" },
+                { value: "HARDWARE", label: "Hardware" },
+                { value: "API", label: "API" },
+              ]}
+            />
+          </div>
+          <div>
+            <span style={filterLabelStyle}>Project</span>
+            <CustomSelect
+              ariaLabel="Filter project"
+              value={draftProject}
+              onChange={setDraftProject}
+              options={[
+                { value: ALL, label: "Semua Project" },
+                ...data.projects
+                  .filter(
+                    (p) =>
+                      draftPlatform === ALL ||
+                      (p.platform ?? "").toUpperCase() === draftPlatform
+                  )
+                  .map((p) => ({ value: p.id, label: p.name })),
+              ]}
+            />
+          </div>
+        </FilterModal>
       </div>
 
       {/* Laporan mingguan (dikirim tiap Jumat) */}

@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Play, RotateCcw, Search, X } from "lucide-react";
 import { createTestRun } from "@/lib/actions/test-runs";
 import { getJSON } from "@/lib/client/use-api";
-import type { RunOptionsPayload } from "@/types/api";
+import type { PlatformCode, RunOptionsPayload } from "@/types/api";
 
 type SuiteOption = {
   id: string;
@@ -22,11 +22,13 @@ type TCOption = {
   suiteName: string;
   suiteId: string | null;
   projectId: string | null;
+  sectionId: string | null;
+  status: "DRAFT" | "ACTIVE" | "DEPRECATED";
 };
 
 type Props = {
   projectId: string;
-  projects: { id: string; name: string }[];
+  projects: { id: string; name: string; platform: PlatformCode | null }[];
 };
 
 const inputStyle: React.CSSProperties = {
@@ -50,6 +52,14 @@ const ACTIVITY_OPTIONS = [
 const ENVIRONMENT_OPTIONS = ["DEV", "STG", "PRE-PROD", "PROD"];
 
 const PLATFORM_OPTIONS = ["Web", "Mobile", "Hardware", "API"];
+
+/** Project.platform (enum) -> label Platform di form, untuk cascading. */
+const PLATFORM_ENUM_TO_LABEL: Record<string, string> = {
+  WEB: "Web",
+  MOBILE: "Mobile",
+  HARDWARE: "Hardware",
+  API: "API",
+};
 
 export function ExpressRunForm({ projectId, projects }: Props) {
   const router = useRouter();
@@ -77,6 +87,7 @@ export function ExpressRunForm({ projectId, projects }: Props) {
   // project di-toggle mati-nyala.
   const [suites, setSuites] = useState<SuiteOption[]>([]);
   const [testCases, setTestCases] = useState<TCOption[]>([]);
+  const [sections, setSections] = useState<{ id: string; name: string }[]>([]);
   const loadedProjects = useRef<Set<string>>(new Set());
   const loadingProjects = useRef<Set<string>>(new Set());
 
@@ -94,6 +105,11 @@ export function ExpressRunForm({ projectId, projects }: Props) {
             ...prev.filter((t) => t.projectId !== id),
             ...data.testCases,
           ]);
+          setSections((prev) => {
+            const known = new Set(prev.map((s) => s.id));
+            const added = data.sections.filter((s) => !known.has(s.id));
+            return added.length ? [...prev, ...added] : prev;
+          });
         })
         .catch(() => {
           // Gagal memuat: biarkan kosong; user bisa toggle project untuk coba lagi.
@@ -107,6 +123,59 @@ export function ExpressRunForm({ projectId, projects }: Props) {
     [projects]
   );
 
+  /**
+   * Cascading: Platform yang dicentang membatasi project yang boleh dipilih
+   * (dan otomatis membatasi suite & TC, karena keduanya turunan project).
+   * Tanpa platform terpilih, semua project tersedia.
+   */
+  const matchesPlatform = useCallback(
+    (p: { platform: PlatformCode | null }) =>
+      platforms.size === 0 ||
+      (!!p.platform && platforms.has(PLATFORM_ENUM_TO_LABEL[p.platform] ?? "")),
+    [platforms]
+  );
+
+  const selectableProjects = useMemo(
+    () => projects.filter(matchesPlatform),
+    [projects, matchesPlatform]
+  );
+
+  /**
+   * Auto-reset seleksi saat Platform berubah: buang project terpilih, suite
+   * aktif, dan TC terpilih yang tidak lagi relevan dengan Platform.
+   *
+   * Dijaga lewat `prevPlatformKey` supaya HANYA berjalan ketika set Platform
+   * benar-benar berubah — mematikan sebuah project secara manual tetap
+   * mempertahankan pilihan TC yang sudah dibuat (perilaku lama).
+   */
+  const prevPlatformKey = useRef<string | null>(null);
+  useEffect(() => {
+    const key = Array.from(platforms).sort().join(",");
+    if (prevPlatformKey.current === key) return;
+    prevPlatformKey.current = key;
+
+    const allowedProjects = new Set(projects.filter(matchesPlatform).map((p) => p.id));
+    const allowedSuites = new Set(
+      suites.filter((s) => allowedProjects.has(s.projectId)).map((s) => s.id)
+    );
+    const suiteOfTc = new Map(testCases.map((t) => [t.id, t.suiteId]));
+
+    setSelectedProjectIds((prev) => {
+      const next = new Set(Array.from(prev).filter((id) => allowedProjects.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+    setActiveSuiteId((prev) => (prev && !allowedSuites.has(prev) ? null : prev));
+    setSelectedTCs((prev) => {
+      const next = new Set(
+        Array.from(prev).filter((id) => {
+          const suiteId = suiteOfTc.get(id);
+          return suiteId ? allowedSuites.has(suiteId) : true;
+        })
+      );
+      return next.size === prev.size ? prev : next;
+    });
+  }, [platforms, projects, suites, testCases, matchesPlatform]);
+
   const toggleProject = (id: string) => {
     setSelectedProjectIds((prev) => {
       const next = new Set(prev);
@@ -116,10 +185,28 @@ export function ExpressRunForm({ projectId, projects }: Props) {
     });
   };
 
-  // Semua suite dari seluruh project terpilih (unified)
+  /** Platform tiap project — dipakai untuk memfilter Suite per Platform. */
+  const platformByProject = useMemo(
+    () => new Map(projects.map((p) => [p.id, p.platform])),
+    [projects]
+  );
+
+  /**
+   * Suite harus lolos DUA syarat: Platform yang dipilih DAN project yang
+   * dipilih. Memfilter hanya dengan project tidak cukup — suite dari project
+   * yang sudah tidak relevan dengan Platform bisa ikut muncul.
+   */
   const availableSuites = useMemo(
-    () => suites.filter((s) => selectedProjectIds.has(s.projectId)),
-    [suites, selectedProjectIds]
+    () =>
+      suites.filter((s) => {
+        const platform = platformByProject.get(s.projectId) ?? null;
+        const isPlatformMatch =
+          platforms.size === 0 ||
+          (!!platform && platforms.has(PLATFORM_ENUM_TO_LABEL[platform] ?? ""));
+        const isProjectMatch = selectedProjectIds.has(s.projectId);
+        return isPlatformMatch && isProjectMatch;
+      }),
+    [suites, selectedProjectIds, platformByProject, platforms]
   );
 
   const filteredSuites = useMemo(() => {
@@ -130,13 +217,21 @@ export function ExpressRunForm({ projectId, projects }: Props) {
     );
   }, [availableSuites, suiteQuery]);
 
-  // TC dari suite yang sedang aktif (kolom kanan menampilkan suite ini saja)
+  // TC berstatus DEPRECATED sengaja disaring keluar dari daftar pilihan.
+  const activeTestCases = useMemo(
+    () => testCases.filter((tc) => tc.status !== "DEPRECATED"),
+    [testCases]
+  );
+
+  // TC dari suite yang sedang aktif (kolom kanan menampilkan suite ini saja).
+  // Suite aktif wajib masih ada di availableSuites, supaya TC dari suite yang
+  // sudah tidak relevan dengan Platform tidak ikut tampil.
   const visibleTCs = useMemo(
     () =>
-      activeSuiteId
-        ? testCases.filter((t) => t.suiteId === activeSuiteId)
+      activeSuiteId && availableSuites.some((s) => s.id === activeSuiteId)
+        ? activeTestCases.filter((t) => t.suiteId === activeSuiteId)
         : [],
-    [testCases, activeSuiteId]
+    [activeTestCases, activeSuiteId, availableSuites]
   );
 
   const filteredTCs = useMemo(() => {
@@ -146,6 +241,26 @@ export function ExpressRunForm({ projectId, projects }: Props) {
       (t) => t.title.toLowerCase().includes(q) || t.tcId.toLowerCase().includes(q) || t.suiteName.toLowerCase().includes(q)
     );
   }, [visibleTCs, tcQuery]);
+
+  // Kelompokkan TC per Section supaya hierarkinya terlihat (bukan daftar rata).
+  const tcSectionGroups = useMemo(() => {
+    const nameById = new Map(sections.map((s) => [s.id, s.name]));
+    const groups = new Map<string, { key: string; name: string; items: TCOption[] }>();
+    for (const t of filteredTCs) {
+      const key = t.sectionId ?? "__none__";
+      let g = groups.get(key);
+      if (!g) {
+        g = {
+          key,
+          name: t.sectionId ? nameById.get(t.sectionId) ?? "Section" : "Tanpa Section",
+          items: [],
+        };
+        groups.set(key, g);
+      }
+      g.items.push(t);
+    }
+    return Array.from(groups.values());
+  }, [filteredTCs, sections]);
 
   // Jumlah suite dipilih = suite yang punya >=1 TC terpilih? Tidak; pakai active project.
   const allTCsSelected =
@@ -518,7 +633,7 @@ export function ExpressRunForm({ projectId, projects }: Props) {
                 }}
               >
                 <option value="">+ Tambah project</option>
-                {projects
+                {selectableProjects
                   .filter((p) => !selectedProjectIds.has(p.id))
                   .map((p) => (
                     <option key={p.id} value={p.id}>
@@ -665,7 +780,25 @@ export function ExpressRunForm({ projectId, projects }: Props) {
                   Tidak ada test case di suite ini.
                 </p>
               ) : (
-                filteredTCs.map((t) => {
+                tcSectionGroups.map((g) => (
+                  <div key={g.key}>
+                    {/* Header Section: mengelompokkan TC agar tidak membingungkan. */}
+                    <div
+                      style={{
+                        padding: "0.35rem 0.55rem",
+                        margin: "0.2rem 0 0.3rem",
+                        background: "var(--surface-muted)",
+                        borderRadius: 6,
+                        fontSize: "0.66rem",
+                        fontWeight: 700,
+                        textTransform: "uppercase",
+                        letterSpacing: "0.05em",
+                        color: "#94A3B8",
+                      }}
+                    >
+                      {g.name}
+                    </div>
+                    {g.items.map((t) => {
                   const checked = selectedTCs.has(t.id);
                   return (
                     <label
@@ -699,8 +832,10 @@ export function ExpressRunForm({ projectId, projects }: Props) {
                         {t.projectId ? (projectNameMap.get(t.projectId) ?? "") : ""}
                       </span>
                     </label>
-                  );
-                })
+                    );
+                    })}
+                  </div>
+                ))
               )}
             </div>
           </div>

@@ -392,6 +392,11 @@ export type RunOptionSuite = {
   projectId: string;
 };
 
+export type RunOptionSection = {
+  id: string;
+  name: string;
+};
+
 export type RunOptionTestCase = {
   id: string;
   tcId: string;
@@ -399,12 +404,17 @@ export type RunOptionTestCase = {
   suiteName: string;
   suiteId: string | null;
   projectId: string | null;
+  sectionId: string | null;
+  status: "DRAFT" | "ACTIVE" | "DEPRECATED";
 };
 
 export type RunOptionsPayload = {
-  projects: { id: string; name: string }[];
+  /** `platform` dipakai untuk cascading pilihan Platform -> Project. */
+  projects: { id: string; name: string; platform: PlatformCode | null }[];
   suites: RunOptionSuite[];
   testCases: RunOptionTestCase[];
+  /** Section milik project, untuk mengelompokkan daftar TC. */
+  sections: RunOptionSection[];
 };
 
 /* ---------- /api/test-runs/[id] ---------- */

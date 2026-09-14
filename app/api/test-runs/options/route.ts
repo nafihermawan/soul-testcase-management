@@ -20,29 +20,37 @@ export async function GET(req: NextRequest) {
 
   const projectId = (req.nextUrl.searchParams.get("projectId") ?? "").trim();
 
-  // Tanpa projectId: cukup daftar project untuk dropdown.
+  // Tanpa projectId: cukup daftar project untuk dropdown. `platform` dipakai
+  // form untuk cascading (pilih Platform -> project menyempit).
   if (!projectId) {
     const projects = await prisma.project.findMany({
       orderBy: [{ order: "asc" }, { createdAt: "asc" }],
-      select: { id: true, name: true },
+      select: { id: true, name: true, platform: true },
     });
     return NextResponse.json({
       projects,
       suites: [],
       testCases: [],
+      sections: [],
     } satisfies RunOptionsPayload);
   }
 
   // Dengan projectId: hanya suite & TC project itu (independen -> paralel).
-  const [suites, testCases] = await Promise.all([
+  // TC berstatus DEPRECATED sengaja TIDAK diikutsertakan.
+  const [suites, testCases, sections] = await Promise.all([
     prisma.suite.findMany({
       where: { projectId },
       select: { id: true, name: true, code: true, projectId: true, parentId: true },
       orderBy: [{ order: "asc" }, { createdAt: "asc" }],
     }),
     prisma.testCase.findMany({
+      where: { suite: { is: { projectId } }, status: { not: "DEPRECATED" } },
+      select: { id: true, tcId: true, title: true, suiteId: true, sectionId: true, status: true },
+      orderBy: [{ order: "asc" }, { createdAt: "asc" }],
+    }),
+    prisma.section.findMany({
       where: { suite: { is: { projectId } } },
-      select: { id: true, tcId: true, title: true, suiteId: true },
+      select: { id: true, name: true },
       orderBy: [{ order: "asc" }, { createdAt: "asc" }],
     }),
   ]);
@@ -75,12 +83,15 @@ export async function GET(req: NextRequest) {
     suiteName: t.suiteId ? pathOf(t.suiteId) : "",
     suiteId: t.suiteId ?? null,
     projectId: t.suiteId ? (suiteProject.get(t.suiteId) ?? null) : null,
+    sectionId: t.sectionId ?? null,
+    status: t.status,
   }));
 
   return NextResponse.json({
     projects: [],
     suites: suiteOptions,
     testCases: tcOptions,
+    sections,
   } satisfies RunOptionsPayload);
 }
 

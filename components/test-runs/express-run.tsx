@@ -1,9 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Play, RotateCcw, Search, X } from "lucide-react";
 import { createTestRun } from "@/lib/actions/test-runs";
+import { getJSON } from "@/lib/client/use-api";
+import type { RunOptionsPayload } from "@/types/api";
 
 type SuiteOption = {
   id: string;
@@ -25,8 +27,6 @@ type TCOption = {
 type Props = {
   projectId: string;
   projects: { id: string; name: string }[];
-  suites: SuiteOption[];
-  testCases: TCOption[];
 };
 
 const inputStyle: React.CSSProperties = {
@@ -51,7 +51,7 @@ const ENVIRONMENT_OPTIONS = ["DEV", "STG", "PRE-PROD", "PROD"];
 
 const PLATFORM_OPTIONS = ["Web", "Mobile", "Hardware", "API"];
 
-export function ExpressRunForm({ projectId, projects, suites, testCases }: Props) {
+export function ExpressRunForm({ projectId, projects }: Props) {
   const router = useRouter();
   const [selectedProjectIds, setSelectedProjectIds] = useState<Set<string>>(
     () => new Set(projectId ? [projectId] : projects[0]?.id ? [projects[0].id] : [])
@@ -70,6 +70,37 @@ export function ExpressRunForm({ projectId, projects, suites, testCases }: Props
   const [tcQuery, setTcQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+
+  // Suite & TC dimuat PER project yang dipilih, bukan seluruh repository
+  // sekaligus (dulu ~78 KB untuk 331 TC — lihat audit performa navigasi §6).
+  // Data project yang sudah pernah dimuat disimpan; tidak ada fetch ulang saat
+  // project di-toggle mati-nyala.
+  const [suites, setSuites] = useState<SuiteOption[]>([]);
+  const [testCases, setTestCases] = useState<TCOption[]>([]);
+  const loadedProjects = useRef<Set<string>>(new Set());
+  const loadingProjects = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    for (const id of Array.from(selectedProjectIds)) {
+      if (loadedProjects.current.has(id) || loadingProjects.current.has(id)) continue;
+      loadingProjects.current.add(id);
+      getJSON<RunOptionsPayload>(
+        `/api/test-runs/options?projectId=${encodeURIComponent(id)}`
+      )
+        .then((data) => {
+          loadedProjects.current.add(id);
+          setSuites((prev) => [...prev.filter((s) => s.projectId !== id), ...data.suites]);
+          setTestCases((prev) => [
+            ...prev.filter((t) => t.projectId !== id),
+            ...data.testCases,
+          ]);
+        })
+        .catch(() => {
+          // Gagal memuat: biarkan kosong; user bisa toggle project untuk coba lagi.
+        })
+        .finally(() => loadingProjects.current.delete(id));
+    }
+  }, [selectedProjectIds]);
 
   const projectNameMap = useMemo(
     () => new Map(projects.map((p) => [p.id, p.name])),

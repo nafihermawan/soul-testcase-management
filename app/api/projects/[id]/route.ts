@@ -3,65 +3,6 @@ import { prisma } from "@/lib/prisma";
 import { apiSession, apiRoleAtLeast, json401, json404 } from "@/lib/api-auth";
 import type { ProjectSuiteNode, ProjectTreePayload } from "@/types/api";
 
-type SuiteWithCount = {
-  id: string;
-  name: string;
-  code: string;
-  parentId: string | null;
-  docUrl: string | null;
-  updatedAt: Date;
-  _count: { testCases: number };
-  children: Array<{
-    id: string;
-    name: string;
-    code: string;
-    parentId: string | null;
-    docUrl: string | null;
-    updatedAt: Date;
-    _count: { testCases: number };
-    children: Array<{
-      id: string;
-      name: string;
-      code: string;
-      parentId: string | null;
-      docUrl: string | null;
-      updatedAt: Date;
-      _count: { testCases: number };
-    }>;
-  }>;
-};
-
-function toNode(s: SuiteWithCount): ProjectSuiteNode {
-  return {
-    id: s.id,
-    name: s.name,
-    code: s.code,
-    parentId: s.parentId,
-    docUrl: s.docUrl,
-    totalTestCases: s._count.testCases,
-    updatedAt: s.updatedAt.toISOString(),
-    children: s.children.map((c) => ({
-      id: c.id,
-      name: c.name,
-      code: c.code,
-      parentId: c.parentId,
-      docUrl: c.docUrl,
-      totalTestCases: c._count.testCases,
-      updatedAt: c.updatedAt.toISOString(),
-      children: c.children.map((g) => ({
-        id: g.id,
-        name: g.name,
-        code: g.code,
-        parentId: g.parentId,
-        docUrl: g.docUrl,
-        totalTestCases: g._count.testCases,
-        updatedAt: g.updatedAt.toISOString(),
-        children: [],
-      })),
-    })),
-  };
-}
-
 export async function GET(
   _req: Request,
   { params }: { params: { id: string } }
@@ -71,38 +12,59 @@ export async function GET(
 
   const project = await prisma.project.findUnique({
     where: { id: params.id },
-    include: {
-      suites: {
-        where: { parentId: null },
-        orderBy: [{ order: "asc" }, { createdAt: "asc" }],
-        include: {
-          _count: { select: { testCases: true } },
-          children: {
-            orderBy: [{ order: "asc" }, { createdAt: "asc" }],
-            include: {
-              _count: { select: { testCases: true } },
-              children: {
-                orderBy: [{ order: "asc" }, { createdAt: "asc" }],
-                include: {
-                  _count: { select: { testCases: true } },
-                },
-              },
-            },
-          },
-        },
-      },
-    },
+    select: { id: true, name: true, code: true, platform: true },
   });
 
   if (!project) {
     return json404("Project tidak ditemukan.");
   }
 
-  const suites: ProjectSuiteNode[] = project.suites.map((s) => toNode(s as unknown as SuiteWithCount));
+  // Ambil SEMUA suite milik project sekali jalan, lalu susun tree di memory
+  // berdasarkan parentId. Suite bersifat rekursif tanpa batas kedalaman
+  // (PRD Section 4), jadi tidak ada level yang boleh di-hardcode.
+  // findMany terurut (order, createdAt) -> urutan antar sibling tetap terjaga
+  // karena anak didorong ke parent-nya sesuai urutan iterasi.
+  const suites = await prisma.suite.findMany({
+    where: { projectId: project.id },
+    orderBy: [{ order: "asc" }, { createdAt: "asc" }],
+    select: {
+      id: true,
+      name: true,
+      code: true,
+      parentId: true,
+      docUrl: true,
+      updatedAt: true,
+      _count: { select: { testCases: true } },
+    },
+  });
+
+  const nodeById = new Map<string, ProjectSuiteNode>();
+  for (const s of suites) {
+    nodeById.set(s.id, {
+      id: s.id,
+      name: s.name,
+      code: s.code,
+      parentId: s.parentId,
+      docUrl: s.docUrl,
+      totalTestCases: s._count.testCases,
+      updatedAt: s.updatedAt.toISOString(),
+      children: [],
+    });
+  }
+
+  const roots: ProjectSuiteNode[] = [];
+  for (const s of suites) {
+    const node = nodeById.get(s.id)!;
+    const parent = s.parentId ? nodeById.get(s.parentId) : undefined;
+    // parentId yang menunjuk suite di luar project ini (data tak terduga) tetap
+    // ditampilkan sebagai root, supaya tidak ada suite yang hilang dari tree.
+    if (parent) parent.children.push(node);
+    else roots.push(node);
+  }
 
   const payload: ProjectTreePayload = {
     project: { id: project.id, name: project.name, code: project.code, platform: project.platform },
-    suites,
+    suites: roots,
     canEdit: apiRoleAtLeast(user.role, "QA"),
   };
 

@@ -28,11 +28,6 @@ export async function GET(req: NextRequest) {
   // Rentang bulan "YYYY-MM" (from & to inklusif).
   const monthRange = monthRangeToDateRange(sp.get("from"), sp.get("to"));
 
-  const allProjects = await prisma.project.findMany({
-    orderBy: [{ order: "asc" }, { createdAt: "asc" }],
-    select: { id: true, name: true, platform: true },
-  });
-
   // Active Runs = semua yang BELUM SELESAI (PENDING + IN_PROGRESS + RE_OPEN).
   const where: Record<string, unknown> = { status: { in: OPEN_RUN_STATUSES } };
   const andClauses: Record<string, unknown>[] = [];
@@ -63,43 +58,39 @@ export async function GET(req: NextRequest) {
 
   // Full list: seluruh run aktif dikirim sekaligus (halaman Active Runs tidak
   // memakai pagination — semua run tampil di dalam grup statusnya).
-  const runs = await prisma.testRun.findMany({
-    where,
-    orderBy: { createdAt: "desc" },
-    include: {
-      project: { select: { id: true, name: true } },
-      createdBy: { select: { name: true } },
-      _count: { select: { results: true } },
-      results: {
-        select: {
-          testCase: {
-            select: {
-              suite: {
-                select: {
-                  id: true,
-                  name: true,
-                  projectId: true,
-                  project: { select: { name: true } },
+  // Ketiganya tidak saling bergantung -> satu Promise.all (1 fase round-trip).
+  const [allProjects, runs] = await Promise.all([
+    prisma.project.findMany({
+      orderBy: [{ order: "asc" }, { createdAt: "asc" }],
+      select: { id: true, name: true, platform: true },
+    }),
+    prisma.testRun.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      include: {
+        project: { select: { id: true, name: true } },
+        createdBy: { select: { name: true } },
+        _count: { select: { results: true } },
+        results: {
+          select: {
+            status: true,
+            testCase: {
+              select: {
+                suite: {
+                  select: {
+                    id: true,
+                    name: true,
+                    projectId: true,
+                    project: { select: { name: true } },
+                  },
                 },
               },
             },
           },
         },
       },
-    },
-  });
-
-  // Pass rate per run
-  const runStats = await prisma.testRunResult.groupBy({
-    by: ["runId", "status"],
-    _count: { _all: true },
-  });
-  const statsByRun = new Map<string, Record<string, number>>();
-  for (const r of runStats) {
-    const cur = statsByRun.get(r.runId) ?? {};
-    cur[r.status] = r._count._all;
-    statsByRun.set(r.runId, cur);
-  }
+    }),
+  ]);
 
   // Metadata per run: projects & suites unik (via testCase.suite)
   const metaByRun = new Map<
@@ -122,9 +113,10 @@ export async function GET(req: NextRequest) {
   }
 
   const rows: ActiveRunRow[] = runs.map((run) => {
-    const stats = statsByRun.get(run.id) ?? {};
     const total = run._count.results;
-    const passed = stats.PASS ?? 0;
+    // Pass rate dihitung dari hasil yang memang sudah ikut ter-fetch (bounded
+    // ke run halaman ini) — bukan groupBy atas seluruh tabel TestRunResult.
+    const passed = run.results.filter((r) => r.status === "PASS").length;
     const pct = total > 0 ? Math.round((passed / total) * 100) : 0;
     const meta = metaByRun.get(run.id);
     return {

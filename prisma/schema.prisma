@@ -225,6 +225,10 @@ model TestRun {
   results   TestRunResult[]
 
   @@index([projectId, createdAt])
+  // Filter status dipakai Active Runs (PENDING/IN_PROGRESS/RE_OPEN) & History
+  // (COMPLETED, urut completedAt).
+  @@index([status])
+  @@index([status, completedAt])
 }
 
 model TestRunResult {
@@ -247,6 +251,8 @@ model TestRunResult {
 
   @@unique([runId, testCaseId])
   @@index([testCaseId, updatedAt])
+  // Dipakai laporan (filter status <> NOT_RUN).
+  @@index([status])
 }
 
 model AutomationLink {
@@ -286,6 +292,8 @@ model Bug {
 
   @@index([testCaseId, createdAt])
   @@index([testRunResultId, createdAt])
+  // Dipakai daftar Bugs & laporan mingguan (filter status OPEN/IN_PROGRESS).
+  @@index([status])
 }
 
 /// File evidence/reference. Metadata saja — byte disimpan di Cloudflare R2.

@@ -38,11 +38,6 @@ export async function GET(req: NextRequest) {
   const page = Math.max(1, parseInt(sp.get("page") ?? "1", 10) || 1);
   const perPage = Math.min(100, Math.max(10, parseInt(sp.get("perPage") ?? "10", 10) || 10));
 
-  const allProjects = await prisma.project.findMany({
-    orderBy: [{ order: "asc" }, { createdAt: "asc" }],
-    select: { id: true, name: true, platform: true },
-  });
-
   // Query where — kombinasi AND antar kriteria, OR di dalam kriteria
   const where: Record<string, unknown> = { status: "COMPLETED" };
   const andClauses: Record<string, unknown>[] = [];
@@ -71,7 +66,13 @@ export async function GET(req: NextRequest) {
   }
   if (andClauses.length > 0) where.AND = andClauses;
 
-  const [total, runs] = await Promise.all([
+  // Semua query di bawah tidak saling bergantung -> satu Promise.all
+  // (1 fase round-trip, bukan 3 berurutan).
+  const [allProjects, total, runs] = await Promise.all([
+    prisma.project.findMany({
+      orderBy: [{ order: "asc" }, { createdAt: "asc" }],
+      select: { id: true, name: true, platform: true },
+    }),
     prisma.testRun.count({ where }),
     prisma.testRun.findMany({
       where,
@@ -84,6 +85,7 @@ export async function GET(req: NextRequest) {
         _count: { select: { results: true } },
         results: {
           select: {
+            status: true,
             testCase: {
               select: {
                 suite: {
@@ -101,18 +103,6 @@ export async function GET(req: NextRequest) {
       },
     }),
   ]);
-
-  // Pass rate per run
-  const runStats = await prisma.testRunResult.groupBy({
-    by: ["runId", "status"],
-    _count: { _all: true },
-  });
-  const statsByRun = new Map<string, Record<string, number>>();
-  for (const r of runStats) {
-    const cur = statsByRun.get(r.runId) ?? {};
-    cur[r.status] = r._count._all;
-    statsByRun.set(r.runId, cur);
-  }
 
   // Metadata per run: projects & suites unik (via testCase.suite)
   const metaByRun = new Map<
@@ -135,9 +125,10 @@ export async function GET(req: NextRequest) {
   }
 
   const rows: HistoryRunRow[] = runs.map((run) => {
-    const stats = statsByRun.get(run.id) ?? {};
     const total = run._count.results;
-    const passed = stats.PASS ?? 0;
+    // Pass rate dihitung dari hasil yang memang sudah ikut ter-fetch (bounded
+    // ke run halaman ini) — bukan groupBy atas seluruh tabel TestRunResult.
+    const passed = run.results.filter((r) => r.status === "PASS").length;
     const pct = total > 0 ? Math.round((passed / total) * 100) : 0;
     const meta = metaByRun.get(run.id);
     return {

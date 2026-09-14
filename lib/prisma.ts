@@ -14,6 +14,20 @@ const globalForPrisma = globalThis as unknown as {
   pool: InstanceType<typeof Pool> | undefined;
 };
 
+/**
+ * Batas koneksi pool per instance.
+ *
+ * Sejak DATABASE_URL menunjuk transaction pooler Supabase (port 6543), koneksi
+ * client di-multiplex oleh Supavisor. Namun pooler menolak > 15 client
+ * (`EMAXCONNSESSION ... pool_size: 15`), jadi `max` per instance harus kecil.
+ *
+ * Nilai 3 dipilih dari pengukuran (lihat docs/AUDIT-Performa-Navigasi.md §6):
+ * batch 8 query /api/dashboard butuh 922ms pada max=1, 751ms pada max=2, dan
+ * tidak membaik lagi di atas 3 (736ms). Jadi 3 adalah titik optimal — cukup
+ * untuk query paralel, tanpa menghabiskan kuota client pooler.
+ */
+const POOL_MAX = 3;
+
 function createPrismaClient() {
   const connectionString =
     process.env.DATABASE_URL ?? "postgresql://localhost:5432/soul_testcase";
@@ -21,6 +35,7 @@ function createPrismaClient() {
   const isSupabase = /supabase\.co/.test(connectionString);
   const poolConfig: ConstructorParameters<typeof Pool>[0] = {
     connectionString,
+    max: POOL_MAX,
     connectionTimeoutMillis: 15000,
     query_timeout: 25000,
     ...(isSupabase ? { ssl: { rejectUnauthorized: false } } : {}),

@@ -17,10 +17,16 @@ export type AttachmentRow = {
  * (murni HMAC lokal, tanpa network call) karena bucket R2 bersifat private.
  * Bila storage belum dikonfigurasi, `url` bernilai null dan UI menampilkan
  * placeholder alih-alih error.
+ *
+ * `presetUrls` dipakai bila pemanggil sudah mem-presign banyak key sekaligus
+ * (mis. seluruh attachment satu halaman) supaya tidak presign per baris.
  */
-export async function toAttachmentItems(rows: AttachmentRow[]): Promise<AttachmentItem[]> {
+export async function toAttachmentItems(
+  rows: AttachmentRow[],
+  presetUrls?: Map<string, string>
+): Promise<AttachmentItem[]> {
   if (rows.length === 0) return [];
-  const urls = await presignGetUrls(rows.map((r) => r.storageKey));
+  const urls = presetUrls ?? (await presignGetUrls(rows.map((r) => r.storageKey)));
   return rows.map((r) => ({
     id: r.id,
     fileName: r.fileName,

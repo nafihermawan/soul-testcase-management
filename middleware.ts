@@ -7,5 +7,8 @@ export default withAuth({
 });
 
 export const config = {
-  matcher: ["/((?!login|api/auth|api/me|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|md)$).*)"],
+  // Seluruh /api/* dikecualikan: route handler sudah menegakkan sesi sendiri
+  // lewat apiSession() dan mengembalikan 401/403 JSON, jadi melewati middleware
+  // hanya menambah satu hop tanpa manfaat.
+  matcher: ["/((?!api|login|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|md)$).*)"],
 };

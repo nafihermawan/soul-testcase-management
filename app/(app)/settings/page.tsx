@@ -5,13 +5,14 @@ import { useRouter } from "next/navigation";
 import { SettingsView } from "@/components/settings/settings-view";
 import { ErrorBlock, TableCardSkeleton } from "@/components/ui/data-states";
 import { useApi } from "@/lib/client/use-api";
-import type { Me, SettingsPayload } from "@/types/api";
+import { useMe } from "@/lib/client/me-context";
+import type { SettingsPayload } from "@/types/api";
 
 export default function SettingsPage() {
   const router = useRouter();
-  const me = useApi<Me>("/api/me");
-  const role = me.data?.role;
-  const blocked = !!me.data && role !== "QA";
+  const { me, loading: meLoading } = useMe();
+  const role = me?.role;
+  const blocked = !!me && role !== "QA";
 
   // Settings (kelola struktur project/suite + admin users) hanya untuk QA.
   // Non-QA diarahkan ke beranda (bukan redirect loop ke /settings).
@@ -19,13 +20,13 @@ export default function SettingsPage() {
     if (blocked) router.replace("/");
   }, [blocked, router]);
 
-  const { data, error, loading, reload } = useApi<SettingsPayload>("/api/settings", {
-    enabled: !!me.data && role === "QA",
-  });
+  // Payload langsung diminta tanpa menunggu role; server tetap menolak (403)
+  // bila role tidak berhak, dan halaman mengalihkan user.
+  const { data, error, loading, reload } = useApi<SettingsPayload>("/api/settings");
 
   return (
     <main style={{ fontFamily: "var(--font-sans, system-ui, sans-serif)", width: "100%" }}>
-      {!me.data || blocked ? (
+      {meLoading || !me || blocked ? (
         <TableCardSkeleton />
       ) : error ? (
         <ErrorBlock message={error.message} onRetry={reload} />

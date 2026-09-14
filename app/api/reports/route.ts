@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@/lib/generated/prisma/client";
 import { apiSession, json401 } from "@/lib/api-auth";
 import {
   pct,
@@ -35,7 +36,8 @@ export async function GET() {
     tcTotal,
     tcOrphans,
     automatedCount,
-    executedResults,
+    testedRows,
+    anyExecuted,
   ] = await Promise.all([
     prisma.project.findMany({
       orderBy: [{ order: "asc" }, { createdAt: "asc" }],
@@ -62,34 +64,32 @@ export async function GET() {
     prisma.testCase.count({
       where: { automation: { is: { status: { in: ["AUTOMATED", "FAILING", "UNSTABLE"] } } } },
     }),
-    // TC unik yang pernah dieksekusi (status != NOT_RUN) pada run yang sudah
-    // pernah tuntas (COMPLETED atau RE_OPEN — run yang dibuka ulang tetap
-    // dihitung, agar angka coverage tidak turun palsu).
-    prisma.testRunResult.findMany({
-      where: { status: { not: "NOT_RUN" }, run: { is: { status: { in: EXECUTED_RUN_STATUSES } } } },
-      select: { testCaseId: true, testCase: { select: { suiteId: true } } },
+    // Jumlah TC unik yang pernah dieksekusi (status != NOT_RUN) per suite, pada
+    // run yang sudah tuntas (COMPLETED/RE_OPEN — run yang dibuka ulang tetap
+    // dihitung agar angka coverage tidak turun palsu). Dihitung di SQL dengan
+    // COUNT(DISTINCT ...) supaya jumlah baris tidak tumbuh seiring riwayat.
+    prisma.$queryRaw<{ suite_id: string; tested: number | bigint }[]>`
+      SELECT tc."suiteId" AS suite_id, COUNT(DISTINCT r."testCaseId") AS tested
+      FROM "TestRunResult" r
+      JOIN "TestRun" run ON run.id = r."runId"
+      JOIN "TestCase" tc ON tc.id = r."testCaseId"
+      WHERE r."status"::text <> 'NOT_RUN'
+        AND run."status"::text IN (${Prisma.join(EXECUTED_RUN_STATUSES)})
+        AND tc."suiteId" IS NOT NULL
+      GROUP BY tc."suiteId"
+    `,
+    // Total hasil eksekusi apa pun statusnya (untuk noExecutionYet).
+    prisma.testRunResult.count({
+      where: { status: { not: "NOT_RUN" } },
     }),
   ]);
 
-  // Total hasil eksekusi apa pun statusnya (untuk noExecutionYet).
-  const anyExecuted = await prisma.testRunResult.count({
-    where: { status: { not: "NOT_RUN" } },
-  });
-
   const projectById = new Map(projects.map((p) => [p.id, p]));
 
-  // --- "Tested" per suite: DISTINCT TC (eksekusi berulang tidak double-count) ---
-  const testedBySuite = new Map<string, Set<string>>();
-  for (const r of executedResults) {
-    const suiteId = r.testCase?.suiteId;
-    if (!suiteId) continue;
-    let set = testedBySuite.get(suiteId);
-    if (!set) {
-      set = new Set();
-      testedBySuite.set(suiteId, set);
-    }
-    set.add(r.testCaseId);
-  }
+  // --- "Tested" per suite: jumlah TC unik (eksekusi berulang tidak double-count) ---
+  const testedBySuite = new Map<string, number>(
+    testedRows.map((r) => [r.suite_id, Number(r.tested)])
+  );
 
   // --- Komposisi priority & status ---
   const priorityCount = new Map(tcByPriority.map((r) => [r.priority as string, r._count._all]));
@@ -114,7 +114,7 @@ export async function GET() {
     .filter((s) => s._count.testCases > 0)
     .map((s) => {
       const total = s._count.testCases;
-      const tested = Math.min(testedBySuite.get(s.id)?.size ?? 0, total);
+      const tested = Math.min(testedBySuite.get(s.id) ?? 0, total);
       const project = projectById.get(s.projectId);
       return {
         suiteId: s.id,

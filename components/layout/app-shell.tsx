@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Sidebar, SidebarSkeleton } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
 import { useApi } from "@/lib/client/use-api";
+import { MeContext } from "@/lib/client/me-context";
 import type { Me } from "@/types/api";
 import type { SidebarProject } from "@/types/api";
 
@@ -56,7 +57,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           className="app-main"
           style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "1.25rem", minWidth: 0 }}
         >
-          {children}
+          {/* Identitas/role user dibagikan ke halaman lewat context supaya tiap
+              halaman tidak perlu fetch /api/me sendiri lagi. */}
+          <MeContext.Provider value={{ me: me.data, loading: me.loading }}>
+            {children}
+          </MeContext.Provider>
         </main>
       </div>
     </div>

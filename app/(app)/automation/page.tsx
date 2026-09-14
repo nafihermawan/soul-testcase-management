@@ -9,26 +9,27 @@ import {
   TableCardSkeleton,
 } from "@/components/ui/data-states";
 import { useApi } from "@/lib/client/use-api";
-import type { AutomationPayload, Me } from "@/types/api";
+import { useMe } from "@/lib/client/me-context";
+import type { AutomationPayload } from "@/types/api";
 
 export default function AutomationPage() {
   const router = useRouter();
-  const me = useApi<Me>("/api/me");
-  const role = me.data?.role;
-  const blocked = !!me.data && role === "PRODUCT";
+  const { me, loading: meLoading } = useMe();
+  const role = me?.role;
+  const blocked = !!me && role === "PRODUCT";
 
   // Role PRODUCT tidak berhak melihat halaman automation.
   useEffect(() => {
     if (blocked) router.replace("/");
   }, [blocked, router]);
 
-  const { data, error, loading, reload } = useApi<AutomationPayload>("/api/automation", {
-    enabled: !!me.data && role !== "PRODUCT",
-  });
+  // Payload langsung diminta tanpa menunggu role; server tetap menolak (403)
+  // bila role tidak berhak, dan halaman mengalihkan user.
+  const { data, error, loading, reload } = useApi<AutomationPayload>("/api/automation");
 
   return (
     <main style={{ fontFamily: "var(--font-sans, system-ui, sans-serif)", width: "100%" }}>
-      {!me.data || blocked ? (
+      {meLoading || !me || blocked ? (
         <TableCardSkeleton />
       ) : error ? (
         <ErrorBlock message={error.message} onRetry={reload} />

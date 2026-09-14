@@ -5,24 +5,25 @@ import { useRouter } from "next/navigation";
 import { ExpressRunForm } from "@/components/test-runs/express-run";
 import { ErrorBlock, FormCardSkeleton, HeaderDetailSkeleton } from "@/components/ui/data-states";
 import { useApi } from "@/lib/client/use-api";
-import type { Me, RunOptionsPayload } from "@/types/api";
+import { useMe } from "@/lib/client/me-context";
+import type { RunOptionsPayload } from "@/types/api";
 
 export function CreateRunView() {
   const router = useRouter();
-  const me = useApi<Me>("/api/me");
-  const role = me.data?.role;
-  const blocked = !!me.data && role !== "QA";
+  const { me, loading: meLoading } = useMe();
+  const role = me?.role;
+  const blocked = !!me && role !== "QA";
 
   // Hanya QA yang dapat membuat Express Run.
   useEffect(() => {
     if (blocked) router.replace("/test-runs");
   }, [blocked, router]);
 
-  const { data, error, loading, reload } = useApi<RunOptionsPayload>("/api/test-runs/options", {
-    enabled: !!me.data && role === "QA",
-  });
+  // Payload langsung diminta tanpa menunggu role; server tetap menolak (403)
+  // bila role tidak berhak, dan halaman mengalihkan user.
+  const { data, error, loading, reload } = useApi<RunOptionsPayload>("/api/test-runs/options");
 
-  if (!me.data || blocked) {
+  if (meLoading || !me || blocked) {
     return (
       <main style={{ fontFamily: "var(--font-sans)", width: "100%" }}>
         <HeaderDetailSkeleton />
@@ -116,12 +117,7 @@ export function CreateRunView() {
             Isi detail run dan pilih suite/test case yang ingin dieksekusi.
           </p>
         </div>
-        <ExpressRunForm
-          projectId=""
-          projects={data.projects}
-          suites={data.suites}
-          testCases={data.testCases}
-        />
+        <ExpressRunForm projectId="" projects={data.projects} />
       </div>
     </main>
   );

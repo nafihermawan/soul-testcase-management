@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { apiSession, apiRoleAtLeast, json401, json404 } from "@/lib/api-auth";
 import { toAttachmentItems } from "@/lib/attachments";
+import { presignGetUrls } from "@/lib/storage/r2";
 import type { RunDetailPayload, RunResultItem } from "@/types/api";
 
 export async function GET(
@@ -71,6 +72,11 @@ export async function GET(
     return json404("Test run tidak ditemukan.");
   }
 
+  // Presign sekali untuk SEMUA evidence di run ini (bukan per hasil eksekusi).
+  const attachmentUrlMap = await presignGetUrls(
+    run.results.flatMap((r) => r.attachments.map((a) => a.storageKey))
+  );
+
   const results: RunResultItem[] = await Promise.all(
     run.results.map(async (r) => ({
       id: r.id,
@@ -86,7 +92,7 @@ export async function GET(
         status: b.status,
         externalLink: b.externalLink,
       })),
-      attachments: await toAttachmentItems(r.attachments),
+      attachments: await toAttachmentItems(r.attachments, attachmentUrlMap),
       testCase: r.testCase
         ? {
             id: r.testCase.id,

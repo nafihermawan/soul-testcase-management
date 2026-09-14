@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { apiSession, apiRoleAtLeast, json401 } from "@/lib/api-auth";
 import { toAttachmentItems } from "@/lib/attachments";
+import { presignGetUrls } from "@/lib/storage/r2";
 import type { BugsPayload, BugRow } from "@/types/api";
 
 export async function GET() {
@@ -20,6 +21,11 @@ export async function GET() {
     },
   });
 
+  // Presign sekali untuk SEMUA attachment di halaman ini (bukan per baris bug).
+  const urlMap = await presignGetUrls(
+    bugs.flatMap((b) => b.attachments.map((a) => a.storageKey))
+  );
+
   const rows: BugRow[] = await Promise.all(
     bugs.map(async (b) => ({
       id: b.id,
@@ -31,7 +37,7 @@ export async function GET() {
       createdAt: b.createdAt.toISOString(),
       testCase: b.testCase,
       createdBy: b.createdBy,
-      attachments: await toAttachmentItems(b.attachments),
+      attachments: await toAttachmentItems(b.attachments, urlMap),
     }))
   );
 

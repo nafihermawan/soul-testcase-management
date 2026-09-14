@@ -150,11 +150,48 @@ export type AutomationProjectStat = {
   coveragePct: number;
 };
 
+/** Ringkasan health automation untuk seluruh data terfilter (bukan per halaman). */
+export type AutomationSummary = {
+  total: number;
+  automated: number;
+  failing: number;
+  stale: number;
+  unstable: number;
+  notAutomated: number;
+  coveragePct: number;
+};
+
+/** Header grup per Suite untuk default view collapsed-by-suite. */
+export type AutomationSuiteGroup = {
+  suiteId: string;
+  suiteName: string;
+  projectId: string;
+  projectName: string;
+  platform: PlatformCode | null;
+  total: number;
+  automated: number;
+  failing: number;
+  stale: number;
+  unstable: number;
+  notAutomated: number;
+};
+
 export type AutomationPayload = {
   projects: { id: string; name: string; platform: PlatformCode | null }[];
-  suitesByProject: { projectId: string; suites: { id: string; name: string }[] }[];
-  rows: AutomationRow[];
+  /** Agregat per project atas seluruh data terfilter (bukan per halaman). */
   projectStats: AutomationProjectStat[];
+  /** Agregat global atas seluruh data terfilter (bukan per halaman). */
+  summary: AutomationSummary;
+  /** Statistik per Suite, mengikuti filter; dipakai untuk view collapsed. */
+  suiteGroups: AutomationSuiteGroup[];
+  /** Terisi HANYA saat request meminta baris (suiteId / pagination eksplisit). */
+  rows: AutomationRow[];
+  /** Total baris yang cocok dengan request baris tersebut (untuk pagination). */
+  rowsTotal: number;
+  page: number;
+  perPage: number;
+  canManage: boolean;
+  canUpdateStatus: boolean;
 };
 
 /* ---------- /api/settings ---------- */

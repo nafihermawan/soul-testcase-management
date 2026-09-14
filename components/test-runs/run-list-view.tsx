@@ -1,7 +1,7 @@
 "use client";
 
-import { Fragment, useMemo, useState } from "react";
-import { ChevronDown } from "lucide-react";
+import { useMemo, useState } from "react";
+import { ChevronRight } from "lucide-react";
 import { TestRunRow } from "@/components/test-runs/test-run-row";
 import { CreateRunButton } from "@/components/test-runs/create-run-button";
 import { DeleteRunButton } from "@/components/test-runs/delete-run-button";
@@ -204,75 +204,77 @@ export function RunListView({ searchParams }: { searchParams: ActiveRunsSearchPa
 
   return (
     <main style={{ fontFamily: "var(--font-sans)", width: "100%" }}>
-      {/* Satu card utama: header halaman + tabel */}
+      {/* Top control bar — card tersendiri di paling atas, terpisah dari card
+          tabel/kelompok status di bawahnya. */}
       <div
         style={{
           background: "#fff",
-          border: "1px solid rgba(226, 232, 240, 0.8)",
-          borderRadius: 16,
-          boxShadow: "0 1px 3px rgba(15, 23, 42, 0.06)",
-          overflow: "hidden",
+          border: "1px solid #F1F5F9",
+          borderRadius: 8,
+          padding: 16,
+          boxShadow: "0 1px 2px rgba(15, 23, 42, 0.05)",
+          marginBottom: 16,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 16,
+          flexWrap: "wrap",
         }}
       >
-        {/* Area header (Active Runs + kontrol) */}
-        <div
+        <h1
           style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: "1rem",
-            flexWrap: "wrap",
-            padding: "1.25rem 1.5rem",
+            fontSize: 18,
+            fontWeight: 700,
+            color: "#0F172A",
+            margin: 0,
+            lineHeight: 1.2,
           }}
         >
-          <div style={{ minWidth: 0 }}>
-            <h1
-              style={{
-                fontSize: 22,
-                fontWeight: 700,
-                color: "#0F172A",
-                margin: 0,
-                lineHeight: 1.2,
-              }}
-            >
-              Active Runs
-            </h1>
-            <p style={{ fontSize: 13, color: "#64748B", margin: "4px 0 0" }}>
-            </p>
-          </div>
+          Active Runs
+        </h1>
 
-          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
-            <HistoryControls
-              projects={allProjects}
-              baseUrl="/test-runs"
-              dialogTitle="Filter Active Runs"
-              showFilterButton={false}
-              initial={{
-                q: searchParams.q ?? "",
-                platforms: (searchParams.platforms ?? "")
-                  .split(",")
-                  .map((s) => s.trim())
-                  .filter(Boolean),
-                projectIds,
-                from: searchParams.from ?? null,
-                to: searchParams.to ?? null,
-              }}
-              activeCount={
-                (searchParams.platforms ? 1 : 0) +
-                (projectIds.length > 0 ? 1 : 0) +
-                (searchParams.from || searchParams.to ? 1 : 0)
-              }
-            />
-            {data.canEdit && <CreateRunButton />}
-          </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <HistoryControls
+            projects={allProjects}
+            baseUrl="/test-runs"
+            dialogTitle="Filter Active Runs"
+            showFilterButton={false}
+            initial={{
+              q: searchParams.q ?? "",
+              platforms: (searchParams.platforms ?? "")
+                .split(",")
+                .map((s) => s.trim())
+                .filter(Boolean),
+              projectIds,
+              from: searchParams.from ?? null,
+              to: searchParams.to ?? null,
+            }}
+            activeCount={
+              (searchParams.platforms ? 1 : 0) +
+              (projectIds.length > 0 ? 1 : 0) +
+              (searchParams.from || searchParams.to ? 1 : 0)
+            }
+          />
+          {data.canEdit && <CreateRunButton />}
         </div>
+      </div>
 
-        {/* Konten tabel / empty state */}
+      {/* Daftar card per kelompok status — tiap grup punya kontainernya sendiri,
+          bukan lagi satu tabel raksasa. */}
+      <div style={{ display: "flex", flexDirection: "column" }}>
         {runs.length === 0 ? (
-          hasFilter ? (
+          <div
+            style={{
+              background: "#fff",
+              border: "1px solid #F1F5F9",
+              borderRadius: 8,
+              boxShadow: "0 1px 2px rgba(15, 23, 42, 0.05)",
+              overflow: "hidden",
+            }}
+          >
+          {hasFilter ? (
             <div
               style={{
-                borderTop: "1px solid #E2E8F0",
                 padding: "3rem 1.5rem",
                 textAlign: "center",
                 color: "var(--text-muted)",
@@ -284,7 +286,6 @@ export function RunListView({ searchParams }: { searchParams: ActiveRunsSearchPa
           ) : (
             <div
               style={{
-                borderTop: "1px solid #E2E8F0",
                 padding: "3rem 1.5rem",
                 display: "flex",
                 flexDirection: "column",
@@ -319,130 +320,141 @@ export function RunListView({ searchParams }: { searchParams: ActiveRunsSearchPa
                 pindah ke History.
               </p>
             </div>
-          )
+          )}
+          </div>
         ) : (
-          <div style={{ overflowX: "auto", borderTop: "1px solid #E2E8F0" }}>
-            <table
-              style={{
-                width: "100%",
-                borderCollapse: "collapse",
-                fontSize: "0.85rem",
-                tableLayout: "fixed",
-              }}
-            >
-              <colgroup>
-                {columns.map((c) => (
-                  <col key={c.label} style={{ width: c.width }} />
-                ))}
-              </colgroup>
-              <tbody>
-                {groups.map((group) => {
+          <>
+            {groups.map((group) => {
                   const open = !collapsedGroups[group.status];
                   const label =
                     RUN_STATUS_LABEL[group.status as RunStatusValue] ?? group.status;
                   return (
-                    <Fragment key={group.status}>
-                      {/* Header grup: satu baris membentang penuh (colSpan).
-                          Chevron jadi kontrol expand/collapse; label status
-                          tampil sebagai teks polos tanpa badge. */}
-                      <tr style={{ background: "#F1F5F9" }}>
-                        <td
-                          colSpan={columns.length}
+                    <div key={group.status}>
+                      {/* Section header status — teks polos + chevron, berdiri
+                          sendiri DI LUAR card putih tabel. */}
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => toggleGroup(group.status)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            toggleGroup(group.status);
+                          }
+                        }}
+                        aria-expanded={open}
+                        aria-label={`${label} — ${group.runs.length} run`}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 8,
+                          // py-1 + mb-2: menempel tepat di atas card tabelnya.
+                          padding: "4px 0",
+                          marginBottom: 8,
+                          cursor: "pointer",
+                          userSelect: "none",
+                          color: "#1E293B",
+                          // Catatan: app/globals.css memaksa
+                          // `[role="button"] { border-radius: 3px !important }`,
+                          // jadi nilai radius di sini tidak akan berpengaruh.
+                          // Tidak ada dampak visual karena header ini tanpa
+                          // background, border, maupun shadow.
+                        }}
+                      >
+                        <ChevronRight
+                          size={12}
                           style={{
-                            padding: "0.5rem 1rem",
-                            borderTop: "1px solid rgba(226, 232, 240, 0.8)",
+                            color: "#64748B",
+                            flexShrink: 0,
+                            transform: open ? "rotate(90deg)" : "rotate(0deg)",
+                            transition: "transform 0.15s ease",
+                          }}
+                        />
+                        <span style={{ fontSize: 12, fontWeight: 700, color: "#1E293B" }}>
+                          {label}
+                        </span>
+                        <span style={{ fontSize: 12, fontWeight: 500, color: "#94A3B8" }}>
+                          {group.runs.length}
+                        </span>
+                      </div>
+
+                      {/* Tabel kolom + baris data — hanya dirender saat grup
+                          expanded; saat collapsed yang tersisa hanya header bar. */}
+                      {open && (
+                        <div
+                          style={{
+                            background: "#fff",
+                            border: "1px solid #F1F5F9",
+                            borderRadius: 8,
+                            boxShadow: "0 1px 2px rgba(15, 23, 42, 0.05)",
+                            overflow: "hidden",
+                            marginBottom: 24,
                           }}
                         >
-                          <button
-                            type="button"
-                            onClick={() => toggleGroup(group.status)}
-                            aria-expanded={open}
-                            aria-label={`${label} — ${group.runs.length} run`}
+                          <div style={{ overflowX: "auto" }}>
+                          <table
                             style={{
-                              display: "flex",
-                              alignItems: "center",
-                              gap: "0.5rem",
                               width: "100%",
-                              padding: 0,
-                              border: "none",
-                              background: "transparent",
-                              textAlign: "left",
+                              borderCollapse: "collapse",
+                              fontSize: "0.85rem",
+                              tableLayout: "fixed",
                             }}
                           >
-                            <ChevronDown
-                              size={15}
-                              style={{
-                                color: "#94A3B8",
-                                flexShrink: 0,
-                                transform: open ? "rotate(0deg)" : "rotate(-90deg)",
-                                transition: "transform 0.15s ease",
-                              }}
-                            />
-                            <span
-                              style={{ color: "#1E293B", fontWeight: 700, fontSize: "0.75rem" }}
-                            >
-                              {label}
-                            </span>
-                            <span
-                              style={{ color: "#94A3B8", fontWeight: 500, fontSize: "0.75rem" }}
-                            >
-                              {group.runs.length}
-                            </span>
-                          </button>
-                        </td>
-                      </tr>
-
-                      {/* Sub-header kolom + baris data grup ini.
-                          Header kolom & baris data hanya dirender saat grup
-                          expanded, jadi keduanya ikut tersembunyi saat collapse. */}
-                      {open && (
-                        <>
-                          <tr style={{ background: "rgba(248, 250, 252, 0.4)" }}>
-                            {columns.map((c) => (
-                              <th
-                                key={c.label}
-                                scope="col"
-                                style={{
-                                  padding: c.pad,
-                                  fontWeight: 700,
-                                  fontSize: "0.78rem",
-                                  color: "#334155",
-                                  textAlign: c.align ?? "left",
-                                  whiteSpace: c.nowrap ? "nowrap" : undefined,
-                                  borderBottom: "1px solid rgba(226, 232, 240, 0.8)",
-                                }}
-                              >
-                                {c.label}
-                              </th>
-                            ))}
-                          </tr>
-                          {group.runs.map((run) => (
-                            <TestRunRow
-                              key={run.id}
-                              {...run}
-                              onStatusChange={
-                                data.canEdit ? (next) => void changeStatus(run.id, next) : undefined
-                              }
-                              statusPending={pendingStatusId === run.id}
-                              extraAction={
-                                data.canEdit ? (
-                                  <DeleteRunButton
-                                    runId={run.id}
-                                    runName={run.name}
-                                    onDeleted={() => removeRunLocally(run.id)}
-                                  />
-                                ) : undefined
-                              }
-                            />
-                          ))}
-                        </>
+                            <colgroup>
+                              {columns.map((c) => (
+                                <col key={c.label} style={{ width: c.width }} />
+                              ))}
+                            </colgroup>
+                            <thead>
+                              <tr style={{ background: "rgba(248, 250, 252, 0.4)" }}>
+                                {columns.map((c) => (
+                                  <th
+                                    key={c.label}
+                                    scope="col"
+                                    style={{
+                                      padding: c.pad,
+                                      fontWeight: 700,
+                                      fontSize: "0.78rem",
+                                      color: "#334155",
+                                      textAlign: c.align ?? "left",
+                                      whiteSpace: c.nowrap ? "nowrap" : undefined,
+                                      borderBottom: "1px solid rgba(226, 232, 240, 0.8)",
+                                    }}
+                                  >
+                                    {c.label}
+                                  </th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {group.runs.map((run) => (
+                                <TestRunRow
+                                  key={run.id}
+                                  {...run}
+                                  onStatusChange={
+                                    data.canEdit ? (next) => void changeStatus(run.id, next) : undefined
+                                  }
+                                  statusPending={pendingStatusId === run.id}
+                                  extraAction={
+                                    data.canEdit ? (
+                                      <DeleteRunButton
+                                        runId={run.id}
+                                        runName={run.name}
+                                        onDeleted={() => removeRunLocally(run.id)}
+                                      />
+                                    ) : undefined
+                                  }
+                                />
+                              ))}
+                            </tbody>
+                            </table>
+                          </div>
+                        </div>
                       )}
-                    </Fragment>
+                    </div>
                   );
                 })}
-              </tbody>
-            </table>
-          </div>
+          </>
         )}
       </div>
 

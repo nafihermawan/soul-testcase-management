@@ -58,7 +58,7 @@ export function WeeklyReportSection() {
                 Rangkum task yang sedang / baru selesai testing
               </div>
               <div style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginTop: 2 }}>
-                Menghasilkan body email siap kirim ke CTO, PM, dan Engineering Manager.
+                Menghasilkan body email siap kirim untuk progress seminggu terakhir.
               </div>
             </div>
           </div>

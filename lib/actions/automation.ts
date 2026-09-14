@@ -89,6 +89,25 @@ export async function bulkUnlinkAutomation(linkIds: string[]): Promise<Automatio
   }
 }
 
+/**
+ * Unlink automation berdasarkan id TestCase (dipakai bulk unlink lintas
+ * halaman/grup, di mana linkId baris yang tampil belum tentu diketahui).
+ */
+export async function bulkUnlinkAutomationByTestCaseIds(
+  testCaseIds: string[]
+): Promise<AutomationActionState> {
+  await requireRole("QA");
+  const ids = Array.from(new Set(testCaseIds.filter(Boolean)));
+  if (ids.length === 0) return { error: "Tidak ada test case dipilih." };
+  try {
+    await prisma.automationLink.deleteMany({ where: { testCaseId: { in: ids } } });
+    revalidatePath("/automation");
+    return { success: true };
+  } catch (error) {
+    return handleError(error);
+  }
+}
+
 /** Update status automation (QA & DEVELOPER). DEVELOPER hanya bisa ubah status. */
 export async function updateAutomationStatus(
   linkId: string,

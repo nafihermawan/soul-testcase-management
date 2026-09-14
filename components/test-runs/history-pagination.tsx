@@ -9,11 +9,19 @@ export function HistoryPagination({
   page,
   perPage,
   baseUrl,
+  label = "Test Runs",
+  onPageChange,
+  onPerPageChange,
 }: {
   total: number;
   page: number;
   perPage: number;
   baseUrl: string;
+  /** Nama entitas yang dipaginasi (mis. "Test Case"). */
+  label?: string;
+  /** Bila diisi: pakai callback (state-based) dan TIDAK router.push. */
+  onPageChange?: (page: number) => void;
+  onPerPageChange?: (perPage: number) => void;
 }) {
   const router = useRouter();
   const totalPages = Math.max(1, Math.ceil(total / perPage));
@@ -22,7 +30,9 @@ export function HistoryPagination({
 
   const goto = (p: number) => {
     if (p < 1 || p > totalPages || p === page) return;
-    router.push(buildHistoryHref(baseUrl, { page: p, perPage }));
+    // Mode callback (mis. Automation) vs mode URL (Run History) lama.
+    if (onPageChange) onPageChange(p);
+    else router.push(buildHistoryHref(baseUrl, { page: p, perPage }));
   };
 
   // Halaman window: tampilkan max 7 tombol angka
@@ -73,13 +83,15 @@ export function HistoryPagination({
       }}
     >
       <div>
-        Showing {from}-{to} of {total} Test Runs
+        Showing {from}-{to} of {total} {label}
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
         <select
           value={perPage}
           onChange={(e) => {
-            router.push(buildHistoryHref(baseUrl, { page: 1, perPage: Number(e.target.value) }));
+            const next = Number(e.target.value);
+            if (onPerPageChange) onPerPageChange(next);
+            else router.push(buildHistoryHref(baseUrl, { page: 1, perPage: next }));
           }}
           style={{
             padding: "0.3rem 0.5rem",

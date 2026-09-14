@@ -3,14 +3,8 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { AutomationPageClient } from "@/components/automation/automation-page-client";
-import {
-  ErrorBlock,
-  StatsCardsSkeleton,
-  TableCardSkeleton,
-} from "@/components/ui/data-states";
-import { useApi } from "@/lib/client/use-api";
+import { TableCardSkeleton } from "@/components/ui/data-states";
 import { useMe } from "@/lib/client/me-context";
-import type { AutomationPayload } from "@/types/api";
 
 export default function AutomationPage() {
   const router = useRouter();
@@ -23,31 +17,16 @@ export default function AutomationPage() {
     if (blocked) router.replace("/");
   }, [blocked, router]);
 
-  // Payload langsung diminta tanpa menunggu role; server tetap menolak (403)
-  // bila role tidak berhak, dan halaman mengalihkan user.
-  const { data, error, loading, reload } = useApi<AutomationPayload>("/api/automation");
-
   return (
     <main style={{ fontFamily: "var(--font-sans, system-ui, sans-serif)", width: "100%" }}>
       {meLoading || !me || blocked ? (
         <TableCardSkeleton />
-      ) : error ? (
-        <ErrorBlock message={error.message} onRetry={reload} />
-      ) : loading || !data ? (
-        <>
-          <StatsCardsSkeleton count={4} />
-          <div style={{ height: "1.25rem" }} />
-          <TableCardSkeleton />
-        </>
       ) : (
+        // Data + filter dikelola di dalam client (fetch per-suite saat expand),
+        // jadi server tetap menegakkan hak akses lewat 403 di route handler.
         <AutomationPageClient
           canManage={role === "QA"}
           canUpdateStatus={role === "QA" || role === "DEVELOPER"}
-          projects={data.projects}
-          suitesByProject={data.suitesByProject}
-          rows={data.rows}
-          projectStats={data.projectStats}
-          reload={reload}
         />
       )}
     </main>

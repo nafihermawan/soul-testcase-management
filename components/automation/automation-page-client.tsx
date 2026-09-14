@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import {
   CheckSquare,
   ChevronDown,
@@ -21,53 +21,26 @@ import {
 import {
   bulkLinkAutomation,
   bulkUnlinkAutomation,
+  bulkUnlinkAutomationByTestCaseIds,
   createAutomationLink,
   updateAutomationLink,
   updateAutomationStatus,
 } from "@/lib/actions/automation";
+import { getJSON, useApi } from "@/lib/client/use-api";
+import { HistoryPagination } from "@/components/test-runs/history-pagination";
 import { useToast, Toast, ConfirmDialog } from "@/components/ui/feedback";
+import { ErrorBlock, StatsCardsSkeleton, TableCardSkeleton } from "@/components/ui/data-states";
+import type {
+  AutomationPayload,
+  AutomationProjectStat,
+  AutomationRow,
+  AutomationRowStatus,
+  AutomationSuiteGroup,
+} from "@/types/api";
 
-/* ---------- Types ---------- */
+/* ---------- Konstanta tampilan ---------- */
 
-type Platform = "WEB" | "MOBILE" | "HARDWARE" | "API" | null;
-type RowStatus =
-  | "NOT_AUTOMATED"
-  | "AUTOMATED"
-  | "FAILING"
-  | "UNSTABLE"
-  | "STALE";
-
-type AutomationRow = {
-  id: string;
-  tcId: string;
-  title: string;
-  projectId: string | null;
-  projectName: string;
-  platform: Platform;
-  suiteId: string | null;
-  suiteName: string;
-  linkId: string | null;
-  externalTestId: string | null;
-  scriptPath: string | null;
-  status: RowStatus;
-  lastRunAt: string | null;
-  lastResult: string | null;
-};
-
-type ProjectStat = {
-  projectId: string;
-  name: string;
-  platform: Platform;
-  total: number;
-  automated: number;
-  failing: number;
-  stale: number;
-  unstable: number;
-  notAutomated: number;
-  coveragePct: number;
-};
-
-const STATUS_LABEL: Record<RowStatus, string> = {
+const STATUS_LABEL: Record<AutomationRowStatus, string> = {
   NOT_AUTOMATED: "Belum Automated",
   AUTOMATED: "Automated",
   FAILING: "Failing",
@@ -75,7 +48,7 @@ const STATUS_LABEL: Record<RowStatus, string> = {
   UNSTABLE: "Unstable",
 };
 
-const STATUS_COLOR: Record<RowStatus, { color: string; bg: string; border: string }> = {
+const STATUS_COLOR: Record<AutomationRowStatus, { color: string; bg: string; border: string }> = {
   NOT_AUTOMATED: { color: "#64748B", bg: "#F1F5F9", border: "#E2E8F0" },
   AUTOMATED: { color: "#047857", bg: "#ECFDF5", border: "#A7F3D0" },
   FAILING: { color: "#BE123C", bg: "#FFF1F2", border: "#FECDD3" },
@@ -90,12 +63,16 @@ const PLATFORM_LABEL: Record<string, string> = {
   API: "API",
 };
 
-const STATUS_ORDER: Record<RowStatus, number> = {
-  FAILING: 0,
-  STALE: 1,
-  UNSTABLE: 2,
-  NOT_AUTOMATED: 3,
-  AUTOMATED: 4,
+const DEFAULT_PER_PAGE = 25;
+
+const inputBase: CSSProperties = {
+  border: "1px solid #D1D5DB",
+  borderRadius: 8,
+  background: "#fff",
+  padding: "8px 10px",
+  fontSize: "0.85rem",
+  color: "var(--text)",
+  outline: "none",
 };
 
 /* ---------- Helpers ---------- */
@@ -111,87 +88,148 @@ function formatDate(iso: string | null): string {
   });
 }
 
-const inputBase: CSSProperties = {
-  border: "1px solid #D1D5DB",
-  borderRadius: 8,
-  background: "#fff",
-  padding: "8px 10px",
-  fontSize: "0.85rem",
-  color: "var(--text)",
-  outline: "none",
+type RowsState = {
+  rows: AutomationRow[];
+  total: number;
+  loading: boolean;
+  error: string | null;
 };
+
+/** Path request baris: menyertakan suiteId (opsional) + pagination. */
+function buildRowsPath(
+  filterQuery: string,
+  suiteId: string | null,
+  page: number,
+  perPage: number
+): string {
+  const p = new URLSearchParams(filterQuery);
+  if (suiteId) p.set("suiteId", suiteId);
+  p.set("page", String(page));
+  p.set("perPage", String(perPage));
+  return `/api/automation?${p.toString()}`;
+}
 
 /* ---------- Main Component ---------- */
 
 export function AutomationPageClient({
   canManage,
   canUpdateStatus,
-  projects,
-  suitesByProject,
-  rows,
-  projectStats,
-  reload,
 }: {
   canManage: boolean;
   canUpdateStatus: boolean;
-  projects: { id: string; name: string; platform: Platform }[];
-  suitesByProject: { projectId: string; suites: { id: string; name: string }[] }[];
-  rows: AutomationRow[];
-  projectStats: ProjectStat[];
-  reload?: () => void;
 }) {
   const { toast, showToast, dismissToast } = useToast();
 
   // Filter state
+  const [qInput, setQInput] = useState("");
   const [q, setQ] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [selProjects, setSelProjects] = useState<Set<string>>(new Set());
   const [selSuites, setSelSuites] = useState<Set<string>>(new Set());
-  const [groupBySuite, setGroupBySuite] = useState(false);
+  // Default view: collapsed-by-suite. Toggle off -> mode flat lintas suite.
+  const [groupBySuite, setGroupBySuite] = useState(true);
+  const [flatPage, setFlatPage] = useState(1);
+  const [flatPerPage, setFlatPerPage] = useState(DEFAULT_PER_PAGE);
 
   // Bulk state
-  const [selected, setSelected] = useState<Set<string>>(new Set()); // row.id (TC id)
+  const [selected, setSelected] = useState<Set<string>>(new Set()); // id TestCase, lintas halaman/grup
   const [bulkMode, setBulkMode] = useState<"link" | "unlink" | null>(null);
   const [bulkPattern, setBulkPattern] = useState("");
   const [bulkScript, setBulkScript] = useState("");
   const [pending, setPending] = useState(false);
 
   // Row actions
-  const [editing, setEditing] = useState<{
-    mode: "create" | "edit";
-    row: AutomationRow;
-  } | null>(null);
+  const [editing, setEditing] = useState<{ mode: "create" | "edit"; row: AutomationRow } | null>(null);
   const [editExtId, setEditExtId] = useState("");
   const [editScript, setEditScript] = useState("");
   const [confirmUnlink, setConfirmUnlink] = useState<AutomationRow | null>(null);
   const [ciOpen, setCiOpen] = useState(false);
 
-  const toggleProject = (pid: string) =>
+  // Debounce pencarian sebelum dikirim ke server.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setQ(qInput.trim());
+      setFlatPage(1);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [qInput]);
+
+  const filterQuery = useMemo(() => {
+    const p = new URLSearchParams();
+    if (q) p.set("q", q);
+    if (statusFilter !== "ALL") p.set("status", statusFilter);
+    if (selProjects.size) p.set("projects", Array.from(selProjects).join(","));
+    if (selSuites.size) p.set("suites", Array.from(selSuites).join(","));
+    return p.toString();
+  }, [q, statusFilter, selProjects, selSuites]);
+
+  // View collapsed tidak mengirim page/perPage supaya payload tetap ringan;
+  // mode flat mengirimkannya agar server mengembalikan baris lintas suite.
+  const mainPath = useMemo(() => {
+    const p = new URLSearchParams(filterQuery);
+    if (!groupBySuite) {
+      p.set("page", String(flatPage));
+      p.set("perPage", String(flatPerPage));
+    }
+    const qs = p.toString();
+    return `/api/automation${qs ? `?${qs}` : ""}`;
+  }, [filterQuery, groupBySuite, flatPage, flatPerPage]);
+
+  const { data, error, loading, reload } = useApi<AutomationPayload>(mainPath);
+
+  // reload() menyegarkan payload utama; reloadToken memicu grup yang terbuka
+  // ikut memuat ulang supaya UI tidak stale setelah mutasi.
+  const [reloadToken, setReloadToken] = useState(0);
+  const reloadAll = () => {
+    reload();
+    setReloadToken((t) => t + 1);
+  };
+
+  // Akumulasi daftar suite yang pernah terlihat (untuk filter dependent).
+  const [knownSuites, setKnownSuites] = useState<Map<string, { id: string; name: string; projectId: string }>>(
+    new Map()
+  );
+  useEffect(() => {
+    if (!data) return;
+    setKnownSuites((prev) => {
+      let changed = false;
+      const next = new Map(prev);
+      for (const g of data.suiteGroups) {
+        if (!next.has(g.suiteId)) {
+          next.set(g.suiteId, { id: g.suiteId, name: g.suiteName, projectId: g.projectId });
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [data]);
+
+  const toggleProject = (pid: string) => {
+    setFlatPage(1);
     setSelProjects((prev) => {
       const next = new Set(prev);
       if (next.has(pid)) next.delete(pid);
       else next.add(pid);
       return next;
     });
+  };
 
-  const toggleSuite = (sid: string) =>
+  const toggleSuite = (sid: string) => {
+    setFlatPage(1);
     setSelSuites((prev) => {
       const next = new Set(prev);
       if (next.has(sid)) next.delete(sid);
       else next.add(sid);
       return next;
     });
+  };
 
-  // Available suites for the suite filter (dependent on selProjects)
+  // Suite yang bisa dipilih: mengikuti project terpilih (dependent).
   const availableSuites = useMemo(() => {
-    const source =
-      selProjects.size > 0
-        ? suitesByProject.filter((s) => selProjects.has(s.projectId))
-        : suitesByProject;
-    return source.flatMap((s) => s.suites);
-  }, [selProjects, suitesByProject]);
+    const all = Array.from(knownSuites.values());
+    return selProjects.size > 0 ? all.filter((s) => selProjects.has(s.projectId)) : all;
+  }, [knownSuites, selProjects]);
 
-  // Prune seleksi suite yang tidak valid saat project berubah
   const validSuiteIds = useMemo(() => new Set(availableSuites.map((s) => s.id)), [availableSuites]);
   useEffect(() => {
     setSelSuites((prev) => {
@@ -201,86 +239,23 @@ export function AutomationPageClient({
     });
   }, [validSuiteIds]);
 
-  // Filter rows
-  const filtered = useMemo(() => {
-    const term = q.trim().toLowerCase();
-    return rows.filter((r) => {
-      if (statusFilter !== "ALL" && r.status !== statusFilter) return false;
-      if (selProjects.size > 0 && !(r.projectId && selProjects.has(r.projectId))) return false;
-      if (selSuites.size > 0 && !(r.suiteId && selSuites.has(r.suiteId))) return false;
-      if (term) {
-        const hay =
-          `${r.tcId} ${r.title} ${r.externalTestId ?? ""} ${r.scriptPath ?? ""}`.toLowerCase();
-        if (!hay.includes(term)) return false;
-      }
-      return true;
-    });
-  }, [rows, q, statusFilter, selProjects, selSuites]);
-
-  // Default sort: FAILING → STALE → UNSTABLE → NOT_AUTOMATED → AUTOMATED, lalu nama
-  const sorted = useMemo(() => {
-    return [...filtered].sort((a, b) => {
-      const d =
-        (STATUS_ORDER[a.status as RowStatus] ?? 9) -
-        (STATUS_ORDER[b.status as RowStatus] ?? 9);
-      if (d !== 0) return d;
-      return a.title.localeCompare(b.title);
-    });
-  }, [filtered]);
-
-  // Aggregate stats based on current project filter (for summary cards + coverage)
-  const statsSummary = useMemo(() => {
-    const projStats = projectStats.filter(
-      (p) => selProjects.size === 0 || selProjects.has(p.projectId)
-    );
-    const sum = (k: "total" | "automated" | "failing" | "stale" | "unstable" | "notAutomated") =>
-      projStats.reduce((s, p) => s + (p[k] as number), 0);
-    const total = sum("total");
-    const automated = sum("automated");
-    const failing = sum("failing");
-    const stale = sum("stale");
-    const unstable = sum("unstable");
-    const notAutomated = sum("notAutomated");
-    const covered = automated + failing + stale + unstable;
-    return {
-      automated,
-      failing,
-      stale,
-      unstable,
-      notAutomated,
-      total,
-      coveragePct: total > 0 ? Math.round((covered / total) * 100) : 0,
-    };
-  }, [projectStats, selProjects]);
-
-  const allVisibleSelected =
-    filtered.length > 0 && filtered.every((r) => selected.has(r.id));
-
-  const toggleSelectAll = () => {
-    if (allVisibleSelected) {
-      setSelected((prev) => {
-        const next = new Set(prev);
-        filtered.forEach((r) => next.delete(r.id));
-        return next;
-      });
-    } else {
-      setSelected((prev) => {
-        const next = new Set(prev);
-        filtered.forEach((r) => next.add(r.id));
-        return next;
-      });
-    }
-  };
-
   const isRowSelectable = (r: AutomationRow) => r.status === "NOT_AUTOMATED" || !r.linkId;
+
+  const toggleSelect = (id: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  /* ---------- Mutations ---------- */
 
   const doBulkLink = async () => {
     setPending(true);
-    const ids = rows
-      .filter((r) => selected.has(r.id))
-      .filter((r) => !r.linkId)
-      .map((r) => r.id);
-    const res = await bulkLinkAutomation(ids, {
+    // Seleksi lintas halaman: cukup kirim seluruh selected; action melewati
+    // test case yang sudah punya link.
+    const res = await bulkLinkAutomation(Array.from(selected), {
       externalTestPattern: bulkPattern.trim() || undefined,
       scriptPathPrefix: bulkScript.trim() || undefined,
     });
@@ -297,16 +272,13 @@ export function AutomationPageClient({
     );
     setBulkMode(null);
     setSelected(new Set());
-    reload?.();
+    reloadAll();
   };
 
   const doBulkUnlink = async () => {
     setPending(true);
-    const ids = rows
-      .filter((r) => selected.has(r.id))
-      .filter((r) => r.linkId)
-      .map((r) => r.linkId) as string[];
-    const res = await bulkUnlinkAutomation(ids);
+    // Bulk unlink tidak bergantung pada linkId baris yang sedang tampil.
+    const res = await bulkUnlinkAutomationByTestCaseIds(Array.from(selected));
     setPending(false);
     if (res.error) {
       showToast(res.error, "error");
@@ -315,7 +287,7 @@ export function AutomationPageClient({
     showToast("Automation di-unlink.", "success");
     setBulkMode(null);
     setSelected(new Set());
-    reload?.();
+    reloadAll();
   };
 
   const doSaveEdit = async () => {
@@ -345,7 +317,7 @@ export function AutomationPageClient({
       showToast("Automation diperbarui.", "success");
     }
     setEditing(null);
-    reload?.();
+    reloadAll();
   };
 
   const doConfirmUnlink = async () => {
@@ -359,10 +331,10 @@ export function AutomationPageClient({
     }
     showToast("Automation di-unlink.", "success");
     setConfirmUnlink(null);
-    reload?.();
+    reloadAll();
   };
 
-  const doQuickStatus = async (r: AutomationRow, next: RowStatus) => {
+  const doQuickStatus = async (r: AutomationRow, next: AutomationRowStatus) => {
     if (!r.linkId) return;
     setPending(true);
     const res = await updateAutomationStatus(
@@ -375,12 +347,23 @@ export function AutomationPageClient({
       return;
     }
     showToast("Status diperbarui.", "success");
-    reload?.();
+    reloadAll();
   };
 
-  /* ---------- Render ---------- */
+  const openEdit = (r: AutomationRow) => {
+    setEditing({ mode: "edit", row: r });
+    setEditExtId(r.externalTestId ?? "");
+    setEditScript(r.scriptPath ?? "");
+  };
+  const openLink = (r: AutomationRow) => {
+    setEditing({ mode: "create", row: r });
+    setEditExtId("");
+    setEditScript("");
+  };
 
-  const badge = (s: RowStatus) => {
+  /* ---------- Render helpers ---------- */
+
+  const badge = (s: AutomationRowStatus) => {
     const c = STATUS_COLOR[s] ?? STATUS_COLOR.NOT_AUTOMATED;
     return (
       <span
@@ -406,51 +389,45 @@ export function AutomationPageClient({
     );
   };
 
-  const summaryCard = (
-    key: string,
-    label: string,
-    value: number,
-    color: string,
-    bg: string,
-    icon: ReactNode
-  ) => (
-    <div
-      key={key}
-      style={{
-        background: "#fff",
-        border: "1px solid #E5E7EB",
-        borderRadius: 12,
-        padding: "16px 18px",
-        display: "flex",
-        alignItems: "center",
-        gap: 12,
-        minWidth: 180,
-        flex: 1,
-      }}
-    >
-      <div
-        style={{
-          width: 36,
-          height: 36,
-          borderRadius: 10,
-          background: bg,
-          color,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          flexShrink: 0,
-        }}
-      >
-        {icon}
+  // Skeleton saat payload pertama belum ada; error hanya menutup layar bila
+  // memang belum ada data sama sekali.
+  if (error && !data) {
+    return <ErrorBlock message={error.message} onRetry={reload} />;
+  }
+  if (!data) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 16, width: "100%" }}>
+        <StatsCardsSkeleton count={4} />
+        <TableCardSkeleton />
       </div>
-      <div>
-        <div style={{ fontSize: 22, fontWeight: 800, color: "#0F172A", lineHeight: 1.2 }}>
-          {value}
-        </div>
-        <div style={{ fontSize: 12, fontWeight: 600, color: "#64748B" }}>{label}</div>
-      </div>
-    </div>
+    );
+  }
+
+  const summary = data.summary;
+  const projectStats: AutomationProjectStat[] = data.projectStats.filter(
+    (p) => selProjects.size === 0 || selProjects.has(p.projectId)
   );
+
+  const headerSelectAll = (rows: AutomationRow[]) => {
+    const selectable = rows.filter(isRowSelectable);
+    const allOn = selectable.length > 0 && selectable.every((r) => selected.has(r.id));
+    return (
+      <input
+        type="checkbox"
+        checked={allOn}
+        onChange={() =>
+          setSelected((prev) => {
+            const next = new Set(prev);
+            if (allOn) selectable.forEach((r) => next.delete(r.id));
+            else selectable.forEach((r) => next.add(r.id));
+            return next;
+          })
+        }
+        title="Pilih semua baris pada halaman ini"
+        style={{ accentColor: "#F59E0B", cursor: "pointer" }}
+      />
+    );
+  };
 
   return (
     <div style={{ fontFamily: "var(--font-sans)", width: "100%", display: "flex", flexDirection: "column", gap: 16 }}>
@@ -506,73 +483,83 @@ export function AutomationPageClient({
         </div>
       </div>
 
-      {/* Summary cards */}
+      {/* Summary cards — memakai agregat total (bukan halaman) */}
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-        {summaryCard("auto", "Automated", statsSummary.automated, "#047857", "#ECFDF5", <FlaskConical size={17} />)}
-        {summaryCard("fail", "Failing", statsSummary.failing, "#BE123C", "#FFF1F2", <CircleAlert size={17} />)}
-        {summaryCard("stale", "Stale", statsSummary.stale, "#B45309", "#FFFBEB", <Clock4 size={17} />)}
-        {summaryCard("unauto", "Belum Automated", statsSummary.notAutomated, "#64748B", "#F1F5F9", <Link2Off size={17} />)}
+        {summaryCard("auto", "Automated", summary.automated, "#047857", "#ECFDF5", <FlaskConical size={17} />)}
+        {summaryCard("fail", "Failing", summary.failing, "#BE123C", "#FFF1F2", <CircleAlert size={17} />)}
+        {summaryCard("stale", "Stale", summary.stale, "#B45309", "#FFFBEB", <Clock4 size={17} />)}
+        {summaryCard("unauto", "Belum Automated", summary.notAutomated, "#64748B", "#F1F5F9", <Link2Off size={17} />)}
       </div>
 
       {/* Coverage bar per project */}
-      <div
-        style={{
-          background: "#fff",
-          border: "1px solid #E5E7EB",
-          borderRadius: 12,
-          padding: "16px 20px",
-        }}
-      >
+      <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, padding: "16px 20px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: "#0F172A" }}>
-            Coverage per Project
-          </div>
-          <div style={{ fontSize: 13, fontWeight: 700, color: "#0F172A" }}>
-            {statsSummary.coveragePct}%
-          </div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: "#0F172A" }}>Coverage per Project</div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: "#0F172A" }}>{summary.coveragePct}%</div>
         </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {projectStats
-            .filter((p) => selProjects.size === 0 || selProjects.has(p.projectId))
-            .map((p) => (
-              <div key={p.projectId} style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <div style={{ width: 190, flexShrink: 0 }}>
-                  <div style={{ fontSize: "0.8rem", fontWeight: 700, color: "#334155", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {p.name}
-                  </div>
-                  <div style={{ fontSize: "0.7rem", color: "#94A3B8" }}>
-                    {p.platform ? PLATFORM_LABEL[p.platform] : ""} · {p.total} TC
-                  </div>
+        {/* Grid 2 kolom (auto-fit agar tetap 1 kolom di layar sempit). Nama
+            project, persentase, dan bar-nya dibuat berdekatan dalam satu kartu. */}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))",
+            gap: 12,
+          }}
+        >
+          {projectStats.map((p) => (
+            <div
+              key={p.projectId}
+              style={{
+                border: "1px solid #E5E7EB",
+                borderRadius: 10,
+                padding: "10px 12px",
+                background: "#fff",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+                <div
+                  title={p.name}
+                  style={{
+                    flex: 1,
+                    minWidth: 0,
+                    fontSize: "0.8rem",
+                    fontWeight: 700,
+                    color: "#334155",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {p.name}
                 </div>
-                <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4 }}>
-                  <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                    {/* Stacked segmented coverage bar */}
-                    <div style={{ flex: 1, display: "flex", height: 10, borderRadius: 999, overflow: "hidden", background: "#E2E8F0" }}>
-                      {p.automated > 0 && (
-                        <div style={{ width: `${(p.automated / p.total) * 100}%`, background: "#10B981" }} title={`Automated ${p.automated}`} />
-                      )}
-                      {p.stale > 0 && (
-                        <div style={{ width: `${(p.stale / p.total) * 100}%`, background: "#F59E0B" }} title={`Stale ${p.stale}`} />
-                      )}
-                      {p.failing > 0 && (
-                        <div style={{ width: `${(p.failing / p.total) * 100}%`, background: "#F43F5E" }} title={`Failing ${p.failing}`} />
-                      )}
-                      {p.unstable > 0 && (
-                        <div style={{ width: `${(p.unstable / p.total) * 100}%`, background: "#8B5CF6" }} title={`Unstable ${p.unstable}`} />
-                      )}
-                    </div>
-                    <span style={{ fontSize: "0.78rem", fontWeight: 700, color: "#0F172A", width: 36, textAlign: "right" }}>
-                      {p.coveragePct}%
-                    </span>
-                  </div>
+                <div style={{ fontSize: "0.78rem", fontWeight: 700, color: "#0F172A" }}>
+                  {p.coveragePct}%
                 </div>
               </div>
-            ))}
-          {projectStats.filter((p) => selProjects.size === 0 || selProjects.has(p.projectId)).length ===
-            0 && (
-            <div style={{ fontSize: "0.85rem", color: "#9CA3AF", textAlign: "center", padding: "0.5rem" }}>
-              Tidak ada project.
+              <div style={{ fontSize: "0.7rem", color: "#94A3B8", marginTop: 2 }}>
+                {p.platform ? `${PLATFORM_LABEL[p.platform]} · ` : ""}
+                {p.total} TC
+              </div>
+              {/* h-2 (8px) + rounded-full: tetap terlihat walau angkanya rendah. */}
+              <div
+                style={{
+                  display: "flex",
+                  height: 8,
+                  borderRadius: 999,
+                  overflow: "hidden",
+                  background: "#E2E8F0",
+                  marginTop: 6,
+                }}
+              >
+                {p.automated > 0 && <div style={{ width: `${(p.automated / p.total) * 100}%`, background: "#10B981" }} title={`Automated ${p.automated}`} />}
+                {p.stale > 0 && <div style={{ width: `${(p.stale / p.total) * 100}%`, background: "#F59E0B" }} title={`Stale ${p.stale}`} />}
+                {p.failing > 0 && <div style={{ width: `${(p.failing / p.total) * 100}%`, background: "#F43F5E" }} title={`Failing ${p.failing}`} />}
+                {p.unstable > 0 && <div style={{ width: `${(p.unstable / p.total) * 100}%`, background: "#8B5CF6" }} title={`Unstable ${p.unstable}`} />}
+              </div>
             </div>
+          ))}
+          {projectStats.length === 0 && (
+            <div style={{ fontSize: "0.85rem", color: "#9CA3AF", textAlign: "center", padding: "0.5rem" }}>Tidak ada project.</div>
           )}
         </div>
       </div>
@@ -584,25 +571,32 @@ export function AutomationPageClient({
           border: "1px solid #E5E7EB",
           borderRadius: 12,
           padding: "14px 16px",
+          // mb-4: beri jarak napas antara kontrol filter dan tabel.
+          marginBottom: 16,
           display: "flex",
           gap: 10,
           flexWrap: "wrap",
           alignItems: "center",
         }}
       >
-        {/* Search */}
         <div style={{ position: "relative", flex: 1, minWidth: 180, maxWidth: 300 }}>
           <Search size={14} style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF" }} />
           <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
+            value={qInput}
+            onChange={(e) => setQInput(e.target.value)}
             placeholder="Cari TC ID / judul / external id…"
             style={{ ...inputBase, paddingLeft: 30, width: "100%" }}
           />
         </div>
 
-        {/* Status filter */}
-        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={{ ...inputBase }}>
+        <select
+          value={statusFilter}
+          onChange={(e) => {
+            setStatusFilter(e.target.value);
+            setFlatPage(1);
+          }}
+          style={{ ...inputBase }}
+        >
           <option value="ALL">Semua Status</option>
           <option value="FAILING">Failing</option>
           <option value="STALE">Stale</option>
@@ -611,38 +605,29 @@ export function AutomationPageClient({
           <option value="AUTOMATED">Automated</option>
         </select>
 
-        {/* Project multi-select */}
         <MultiChipFilter
           label={
             selProjects.size === 0
               ? "Semua Project"
               : selProjects.size === 1
-                ? projects.find((p) => selProjects.has(p.id))?.name ?? "Project"
+                ? data.projects.find((p) => selProjects.has(p.id))?.name ?? "Project"
                 : `${selProjects.size} Project`
           }
           icon={<Link2 size={13} />}
           selectedCount={selProjects.size}
           onClear={() => setSelProjects(new Set())}
         >
-          {projects.map((p) => (
+          {data.projects.map((p) => (
             <label key={p.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 4px", cursor: "pointer", fontSize: "0.85rem" }}>
-              <input
-                type="checkbox"
-                checked={selProjects.has(p.id)}
-                onChange={() => toggleProject(p.id)}
-                style={{ accentColor: "#F59E0B" }}
-              />
+              <input type="checkbox" checked={selProjects.has(p.id)} onChange={() => toggleProject(p.id)} style={{ accentColor: "#F59E0B" }} />
               {p.name}
               {p.platform ? (
-                <span style={{ fontSize: "0.7rem", color: "#94A3B8", background: "#F1F5F9", borderRadius: 4, padding: "1px 5px" }}>
-                  {PLATFORM_LABEL[p.platform]}
-                </span>
+                <span style={{ fontSize: "0.7rem", color: "#94A3B8", background: "#F1F5F9", borderRadius: 4, padding: "1px 5px" }}>{PLATFORM_LABEL[p.platform]}</span>
               ) : null}
             </label>
           ))}
         </MultiChipFilter>
 
-        {/* Suite filter (dependent on project selection) */}
         <MultiChipFilter
           label={
             selSuites.size === 0
@@ -662,16 +647,18 @@ export function AutomationPageClient({
             </label>
           ))}
           {availableSuites.length === 0 && (
-            <div style={{ padding: "6px 4px", fontSize: "0.8rem", color: "#9CA3AF" }}>
-              Tidak ada suite.
-            </div>
+            <div style={{ padding: "6px 4px", fontSize: "0.8rem", color: "#9CA3AF" }}>Tidak ada suite.</div>
           )}
         </MultiChipFilter>
 
-        {/* Group by suite toggle */}
         <button
           type="button"
-          onClick={() => setGroupBySuite((v) => !v)}
+          onClick={() =>
+            setGroupBySuite((v) => {
+              setFlatPage(1);
+              return !v;
+            })
+          }
           title="Kelompokkan baris per Suite"
           style={{
             display: "inline-flex",
@@ -679,9 +666,9 @@ export function AutomationPageClient({
             gap: 6,
             padding: "8px 12px",
             borderRadius: 8,
-            border: groupBySuite ? "1px solid #F59E0B" : "1px solid #D1D5DB",
-            background: groupBySuite ? "#FFFBEB" : "#fff",
-            color: groupBySuite ? "#B45309" : "#374151",
+            border: groupBySuite ? "1px solid #FFC348" : "1px solid #D1D5DB",
+            background: groupBySuite ? "rgba(255, 195, 72, 0.20)" : "#fff",
+            color: groupBySuite ? "#1E293B" : "#374151",
             fontSize: "0.8rem",
             fontWeight: 600,
             cursor: "pointer",
@@ -692,12 +679,9 @@ export function AutomationPageClient({
           Group by Suite
         </button>
 
-        {/* Selection actions */}
         {selected.size > 0 && canManage && (
           <>
-            <span style={{ fontSize: "0.8rem", fontWeight: 700, color: "#0F172A", marginLeft: 4 }}>
-              {selected.size} dipilih
-            </span>
+            <span style={{ fontSize: "0.8rem", fontWeight: 700, color: "#0F172A", marginLeft: 4 }}>{selected.size} dipilih</span>
             <button
               type="button"
               onClick={() => {
@@ -750,135 +734,109 @@ export function AutomationPageClient({
       <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, overflow: "hidden" }}>
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
-            <thead>
-              <tr style={{ textAlign: "left", color: "#64748B", borderBottom: "1px solid #E2E8F0" }}>
-                <th style={{ padding: "12px 10px", width: 30 }}>
-                  {canManage && (
-                    <input
-                      type="checkbox"
-                      checked={allVisibleSelected}
-                      onChange={toggleSelectAll}
-                      style={{ accentColor: "#F59E0B", cursor: "pointer" }}
-                    />
-                  )}
-                </th>
-                <th style={{ padding: "12px 10px", fontWeight: 700, fontSize: "0.72rem", textTransform: "uppercase" }}>TC</th>
-                <th style={{ padding: "12px 10px", fontWeight: 700, fontSize: "0.72rem", textTransform: "uppercase" }}>Project / Suite</th>
-                <th style={{ padding: "12px 10px", fontWeight: 700, fontSize: "0.72rem", textTransform: "uppercase" }}>External Test ID</th>
-                <th style={{ padding: "12px 10px", fontWeight: 700, fontSize: "0.72rem", textTransform: "uppercase" }}>Script Path</th>
-                <th style={{ padding: "12px 10px", fontWeight: 700, fontSize: "0.72rem", textTransform: "uppercase" }}>Status</th>
-                <th style={{ padding: "12px 10px", fontWeight: 700, fontSize: "0.72rem", textTransform: "uppercase" }}>Last Run</th>
-                <th style={{ padding: "12px 10px", fontWeight: 700, fontSize: "0.72rem", textTransform: "uppercase" }}>Aksi</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sorted.length === 0 ? (
-                <tr>
-                  <td colSpan={8} style={{ padding: "3rem 1rem", textAlign: "center", color: "#9CA3AF", fontSize: "0.9rem" }}>
-                    Tidak ada test case sesuai filter.
-                  </td>
+            {/* Header kolom global hanya untuk mode flat. Di mode grouped,
+                header dirender sebagai sub-header di dalam tiap grup yang
+                di-expand supaya tampilan collapsed tetap bersih. */}
+            {!groupBySuite && (
+              <thead>
+                <tr style={{ textAlign: "left", color: "#64748B", borderBottom: "1px solid #E2E8F0" }}>
+                  <th style={{ padding: "12px 10px", width: 30 }}></th>
+                  <th style={{ padding: "12px 10px", fontWeight: 700, fontSize: "0.72rem", textTransform: "uppercase" }}>TC</th>
+                  <th style={{ padding: "12px 10px", fontWeight: 700, fontSize: "0.72rem", textTransform: "uppercase" }}>Project / Suite</th>
+                  <th style={{ padding: "12px 10px", fontWeight: 700, fontSize: "0.72rem", textTransform: "uppercase" }}>External Test ID</th>
+                  <th style={{ padding: "12px 10px", fontWeight: 700, fontSize: "0.72rem", textTransform: "uppercase" }}>Script Path</th>
+                  <th style={{ padding: "12px 10px", fontWeight: 700, fontSize: "0.72rem", textTransform: "uppercase" }}>Status</th>
+                  <th style={{ padding: "12px 10px", fontWeight: 700, fontSize: "0.72rem", textTransform: "uppercase" }}>Last Run</th>
+                  <th style={{ padding: "12px 10px", fontWeight: 700, fontSize: "0.72rem", textTransform: "uppercase" }}>Aksi</th>
                 </tr>
-              ) : groupBySuite ? (
-                <GroupedRows
-                  rows={sorted}
+              </thead>
+            )}
+            <tbody>
+              {groupBySuite ? (
+                data.suiteGroups.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} style={{ padding: "3rem 1rem", textAlign: "center", color: "#9CA3AF", fontSize: "0.9rem" }}>
+                      Tidak ada test case sesuai filter.
+                    </td>
+                  </tr>
+                ) : (
+                  data.suiteGroups.map((g) => (
+                    <SuiteGroup
+                      key={g.suiteId}
+                      group={g}
+                      filterQuery={filterQuery}
+                      reloadToken={reloadToken}
+                      canManage={canManage}
+                      canUpdateStatus={canUpdateStatus}
+                      selected={selected}
+                      isRowSelectable={isRowSelectable}
+                      onToggleSelect={toggleSelect}
+                      renderSelectAll={headerSelectAll}
+                      badge={badge}
+                      formatDate={formatDate}
+                      onQuickStatus={doQuickStatus}
+                      onEdit={openEdit}
+                      onLink={openLink}
+                      onUnlink={setConfirmUnlink}
+                      pending={pending}
+                    />
+                  ))
+                )
+              ) : (
+                <FlatRows
+                  rows={data.rows}
+                  loading={loading}
                   canManage={canManage}
                   canUpdateStatus={canUpdateStatus}
                   selected={selected}
-                  onToggle={(id) =>
-                    setSelected((prev) => {
-                      const next = new Set(prev);
-                      if (next.has(id)) next.delete(id);
-                      else next.add(id);
-                      return next;
-                    })
-                  }
-                  onSelectable={isRowSelectable}
+                  isRowSelectable={isRowSelectable}
+                  onToggleSelect={toggleSelect}
+                  renderSelectAll={headerSelectAll}
                   badge={badge}
                   formatDate={formatDate}
                   onQuickStatus={doQuickStatus}
-                  onEdit={(r) => {
-                    setEditing({ mode: "edit", row: r });
-                    setEditExtId(r.externalTestId ?? "");
-                    setEditScript(r.scriptPath ?? "");
-                  }}
-                  onLink={(r) => {
-                    setEditing({ mode: "create", row: r });
-                    setEditExtId("");
-                    setEditScript("");
-                  }}
+                  onEdit={openEdit}
+                  onLink={openLink}
                   onUnlink={setConfirmUnlink}
                   pending={pending}
                 />
-              ) : (
-                sorted.map((r) => (
-                  <RowTr
-                    key={r.id}
-                    r={r}
-                    canManage={canManage}
-                    canUpdateStatus={canUpdateStatus}
-                    selected={selected.has(r.id)}
-                    selectable={isRowSelectable(r)}
-                    onToggle={() =>
-                      setSelected((prev) => {
-                        const next = new Set(prev);
-                        if (next.has(r.id)) next.delete(r.id);
-                        else next.add(r.id);
-                        return next;
-                      })
-                    }
-                    badge={badge}
-                    formatDate={formatDate}
-                    onQuickStatus={doQuickStatus}
-                    onEdit={(r) => {
-                      setEditing({ mode: "edit", row: r });
-                      setEditExtId(r.externalTestId ?? "");
-                      setEditScript(r.scriptPath ?? "");
-                    }}
-                    onLink={(r) => {
-                      setEditing({ mode: "create", row: r });
-                      setEditExtId("");
-                      setEditScript("");
-                    }}
-                    onUnlink={() => setConfirmUnlink(r)}
-                    pending={pending}
-                  />
-                ))
               )}
             </tbody>
           </table>
         </div>
+
+        {/* Pagination hanya untuk mode flat; grup punya kontrolnya sendiri. */}
+        {!groupBySuite && data.rowsTotal > 0 && (
+          <HistoryPagination
+            total={data.rowsTotal}
+            page={data.page}
+            perPage={data.perPage}
+            baseUrl="/automation"
+            label="Test Case"
+            onPageChange={(p) => setFlatPage(p)}
+            onPerPageChange={(n) => {
+              setFlatPerPage(n);
+              setFlatPage(1);
+            }}
+          />
+        )}
       </div>
 
       {/* Modals */}
-
-      {/* Modal Bulk Link */}
       {bulkMode === "link" && canManage && (
         <Modal onClose={() => setBulkMode(null)} title="Bulk Link Automation">
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <p style={{ margin: 0, fontSize: "0.85rem", color: "#6B7280" }}>
-              {selected.size} test case dipilih. Gunakan pola <code style={{ background: "#F1F5F9", padding: "1px 5px", borderRadius: 4 }}>{"{TC_ID}"}</code> untuk menyisipkan kode TC unik tiap baris.
+              {selected.size} test case dipilih. Gunakan pola{" "}
+              <code style={{ background: "#F1F5F9", padding: "1px 5px", borderRadius: 4 }}>{"{TC_ID}"}</code> untuk menyisipkan kode TC unik tiap baris.
             </p>
             <div>
-              <label style={{ fontSize: "0.78rem", fontWeight: 700, color: "#374151", display: "block", marginBottom: 4 }}>
-                Pola External Test ID (wajib)
-              </label>
-              <input
-                value={bulkPattern}
-                onChange={(e) => setBulkPattern(e.target.value)}
-                placeholder="mis. LOGIN-{TC_ID}"
-                style={{ ...inputBase, width: "100%" }}
-              />
+              <label style={{ fontSize: "0.78rem", fontWeight: 700, color: "#374151", display: "block", marginBottom: 4 }}>Pola External Test ID (wajib)</label>
+              <input value={bulkPattern} onChange={(e) => setBulkPattern(e.target.value)} placeholder="mis. LOGIN-{TC_ID}" style={{ ...inputBase, width: "100%" }} />
             </div>
             <div>
-              <label style={{ fontSize: "0.78rem", fontWeight: 700, color: "#374151", display: "block", marginBottom: 4 }}>
-                Prefix Script Path (opsional)
-              </label>
-              <input
-                value={bulkScript}
-                onChange={(e) => setBulkScript(e.target.value)}
-                placeholder="mis. e2e/tests/"
-                style={{ ...inputBase, width: "100%" }}
-              />
+              <label style={{ fontSize: "0.78rem", fontWeight: 700, color: "#374151", display: "block", marginBottom: 4 }}>Prefix Script Path (opsional)</label>
+              <input value={bulkScript} onChange={(e) => setBulkScript(e.target.value)} placeholder="mis. e2e/tests/" style={{ ...inputBase, width: "100%" }} />
               <div style={{ fontSize: "0.72rem", color: "#9CA3AF", marginTop: 4 }}>
                 Jika diisi tanpa {"{TC_ID}"}, otomatis ditambahkan <code>/&lt;TC_ID&gt;.spec.ts</code>
               </div>
@@ -895,19 +853,7 @@ export function AutomationPageClient({
                 type="button"
                 onClick={doBulkLink}
                 disabled={pending || !bulkPattern.trim()}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 6,
-                  padding: "8px 14px",
-                  borderRadius: 8,
-                  border: "none",
-                  background: "#F59E0B",
-                  color: "#fff",
-                  fontWeight: 700,
-                  fontSize: "0.82rem",
-                  cursor: "pointer",
-                }}
+                style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, border: "none", background: "#F59E0B", color: "#fff", fontWeight: 700, fontSize: "0.82rem", cursor: "pointer" }}
               >
                 {pending && <Loader2 size={13} style={{ animation: "spin 0.8s linear infinite" }} />}
                 Link Automation
@@ -917,15 +863,10 @@ export function AutomationPageClient({
         </Modal>
       )}
 
-      {/* Modal Edit / Create */}
       {editing && canManage && (
         <Modal
           onClose={() => setEditing(null)}
-          title={
-            editing.mode === "edit"
-              ? `Edit Automation — ${editing.row.tcId}`
-              : `Link Automation — ${editing.row.tcId}`
-          }
+          title={editing.mode === "edit" ? `Edit Automation — ${editing.row.tcId}` : `Link Automation — ${editing.row.tcId}`}
         >
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             {editing.mode === "create" && (
@@ -934,15 +875,11 @@ export function AutomationPageClient({
               </p>
             )}
             <div>
-              <label style={{ fontSize: "0.78rem", fontWeight: 700, color: "#374151", display: "block", marginBottom: 4 }}>
-                External Test ID
-              </label>
+              <label style={{ fontSize: "0.78rem", fontWeight: 700, color: "#374151", display: "block", marginBottom: 4 }}>External Test ID</label>
               <input value={editExtId} onChange={(e) => setEditExtId(e.target.value)} placeholder={editing.mode === "create" ? "mis. LOGIN-001" : ""} style={{ ...inputBase, width: "100%" }} />
             </div>
             <div>
-              <label style={{ fontSize: "0.78rem", fontWeight: 700, color: "#374151", display: "block", marginBottom: 4 }}>
-                Script Path
-              </label>
+              <label style={{ fontSize: "0.78rem", fontWeight: 700, color: "#374151", display: "block", marginBottom: 4 }}>Script Path</label>
               <input value={editScript} onChange={(e) => setEditScript(e.target.value)} placeholder="mis. e2e/tests/login.spec.ts" style={{ ...inputBase, width: "100%" }} />
             </div>
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 4 }}>
@@ -967,10 +904,8 @@ export function AutomationPageClient({
         </Modal>
       )}
 
-      {/* Modal Cara Integrasi CI */}
       {ciOpen && <CiGuideModal onClose={() => setCiOpen(false)} />}
 
-      {/* Bulk unlink confirm */}
       <ConfirmDialog
         open={bulkMode === "unlink"}
         title="Unlink automation terpilih?"
@@ -984,7 +919,6 @@ export function AutomationPageClient({
         }}
       />
 
-      {/* Row unlink confirm */}
       <ConfirmDialog
         open={!!confirmUnlink}
         title={confirmUnlink ? `Unlink ${confirmUnlink.tcId}?` : ""}
@@ -1001,6 +935,62 @@ export function AutomationPageClient({
 }
 
 /* ---------- Sub-components ---------- */
+
+/**
+ * Kartu metrik ringkas. Keempat kartu wajib berstruktur identik:
+ * [Icon] -> [Value (bold besar)] -> [Label (slate-500 kecil)].
+ *
+ * Saat nilainya 0, ikon & angkanya dibuat netral supaya kartu "kosong" tidak
+ * terbaca seperti status aktif — label tetap tampil di bawah angka.
+ */
+function summaryCard(key: string, label: string, value: number, color: string, bg: string, icon: ReactNode) {
+  const isZero = value === 0;
+  return (
+    <div
+      key={key}
+      style={{
+        background: "#fff",
+        border: "1px solid #E5E7EB",
+        borderRadius: 12,
+        padding: "16px 18px",
+        display: "flex",
+        alignItems: "center",
+        gap: 12,
+        minWidth: 180,
+        flex: 1,
+      }}
+    >
+      <div
+        style={{
+          width: 36,
+          height: 36,
+          borderRadius: 10,
+          background: isZero ? "#F1F5F9" : bg,
+          color: isZero ? "#94A3B8" : color,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          flexShrink: 0,
+        }}
+      >
+        {icon}
+      </div>
+      <div style={{ minWidth: 0 }}>
+        <div
+          style={{
+            fontSize: 22,
+            fontWeight: 800,
+            lineHeight: 1.2,
+            color: isZero ? "#94A3B8" : "#0F172A",
+          }}
+        >
+          {value}
+        </div>
+        <div style={{ fontSize: 12, fontWeight: 600, color: "#64748B" }}>{label}</div>
+      </div>
+    </div>
+  );
+}
 
 function MultiChipFilter({
   label,
@@ -1092,6 +1082,15 @@ function Modal({ title, children, onClose }: { title: string; children: ReactNod
   );
 }
 
+type RowActions = {
+  badge: (s: AutomationRowStatus) => ReactNode;
+  formatDate: (iso: string | null) => string;
+  onQuickStatus: (r: AutomationRow, s: AutomationRowStatus) => void;
+  onEdit: (r: AutomationRow) => void;
+  onLink: (r: AutomationRow) => void;
+  onUnlink: (r: AutomationRow) => void;
+};
+
 function RowTr({
   r,
   canManage,
@@ -1099,12 +1098,7 @@ function RowTr({
   selected,
   selectable,
   onToggle,
-  badge,
-  formatDate,
-  onQuickStatus,
-  onEdit,
-  onLink,
-  onUnlink,
+  actions,
   pending,
 }: {
   r: AutomationRow;
@@ -1113,12 +1107,7 @@ function RowTr({
   selected: boolean;
   selectable: boolean;
   onToggle: () => void;
-  badge: (s: RowStatus) => ReactNode;
-  formatDate: (iso: string | null) => string;
-  onQuickStatus: (r: AutomationRow, s: RowStatus) => void;
-  onEdit: (r: AutomationRow) => void;
-  onLink: (r: AutomationRow) => void;
-  onUnlink: (r: AutomationRow) => void;
+  actions: RowActions;
   pending: boolean;
 }) {
   const canSel = selectable && canManage;
@@ -1145,7 +1134,7 @@ function RowTr({
         {r.externalTestId ? (
           <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.78rem", color: "#475569" }}>{r.externalTestId}</span>
         ) : (
-          <span style={{ color: "#CBD5E1", fontSize: "0.78rem" }}>—</span>
+          <span style={{ color: "#CBD5E1", fontSize: "0.78rem" }}>-</span>
         )}
       </td>
       <td style={{ padding: "10px 10px", maxWidth: 220 }}>
@@ -1154,27 +1143,19 @@ function RowTr({
             {r.scriptPath}
           </div>
         ) : (
-          <span style={{ color: "#CBD5E1", fontSize: "0.78rem" }}>—</span>
+          <span style={{ color: "#CBD5E1", fontSize: "0.78rem" }}>-</span>
         )}
       </td>
       <td style={{ padding: "10px 10px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          {badge(r.status)}
+          {actions.badge(r.status)}
           {canUpdateStatus && r.linkId && (
             <select
               value={r.status === "STALE" ? "AUTOMATED" : r.status}
-              onChange={(e) => onQuickStatus(r, e.target.value as RowStatus)}
+              onChange={(e) => actions.onQuickStatus(r, e.target.value as AutomationRowStatus)}
               disabled={pending}
               title="Ubah status"
-              style={{
-                border: "1px solid #E2E8F0",
-                borderRadius: 6,
-                background: "#fff",
-                fontSize: "0.72rem",
-                color: "#64748B",
-                padding: "2px 4px",
-                cursor: "pointer",
-              }}
+              style={{ border: "1px solid #E2E8F0", borderRadius: 6, background: "#fff", fontSize: "0.72rem", color: "#64748B", padding: "2px 4px", cursor: "pointer" }}
             >
               <option value="AUTOMATED">Automated</option>
               <option value="FAILING">Failing</option>
@@ -1187,31 +1168,29 @@ function RowTr({
       <td style={{ padding: "10px 10px", color: "#64748B", fontSize: "0.78rem", whiteSpace: "nowrap" }}>
         {r.lastRunAt ? (
           <div>
-            {formatDate(r.lastRunAt)}
+            {actions.formatDate(r.lastRunAt)}
             {r.lastResult && (
-              <div style={{ fontSize: "0.7rem", color: r.lastResult === "PASS" ? "#059669" : r.lastResult === "FAIL" ? "#BE123C" : "#94A3B8" }}>
-                {r.lastResult}
-              </div>
+              <div style={{ fontSize: "0.7rem", color: r.lastResult === "PASS" ? "#059669" : r.lastResult === "FAIL" ? "#BE123C" : "#94A3B8" }}>{r.lastResult}</div>
             )}
           </div>
         ) : (
-          <span style={{ color: "#CBD5E1" }}>—</span>
+          <span style={{ color: "#CBD5E1" }}>-</span>
         )}
       </td>
       <td style={{ padding: "10px 10px", whiteSpace: "nowrap" }}>
         <div style={{ display: "flex", gap: 4 }}>
           {canManage && r.linkId && (
-            <IconBtn title="Edit" onClick={() => onEdit(r)}>
+            <IconBtn title="Edit" onClick={() => actions.onEdit(r)}>
               <Pencil size={14} />
             </IconBtn>
           )}
           {canManage && r.linkId && (
-            <IconBtn title="Unlink" onClick={() => onUnlink(r)} danger>
+            <IconBtn title="Unlink" onClick={() => actions.onUnlink(r)} danger>
               <Link2Off size={14} />
             </IconBtn>
           )}
           {canManage && !r.linkId && (
-            <IconBtn title="Link automation" onClick={() => onLink(r)}>
+            <IconBtn title="Link automation" onClick={() => actions.onLink(r)}>
               <Link2 size={14} />
             </IconBtn>
           )}
@@ -1221,13 +1200,16 @@ function RowTr({
   );
 }
 
-function GroupedRows({
+/** Mode flat: baris lintas suite, paginated dari server. */
+function FlatRows({
   rows,
+  loading,
   canManage,
   canUpdateStatus,
   selected,
-  onToggle,
-  onSelectable,
+  isRowSelectable,
+  onToggleSelect,
+  renderSelectAll,
   badge,
   formatDate,
   onQuickStatus,
@@ -1237,75 +1219,348 @@ function GroupedRows({
   pending,
 }: {
   rows: AutomationRow[];
+  loading: boolean;
   canManage: boolean;
   canUpdateStatus: boolean;
   selected: Set<string>;
-  onToggle: (id: string) => void;
-  onSelectable: (r: AutomationRow) => boolean;
-  badge: (s: RowStatus) => ReactNode;
+  isRowSelectable: (r: AutomationRow) => boolean;
+  onToggleSelect: (id: string) => void;
+  renderSelectAll: (rows: AutomationRow[]) => ReactNode;
+  badge: (s: AutomationRowStatus) => ReactNode;
   formatDate: (iso: string | null) => string;
-  onQuickStatus: (r: AutomationRow, s: RowStatus) => void;
+  onQuickStatus: (r: AutomationRow, s: AutomationRowStatus) => void;
   onEdit: (r: AutomationRow) => void;
   onLink: (r: AutomationRow) => void;
   onUnlink: (r: AutomationRow) => void;
   pending: boolean;
 }) {
-  const groups = new Map<string, AutomationRow[]>();
-  for (const r of rows) {
-    const k = r.suiteName;
-    if (!groups.has(k)) groups.set(k, []);
-    groups.get(k)!.push(r);
+  const actions: RowActions = { badge, formatDate, onQuickStatus, onEdit, onLink, onUnlink };
+  if (rows.length === 0) {
+    return (
+      <tr>
+        <td colSpan={8} style={{ padding: "3rem 1rem", textAlign: "center", color: "#9CA3AF", fontSize: "0.9rem" }}>
+          {loading ? "Memuat…" : "Tidak ada test case sesuai filter."}
+        </td>
+      </tr>
+    );
   }
   return (
     <>
-      {Array.from(groups.entries()).map(([suite, items]) => (
-        <>
-          <tr key={`g-${suite}`} style={{ background: "#F8FAFC" }}>
-            <td colSpan={8} style={{ padding: "8px 12px", fontWeight: 700, fontSize: "0.8rem", color: "#334155" }}>
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                <ChevronRight size={13} style={{ color: "#94A3B8" }} />
-                {suite}
-              </span>
-              <span style={{ marginLeft: 8, fontSize: "0.7rem", color: "#94A3B8", fontWeight: 600 }}>
-                {items.length} TC
-              </span>
-            </td>
-          </tr>
-          {items.map((r) => (
-            <RowTr
-              key={r.id}
-              r={r}
-              canManage={canManage}
-              canUpdateStatus={canUpdateStatus}
-              selected={selected.has(r.id)}
-              selectable={onSelectable(r)}
-              onToggle={() => onToggle(r.id)}
-              badge={badge}
-              formatDate={formatDate}
-              onQuickStatus={onQuickStatus}
-              onEdit={onEdit}
-              onLink={onLink}
-              onUnlink={onUnlink}
-              pending={pending}
-            />
-          ))}
-        </>
+      <tr style={{ background: "#F8FAFC" }}>
+        <td style={{ padding: "8px 10px" }}>{canManage && renderSelectAll(rows)}</td>
+        <td colSpan={7} style={{ padding: "8px 10px", fontSize: "0.75rem", color: "#64748B" }}>
+          {loading ? "Memuat…" : "Semua suite"}
+        </td>
+      </tr>
+      {rows.map((r) => (
+        <RowTr
+          key={r.id}
+          r={r}
+          canManage={canManage}
+          canUpdateStatus={canUpdateStatus}
+          selected={selected.has(r.id)}
+          selectable={isRowSelectable(r)}
+          onToggle={() => onToggleSelect(r.id)}
+          actions={actions}
+          pending={pending}
+        />
       ))}
     </>
   );
 }
 
-function IconBtn({
-  children,
-  onClick,
-  title,
-  danger,
+/**
+ * Header grup suite + baris TC-nya. Komponen ini SELALU ter-mount (agar data
+ * yang sudah dimuat tetap tersimpan saat di-collapse) tetapi baru fetch saat
+ * pertama kali di-expand dan saat filter/reload/mutasi berubah.
+ */
+function SuiteGroup({
+  group,
+  filterQuery,
+  reloadToken,
+  canManage,
+  canUpdateStatus,
+  selected,
+  isRowSelectable,
+  onToggleSelect,
+  renderSelectAll,
+  badge,
+  formatDate,
+  onQuickStatus,
+  onEdit,
+  onLink,
+  onUnlink,
+  pending,
 }: {
-  children: ReactNode;
-  onClick: () => void;
-  title: string;
-  danger?: boolean;
+  group: AutomationSuiteGroup;
+  filterQuery: string;
+  reloadToken: number;
+  canManage: boolean;
+  canUpdateStatus: boolean;
+  selected: Set<string>;
+  isRowSelectable: (r: AutomationRow) => boolean;
+  onToggleSelect: (id: string) => void;
+  renderSelectAll: (rows: AutomationRow[]) => ReactNode;
+  badge: (s: AutomationRowStatus) => ReactNode;
+  formatDate: (iso: string | null) => string;
+  onQuickStatus: (r: AutomationRow, s: AutomationRowStatus) => void;
+  onEdit: (r: AutomationRow) => void;
+  onLink: (r: AutomationRow) => void;
+  onUnlink: (r: AutomationRow) => void;
+  pending: boolean;
 }) {
+  const [expanded, setExpanded] = useState(false);
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(DEFAULT_PER_PAGE);
+  const [state, setState] = useState<RowsState>({ rows: [], total: 0, loading: false, error: null });
+
+  const requestKey = `${filterQuery}|${page}|${perPage}|${reloadToken}`;
+  const lastKey = useRef<string | null>(null);
+
+  // Ganti filter -> kembali ke halaman 1.
+  useEffect(() => {
+    setPage(1);
+  }, [filterQuery]);
+
+  useEffect(() => {
+    if (!expanded) return;
+    if (lastKey.current === requestKey) return;
+    lastKey.current = requestKey;
+    let cancelled = false;
+    setState((s) => ({ ...s, loading: true, error: null }));
+    getJSON<AutomationPayload>(buildRowsPath(filterQuery, group.suiteId, page, perPage))
+      .then((p) => {
+        if (!cancelled) setState({ rows: p.rows, total: p.rowsTotal, loading: false, error: null });
+      })
+      .catch((e: unknown) => {
+        if (cancelled) return;
+        setState((s) => ({ ...s, loading: false, error: e instanceof Error ? e.message : "Gagal memuat baris." }));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [expanded, requestKey, filterQuery, group.suiteId, page, perPage]);
+
+  const actions: RowActions = { badge, formatDate, onQuickStatus, onEdit, onLink, onUnlink };
+
+  return (
+    <>
+      <tr
+        style={{
+          background: "rgba(248, 250, 252, 0.7)",
+          borderTop: "1px solid #E2E8F0",
+          borderBottom: "1px solid #E2E8F0",
+        }}
+      >
+        <td colSpan={8} style={{ padding: 0 }}>
+          <div style={{ display: "flex", alignItems: "center" }}>
+            <button
+              type="button"
+              onClick={() => setExpanded((v) => !v)}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                // Dua sisi: identitas suite di kiri, badge di kanan.
+                justifyContent: "space-between",
+                gap: 12,
+                flex: 1,
+                // py-3: beri ruang vertikal agar teks & badge tidak bertumpuk.
+                padding: "12px 12px",
+                border: "none",
+                background: "transparent",
+                cursor: "pointer",
+                textAlign: "left",
+              }}
+            >
+              {/* Kiri: chevron + nama suite + breadcrumb project */}
+              <span style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                <ChevronRight
+                  size={15}
+                  style={{
+                    color: "#64748B",
+                    flexShrink: 0,
+                    transform: expanded ? "rotate(90deg)" : "rotate(0deg)",
+                    transition: "transform 0.18s ease",
+                  }}
+                />
+                <span style={{ fontSize: 12, fontWeight: 700, color: "#0F172A" }}>
+                  {group.suiteName}
+                </span>
+                <span
+                  style={{
+                    marginLeft: 8,
+                    fontSize: 11,
+                    fontWeight: 400,
+                    color: "#94A3B8",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {group.projectName}
+                  {group.platform ? ` · ${PLATFORM_LABEL[group.platform]}` : ""}
+                </span>
+              </span>
+
+              {/* Kanan: badge total TC & status, punya container sendiri */}
+              <span
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  flexShrink: 0,
+                  flexWrap: "wrap",
+                  justifyContent: "flex-end",
+                }}
+              >
+                <GroupBadge label={`${group.total} TC`} />
+                {group.notAutomated > 0 && <GroupBadge label={`${group.notAutomated} Belum`} />}
+                {group.failing > 0 && <MiniBadge color="#BE123C" bg="#FFF1F2" border="#FECDD3" label={`${group.failing} Failing`} />}
+                {group.stale > 0 && <MiniBadge color="#B45309" bg="#FFFBEB" border="#FDE68A" label={`${group.stale} Stale`} />}
+                {group.unstable > 0 && <MiniBadge color="#6D28D9" bg="#F5F3FF" border="#DDD6FE" label={`${group.unstable} Unstable`} />}
+              </span>
+            </button>
+            {/* Ditaruh di luar tombol expand agar klik checkbox tidak ikut toggle grup. */}
+            {expanded && canManage && (
+              <label style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "0 12px", fontSize: "0.72rem", color: "#94A3B8", whiteSpace: "nowrap", cursor: "pointer" }}>
+                {renderSelectAll(state.rows)}
+                pilih halaman
+              </label>
+            )}
+          </div>
+        </td>
+      </tr>
+      {expanded && (
+        <>
+          {/* Sub-header kolom khusus grup ini — pengganti header global yang
+              disembunyikan di mode grouped. */}
+          {!state.loading && !state.error && state.rows.length > 0 && (
+            <tr
+              style={{
+                textAlign: "left",
+                color: "#64748B",
+                borderBottom: "1px solid #E2E8F0",
+                background: "#FCFDFE",
+              }}
+            >
+              <th style={{ ...SUB_HEAD, width: 30 }} />
+              <th style={SUB_HEAD}>TC</th>
+              <th style={SUB_HEAD}>Project / Suite</th>
+              <th style={SUB_HEAD}>External ID</th>
+              <th style={SUB_HEAD}>Script Path</th>
+              <th style={SUB_HEAD}>Status</th>
+              <th style={SUB_HEAD}>Last Run</th>
+              <th style={{ ...SUB_HEAD, width: 30 }}>Aksi</th>
+            </tr>
+          )}
+          {state.loading && state.rows.length === 0 ? (
+            <tr>
+              <td colSpan={8} style={{ padding: "1.5rem", textAlign: "center", color: "#94A3B8", fontSize: "0.85rem" }}>
+                <Loader2 size={16} style={{ animation: "spin 0.8s linear infinite", verticalAlign: "middle" }} /> Memuat…
+              </td>
+            </tr>
+          ) : state.error ? (
+            <tr>
+              <td colSpan={8} style={{ padding: "1.5rem", textAlign: "center", color: "#BE123C", fontSize: "0.85rem" }}>
+                {state.error}
+              </td>
+            </tr>
+          ) : state.rows.length === 0 ? (
+            <tr>
+              <td colSpan={8} style={{ padding: "1.5rem", textAlign: "center", color: "#9CA3AF", fontSize: "0.85rem" }}>
+                Tidak ada test case di suite ini.
+              </td>
+            </tr>
+          ) : (
+            state.rows.map((r) => (
+              <RowTr
+                key={r.id}
+                r={r}
+                canManage={canManage}
+                canUpdateStatus={canUpdateStatus}
+                selected={selected.has(r.id)}
+                selectable={isRowSelectable(r)}
+                onToggle={() => onToggleSelect(r.id)}
+                actions={actions}
+                pending={pending}
+              />
+            ))
+          )}
+          {state.total > 0 && (
+            <tr>
+              <td colSpan={8} style={{ padding: 0 }}>
+                <HistoryPagination
+                  total={state.total}
+                  page={page}
+                  perPage={perPage}
+                  baseUrl="/automation"
+                  label="Test Case"
+                  onPageChange={setPage}
+                  onPerPageChange={(n) => {
+                    setPerPage(n);
+                    setPage(1);
+                  }}
+                />
+              </td>
+            </tr>
+          )}
+        </>
+      )}
+    </>
+  );
+}
+
+/** Gaya bersama untuk sub-header kolom di dalam grup (mode grouped). */
+const SUB_HEAD: React.CSSProperties = {
+  padding: "10px 10px",
+  fontWeight: 700,
+  fontSize: "0.72rem",
+  textTransform: "uppercase",
+};
+
+/**
+ * Badge netral untuk header grup (total TC & jumlah Belum). Badge status yang
+ * bermasalah (Failing/Stale/Unstable) sengaja tetap berwarna lewat MiniBadge
+ * supaya sinyal problem-first tidak hilang.
+ */
+function GroupBadge({ label }: { label: string }) {
+  return (
+    <span
+      style={{
+        padding: "2px 8px",
+        borderRadius: 999,
+        fontSize: 11,
+        fontWeight: 500,
+        color: "#475569",
+        background: "rgba(226, 232, 240, 0.6)",
+        whiteSpace: "nowrap",
+      }}
+    >
+      {label}
+    </span>
+  );
+}
+
+function MiniBadge({ label, color, bg, border }: { label: string; color: string; bg: string; border: string }) {
+  return (
+    <span
+      style={{
+        padding: "1px 8px",
+        borderRadius: 999,
+        fontSize: "0.68rem",
+        fontWeight: 700,
+        color,
+        background: bg,
+        border: `1px solid ${border}`,
+        whiteSpace: "nowrap",
+      }}
+    >
+      {label}
+    </span>
+  );
+}
+
+function IconBtn({ children, onClick, title, danger }: { children: ReactNode; onClick: () => void; title: string; danger?: boolean }) {
   return (
     <button
       type="button"
@@ -1365,16 +1620,7 @@ Content-Type: application/json
           terdaftar, TestCase baru dibuat otomatis.
         </p>
         <div style={{ background: "#0F172A", borderRadius: 10, padding: "14px 16px", overflowX: "auto" }}>
-          <pre
-            style={{
-              margin: 0,
-              color: "#E2E8F0",
-              fontSize: "0.74rem",
-              fontFamily: "var(--font-mono)",
-              lineHeight: 1.6,
-              whiteSpace: "pre",
-            }}
-          >
+          <pre style={{ margin: 0, color: "#E2E8F0", fontSize: "0.74rem", fontFamily: "var(--font-mono)", lineHeight: 1.6, whiteSpace: "pre" }}>
             {example}
           </pre>
         </div>
@@ -1385,19 +1631,7 @@ Content-Type: application/json
           <button
             type="button"
             onClick={copy}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 6,
-              padding: "7px 12px",
-              borderRadius: 8,
-              border: "1px solid #D1D5DB",
-              background: "#fff",
-              color: "#374151",
-              fontWeight: 600,
-              fontSize: "0.78rem",
-              cursor: "pointer",
-            }}
+            style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 12px", borderRadius: 8, border: "1px solid #D1D5DB", background: "#fff", color: "#374151", fontWeight: 600, fontSize: "0.78rem", cursor: "pointer" }}
           >
             {copied ? "Tersalin ✓" : "Salin contoh"}
           </button>

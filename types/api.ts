@@ -437,6 +437,8 @@ export type RunResultTestCase = {
   steps: string | null;
   expectedResult: string | null;
   createdAt: string;
+  /** Section tempat TC berada (dipakai untuk header kelompok di halaman eksekusi). */
+  section: { id: string; name: string } | null;
   suite: {
     id: string;
     name: string;

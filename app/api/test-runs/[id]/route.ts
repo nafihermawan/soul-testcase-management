@@ -52,6 +52,8 @@ export async function GET(
               steps: true,
               expectedResult: true,
               createdAt: true,
+              // Dipakai halaman eksekusi untuk mengelompokkan TC per Section.
+              section: { select: { id: true, name: true } },
               suite: {
                 select: {
                   id: true,
@@ -105,6 +107,7 @@ export async function GET(
             steps: r.testCase.steps,
             expectedResult: r.testCase.expectedResult,
             createdAt: r.testCase.createdAt.toISOString(),
+            section: r.testCase.section,
             suite: r.testCase.suite,
             createdBy: r.testCase.createdBy,
           }

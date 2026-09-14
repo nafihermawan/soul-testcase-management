@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRefresh } from "@/lib/client/refresh-context";
-import { Bug, CheckCircle2, CircleSlash, ExternalLink, MinusCircle, Paperclip, X, XCircle } from "lucide-react";
+import { Bug, CheckCircle2, ChevronRight, CircleSlash, ExternalLink, FolderOpen, MinusCircle, Paperclip, X, XCircle } from "lucide-react";
 import { completeRun, completeRunWithSkip, deleteRun, updateRunResult } from "@/lib/actions/test-runs";
 import { createBug, unlinkBugFromRunResult } from "@/lib/actions/automation-bugs";
 import { ConfirmDialog, Spinner, Toast, useToast } from "@/components/ui/feedback";
@@ -40,6 +40,8 @@ export type RunResultItem = {
     steps: string | null;
     expectedResult: string | null;
     createdAt: string | Date;
+    /** Section TC — dipakai untuk header kelompok di halaman eksekusi. */
+    section?: { id: string; name: string } | null;
     suiteName?: string | null;
     createdBy: { name: string | null } | null;
   } | null;
@@ -51,6 +53,26 @@ const STATUSES = [
   { value: "BLOCKED", label: "Blocked", icon: CircleSlash, color: "#D97706", bg: "#FFFBEB", activeBg: "#D97706" },
   { value: "SKIPPED", label: "Skipped", icon: MinusCircle, color: "#374151", bg: "#F9FAFB", activeBg: "#374151" },
 ] as const;
+
+/**
+ * Kelompokkan hasil eksekusi per Section TC, mempertahankan urutan kemunculan.
+ * TC tanpa Section dikumpulkan di grup "Tanpa Section" supaya tidak ada yang
+ * hilang dari tampilan.
+ */
+function groupItemsBySection(items: RunResultItem[]) {
+  const groups = new Map<string, { key: string; name: string; items: RunResultItem[] }>();
+  for (const it of items) {
+    const sec = it.testCase?.section ?? null;
+    const key = sec?.id ?? "__none__";
+    let g = groups.get(key);
+    if (!g) {
+      g = { key, name: sec?.name ?? "Tanpa Section", items: [] };
+      groups.set(key, g);
+    }
+    g.items.push(it);
+  }
+  return Array.from(groups.values());
+}
 
 export function RunExecutor({
   runId,
@@ -109,6 +131,11 @@ export function RunExecutor({
   const [openProjects, setOpenProjects] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(projects.map((p) => [p.projectId, true]))
   );
+  // Accordion per Section TC: default semua expanded. Kuncinya sectionId
+  // (unik lintas suite) atau "__none__" untuk kelompok "Tanpa Section".
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
+  const toggleSection = (key: string) =>
+    setCollapsedSections((prev) => ({ ...prev, [key]: !prev[key] }));
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [modalItem, setModalItem] = useState<RunResultItem | null>(null);
   const [bugItem, setBugItem] = useState<RunResultItem | null>(null);
@@ -698,31 +725,90 @@ export function RunExecutor({
               </div>
             </div>
 
-            {/* Accordion body: baris test case langsung (tanpa sub-header/pembungkus suite) */}
+            {/* Accordion body: hierarki Project -> Section -> kartu TC */}
             {open && (
-              <div style={{ padding: "0.75rem", display: "flex", flexDirection: "column", gap: "0.6rem" }}>
-                {p.items.map((item) => (
-                  <RunItemCard
-                    key={item.id}
-                    item={item}
-                    isCompleted={isCompleted}
-                    canEdit={canEdit}
-                    pendingId={pendingId}
-                    unlinkPending={unlinkPending}
-                    onSetStatus={(status) => void setStatus(item, status)}
-                    onOpenDetail={() => setModalItem(item)}
-                    onUnlinkBug={(bugId) => void unlinkBug(bugId, item.id)}
-                    onOpenBug={() => {
-                      setBugItem(item);
-                      setBugTitle(item.titleSnapshot);
-                      setBugDesc("");
-                      setBugExpectedResult(item.testCase?.expectedResult ?? "");
-                      setBugSeverity("MEDIUM");
-                      setBugError(null);
-                      setBugPending(false);
-                    }}
-                  />
-                ))}
+              <div style={{ padding: "0.75rem", display: "flex", flexDirection: "column" }}>
+                {groupItemsBySection(p.items).map((sec) => {
+                  const secOpen = !collapsedSections[sec.key];
+                  return (
+                    <div key={sec.key}>
+                      {/* Header Section — klik untuk collapse/expand. Chevron
+                          berputar halus; ikon folder tetap sebagai penanda. */}
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => toggleSection(sec.key)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            toggleSection(sec.key);
+                          }
+                        }}
+                        aria-expanded={secOpen}
+                        aria-label={`${sec.name} — ${sec.items.length} test case`}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 8,
+                          padding: "8px 4px",
+                          marginTop: 16,
+                          marginBottom: 8,
+                          borderBottom: "1px solid #F1F5F9",
+                          cursor: "pointer",
+                          userSelect: "none",
+                        }}
+                      >
+                        <ChevronRight
+                          size={12}
+                          style={{
+                            color: "#94A3B8",
+                            flexShrink: 0,
+                            transform: secOpen ? "rotate(90deg)" : "rotate(0deg)",
+                            transition: "transform 0.15s ease",
+                          }}
+                        />
+                        <FolderOpen size={12} style={{ color: "#94A3B8", flexShrink: 0 }} />
+                        <span
+                          style={{
+                            fontSize: 12,
+                            fontWeight: 700,
+                            color: "#334155",
+                            textTransform: "uppercase",
+                            letterSpacing: "0.05em",
+                          }}
+                        >
+                          {sec.name}
+                        </span>
+                      </div>
+                      {secOpen && (
+                        <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+                          {sec.items.map((item) => (
+                            <RunItemCard
+                              key={item.id}
+                              item={item}
+                              isCompleted={isCompleted}
+                              canEdit={canEdit}
+                              pendingId={pendingId}
+                              unlinkPending={unlinkPending}
+                              onSetStatus={(status) => void setStatus(item, status)}
+                              onOpenDetail={() => setModalItem(item)}
+                              onUnlinkBug={(bugId) => void unlinkBug(bugId, item.id)}
+                              onOpenBug={() => {
+                                setBugItem(item);
+                                setBugTitle(item.titleSnapshot);
+                                setBugDesc("");
+                                setBugExpectedResult(item.testCase?.expectedResult ?? "");
+                                setBugSeverity("MEDIUM");
+                                setBugError(null);
+                                setBugPending(false);
+                              }}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>

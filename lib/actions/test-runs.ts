@@ -106,6 +106,107 @@ export async function createTestRun(
   }
 }
 
+/**
+ * Perbarui Test Run yang sudah ada: field run + sinkronisasi daftar TC-nya.
+ *
+ * Hasil eksekusi untuk TC yang TETAP dipilih dipertahankan apa adanya (status,
+ * actual result, bug yang menempel); TC yang dibuang hasilnya dihapus; TC baru
+ * ditambahkan sebagai NOT_RUN.
+ */
+export async function updateTestRun(
+  runId: string,
+  projectIds: string[],
+  name: string,
+  suiteIds: string[],
+  testCaseIds: string[],
+  opts?: {
+    sprint?: string;
+    taskLink?: string;
+    activityType?: string;
+    environment?: string;
+    platforms?: string[];
+  }
+): Promise<TestRunActionState & { runId?: string }> {
+  await requireRole("QA");
+  const runName = name.trim();
+  const projectId = projectIds[0] ?? "";
+
+  try {
+    if (!runName) return { error: "Nama run wajib diisi." };
+    if (!projectId) return { error: "Project wajib dipilih." };
+
+    const run = await prisma.testRun.findUnique({
+      where: { id: runId },
+      select: { id: true },
+    });
+    if (!run) return { error: "Run tidak ditemukan." };
+
+    // Sama seperti create: TC terpilih = yang dicentang + seluruh isi suite terpilih.
+    const selected = new Set<string>(testCaseIds);
+    for (const suiteId of suiteIds) {
+      const collected = await collectTestCasesInSuite(suiteId);
+      collected.forEach((id) => selected.add(id));
+    }
+    if (selected.size === 0) return { error: "Tidak ada test case yang dipilih." };
+
+    const existing = await prisma.testRunResult.findMany({
+      where: { runId },
+      select: { testCaseId: true },
+    });
+    const existingIds = new Set(existing.map((r) => r.testCaseId));
+    const toAdd = Array.from(selected).filter((id) => !existingIds.has(id));
+    const toRemove = Array.from(existingIds).filter((id) => !selected.has(id));
+
+    const addedCases = toAdd.length
+      ? await prisma.testCase.findMany({
+          where: { id: { in: toAdd } },
+          select: { id: true, title: true },
+        })
+      : [];
+
+    await prisma.$transaction([
+      prisma.testRun.update({
+        where: { id: runId },
+        data: {
+          name: runName,
+          projectId,
+          activityType: opts?.activityType?.trim() || null,
+          platforms:
+            opts?.platforms && opts.platforms.length > 0 ? opts.platforms.join(", ") : null,
+          environment: opts?.environment?.trim() || null,
+          sprint: opts?.sprint?.trim() || null,
+          taskLink: opts?.taskLink?.trim() || null,
+        },
+      }),
+      ...(toRemove.length
+        ? [
+            prisma.testRunResult.deleteMany({
+              where: { runId, testCaseId: { in: toRemove } },
+            }),
+          ]
+        : []),
+      ...(addedCases.length
+        ? [
+            prisma.testRunResult.createMany({
+              data: addedCases.map((tc) => ({
+                runId,
+                testCaseId: tc.id,
+                titleSnapshot: tc.title,
+                status: "NOT_RUN" as const,
+              })),
+            }),
+          ]
+        : []),
+    ]);
+
+    revalidatePath("/test-runs");
+    revalidatePath(`/test-runs/${runId}`);
+    return { success: true, runId };
+  } catch (error) {
+    return handleError(error);
+  }
+}
+
 /** Update status/actual result satu TestRunResult. */
 export async function updateRunResult(
   resultId: string,

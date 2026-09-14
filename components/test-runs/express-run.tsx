@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Play, RotateCcw, Search, X } from "lucide-react";
-import { createTestRun } from "@/lib/actions/test-runs";
-import { getJSON } from "@/lib/client/use-api";
+import { createTestRun, updateTestRun } from "@/lib/actions/test-runs";
+import { getJSON, invalidateApiCache } from "@/lib/client/use-api";
 import type { PlatformCode, RunOptionsPayload } from "@/types/api";
 
 type SuiteOption = {
@@ -26,9 +26,27 @@ type TCOption = {
   status: "DRAFT" | "ACTIVE" | "DEPRECATED";
 };
 
+/** Nilai awal form saat mode edit (diambil dari run yang sedang diubah). */
+export type ExpressRunInitial = {
+  name: string;
+  activityType: string;
+  environment: string;
+  platforms: string[];
+  sprint: string;
+  taskLink: string;
+  projectIds: string[];
+  testCaseIds: string[];
+};
+
 type Props = {
   projectId: string;
   projects: { id: string; name: string; platform: PlatformCode | null }[];
+  /** "create" (default) atau "edit". */
+  mode?: "create" | "edit";
+  /** Wajib saat mode edit. */
+  runId?: string;
+  /** Nilai awal — dipakai mode edit untuk pre-fill seluruh field. */
+  initial?: ExpressRunInitial;
 };
 
 const inputStyle: React.CSSProperties = {
@@ -61,21 +79,33 @@ const PLATFORM_ENUM_TO_LABEL: Record<string, string> = {
   API: "API",
 };
 
-export function ExpressRunForm({ projectId, projects }: Props) {
+export function ExpressRunForm({ projectId, projects, mode = "create", runId, initial }: Props) {
   const router = useRouter();
+  const isEdit = mode === "edit";
   const [selectedProjectIds, setSelectedProjectIds] = useState<Set<string>>(
-    () => new Set(projectId ? [projectId] : projects[0]?.id ? [projects[0].id] : [])
+    () =>
+      new Set(
+        initial?.projectIds?.length
+          ? initial.projectIds
+          : projectId
+            ? [projectId]
+            : projects[0]?.id
+              ? [projects[0].id]
+              : []
+      )
   );
   // Global selection (persisten lintas suite/project)
-  const [selectedTCs, setSelectedTCs] = useState<Set<string>>(new Set());
+  const [selectedTCs, setSelectedTCs] = useState<Set<string>>(
+    () => new Set(initial?.testCaseIds ?? [])
+  );
   // Suite aktif yang sedang dilihat di kolom kiri
   const [activeSuiteId, setActiveSuiteId] = useState<string | null>(null);
-  const [runName, setRunName] = useState("");
-  const [activityType, setActivityType] = useState("");
-  const [platforms, setPlatforms] = useState<Set<string>>(new Set());
-  const [environment, setEnvironment] = useState("");
-  const [sprint, setSprint] = useState("");
-  const [taskLink, setTaskLink] = useState("");
+  const [runName, setRunName] = useState(initial?.name ?? "");
+  const [activityType, setActivityType] = useState(initial?.activityType ?? "");
+  const [platforms, setPlatforms] = useState<Set<string>>(new Set(initial?.platforms ?? []));
+  const [environment, setEnvironment] = useState(initial?.environment ?? "");
+  const [sprint, setSprint] = useState(initial?.sprint ?? "");
+  const [taskLink, setTaskLink] = useState(initial?.taskLink ?? "");
   const [suiteQuery, setSuiteQuery] = useState("");
   const [tcQuery, setTcQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -148,7 +178,12 @@ export function ExpressRunForm({ projectId, projects }: Props) {
    * benar-benar berubah — mematikan sebuah project secara manual tetap
    * mempertahankan pilihan TC yang sudah dibuat (perilaku lama).
    */
-  const prevPlatformKey = useRef<string | null>(null);
+  // Diinisialisasi dengan Platform awal (mode edit) supaya auto-reset TIDAK
+  // ikut berjalan saat form pertama dibuka — kalau tidak, project yang tidak
+  // cocok dengan Platform tersimpan bisa terbuang tanpa sengaja.
+  const prevPlatformKey = useRef<string | null>(
+    initial ? [...initial.platforms].sort().join(",") : null
+  );
   useEffect(() => {
     const key = Array.from(platforms).sort().join(",");
     if (prevPlatformKey.current === key) return;
@@ -314,16 +349,24 @@ export function ExpressRunForm({ projectId, projects }: Props) {
 
   const reset = () => {
     setSelectedProjectIds(
-      new Set(projectId ? [projectId] : projects[0]?.id ? [projects[0].id] : [])
+      new Set(
+        initial?.projectIds?.length
+          ? initial.projectIds
+          : projectId
+            ? [projectId]
+            : projects[0]?.id
+              ? [projects[0].id]
+              : []
+      )
     );
     setActiveSuiteId(null);
-    setSelectedTCs(new Set());
-    setRunName("");
-    setActivityType("");
-    setPlatforms(new Set());
-    setEnvironment("");
-    setSprint("");
-    setTaskLink("");
+    setSelectedTCs(new Set(initial?.testCaseIds ?? []));
+    setRunName(initial?.name ?? "");
+    setActivityType(initial?.activityType ?? "");
+    setPlatforms(new Set(initial?.platforms ?? []));
+    setEnvironment(initial?.environment ?? "");
+    setSprint(initial?.sprint ?? "");
+    setTaskLink(initial?.taskLink ?? "");
     setSuiteQuery("");
     setTcQuery("");
     setError(null);
@@ -373,15 +416,33 @@ export function ExpressRunForm({ projectId, projects }: Props) {
             .filter((s): s is string => !!s)
         )
       );
-      const res = await createTestRun(
-        Array.from(selectedProjectIds),
-        runName,
-        selectedSuiteIds,
-        Array.from(selectedTCs),
-        { sprint, taskLink, activityType, environment, platforms: Array.from(platforms) }
-      );
+      const payload = { sprint, taskLink, activityType, environment, platforms: Array.from(platforms) };
+      const res =
+        isEdit && runId
+          ? await updateTestRun(
+              runId,
+              Array.from(selectedProjectIds),
+              runName,
+              selectedSuiteIds,
+              Array.from(selectedTCs),
+              payload
+            )
+          : await createTestRun(
+              Array.from(selectedProjectIds),
+              runName,
+              selectedSuiteIds,
+              Array.from(selectedTCs),
+              payload
+            );
       if (res.success && res.runId) {
-        router.push(`/test-runs/${res.runId}`);
+        if (isEdit) {
+          // Selesai mengedit: halaman Active Runs harus menampilkan data terbaru,
+          // jadi buang cache client dulu (bukan mengandalkan TTL).
+          invalidateApiCache();
+          router.push("/test-runs");
+        } else {
+          router.push(`/test-runs/${res.runId}`);
+        }
       } else {
         setError(res.error ?? "Gagal membuat run.");
         setPending(false);
@@ -991,7 +1052,14 @@ export function ExpressRunForm({ projectId, projects }: Props) {
               e.currentTarget.style.background = "#FFB622";
             }}
           >
-            <Play size={15} /> {pending ? "Membuat Run..." : "Express Run"}
+            <Play size={15} />{" "}
+            {pending
+              ? isEdit
+                ? "Menyimpan..."
+                : "Membuat Run..."
+              : isEdit
+                ? "Simpan Perubahan"
+                : "Express Run"}
           </button>
         </div>
       </div>

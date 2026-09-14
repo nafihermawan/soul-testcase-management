@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { HistoryRunRow } from "@/components/test-runs/history-run-row";
 import { HistoryControls } from "@/components/test-runs/history-controls";
 import { HistoryPagination } from "@/components/test-runs/history-pagination";
-import { DeleteRunButton } from "@/components/test-runs/delete-run-button";
+import { RunRowActions } from "@/components/test-runs/run-row-actions";
 import { ErrorBlock, TableCardSkeleton } from "@/components/ui/data-states";
 import { Toast, useToast } from "@/components/ui/feedback";
 import { useApi } from "@/lib/client/use-api";
@@ -258,7 +258,7 @@ export function HistoryView({ searchParams }: { searchParams: HistorySearchParam
                     statusPending={pendingStatusId === run.id}
                     extraAction={
                       canDelete ? (
-                        <DeleteRunButton
+                        <RunRowActions
                           runId={run.id}
                           runName={run.name}
                           onDeleted={() => removeRunLocally(run.id)}

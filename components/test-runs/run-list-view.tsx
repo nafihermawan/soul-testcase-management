@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { ChevronRight } from "lucide-react";
 import { TestRunRow } from "@/components/test-runs/test-run-row";
 import { CreateRunButton } from "@/components/test-runs/create-run-button";
-import { DeleteRunButton } from "@/components/test-runs/delete-run-button";
+import { RunRowActions } from "@/components/test-runs/run-row-actions";
 import { HistoryControls } from "@/components/test-runs/history-controls";
 import { ErrorBlock, TableCardSkeleton } from "@/components/ui/data-states";
 import { Toast, useToast } from "@/components/ui/feedback";
@@ -437,7 +437,7 @@ export function RunListView({ searchParams }: { searchParams: ActiveRunsSearchPa
                                   statusPending={pendingStatusId === run.id}
                                   extraAction={
                                     data.canEdit ? (
-                                      <DeleteRunButton
+                                      <RunRowActions
                                         runId={run.id}
                                         runName={run.name}
                                         onDeleted={() => removeRunLocally(run.id)}

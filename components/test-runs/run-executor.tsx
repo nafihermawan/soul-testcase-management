@@ -1292,9 +1292,12 @@ function RunItemCard({
                   type="button"
                   disabled={disabled}
                   aria-pressed={active}
+                  title={active ? "Klik lagi untuk membatalkan (Untested)" : `Tandai ${s.label}`}
                   onClick={(e) => {
                     e.stopPropagation();
-                    onSetStatus(s.value);
+                    // Tombol bersifat toggle: klik status yang sedang aktif
+                    // membatalkan pilihan dan mengembalikan TC ke Untested.
+                    onSetStatus(active ? "NOT_RUN" : s.value);
                   }}
                   style={{
                     position: "relative",

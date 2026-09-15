@@ -253,7 +253,20 @@ export function BugDetailModal({
                   TC Ref: {bug.testCase.tcId}
                 </Link>
               ) : (
-                <span style={{ fontSize: "0.75rem", color: "#94A3B8" }}>Tanpa rujukan TC</span>
+                <span
+                  style={{
+                    display: "inline-block",
+                    padding: "0.125rem 0.5rem",
+                    background: "#FAF5FF",
+                    color: "#7E22CE",
+                    border: "1px solid #E9D5FF",
+                    borderRadius: 4,
+                    fontSize: "0.625rem",
+                    fontWeight: 700,
+                  }}
+                >
+                  Ad-hoc / General
+                </span>
               )}
               {bug.externalLink && (
                 <a

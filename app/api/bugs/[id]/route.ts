@@ -33,6 +33,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     testCase: bug.testCase,
     createdBy: bug.createdBy,
     attachments: await toAttachmentItems(bug.attachments),
+    sourceType: bug.testCaseId ? "EXECUTION" : "GENERAL_FINDING",
   };
 
   return NextResponse.json({

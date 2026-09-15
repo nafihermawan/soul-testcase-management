@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useState, type CSSProperties } from "react";
-import { ExternalLink, Paperclip, Search, Trash2 } from "lucide-react";
+import { ExternalLink, Plus, Search, Trash2 } from "lucide-react";
 import { deleteBug, updateBugStatus } from "@/lib/actions/automation-bugs";
 import { ConfirmDialog, Toast, useToast } from "@/components/ui/feedback";
-import { BugAttachmentsModal } from "@/components/bugs/bug-attachments-modal";
 import { BugDetailModal } from "@/components/bugs/bug-detail-modal";
+import { ReportGeneralBugModal } from "@/components/bugs/report-general-bug-modal";
+import { HistoryPagination } from "@/components/test-runs/history-pagination";
 import { entityCode } from "@/lib/format";
-import type { AttachmentItem, BugStatus } from "@/types/api";
+import type { AttachmentItem, BugSourceType, BugStatus } from "@/types/api";
 
 export type BugRow = {
   id: string;
@@ -20,7 +21,26 @@ export type BugRow = {
   testCase: { id: string; tcId: string; title: string } | null;
   createdBy: { name: string | null } | null;
   attachments?: AttachmentItem[];
+  /**
+   * EXECUTION kalau bug punya rujukan TC, GENERAL_FINDING kalau temuan ad-hoc.
+   * Opsional karena payload yang lebih lama (dari cache klien) belum memuatnya.
+   */
+  sourceType?: BugSourceType;
 };
+
+type BugTab = "ALL" | BugSourceType;
+
+/** Jumlah baris per halaman; sengaja tetap (tanpa opsi ubah dari UI). */
+const BUGS_PER_PAGE = 25;
+
+/**
+ * Klasifikasi sumber bug. Field `sourceType` dari API dipakai kalau ada, tapi
+ * selalu ada fallback ke relasi `testCase` — aturannya memang diturunkan dari
+ * situ, jadi bug tidak akan salah kategori hanya karena payload-nya belum
+ * memuat field baru (mis. data basi dari cache klien).
+ */
+const sourceTypeOf = (b: BugRow): BugSourceType =>
+  b.sourceType ?? (b.testCase ? "EXECUTION" : "GENERAL_FINDING");
 
 const statusStyle: Record<BugRow["status"], { bg: string; color: string }> = {
   OPEN: { bg: "var(--danger-bg)", color: "var(--danger)" },
@@ -36,19 +56,16 @@ const severityStyle: Record<string, { bg: string; color: string }> = {
   LOW: { bg: "var(--surface-muted)", color: "var(--text-secondary)" },
 };
 
-export function BugsPageClient({
-  bugs,
-  canAttach = false,
-}: {
-  bugs: BugRow[];
-  /** Upload/hapus attachment butuh role QA. */
-  canAttach?: boolean;
-}) {
+export function BugsPageClient({ bugs }: { bugs: BugRow[] }) {
   const [deleteTarget, setDeleteTarget] = useState<BugRow | null>(null);
   const [deletePending, setDeletePending] = useState(false);
-  const [evidenceBug, setEvidenceBug] = useState<BugRow | null>(null);
   /** Bug yang detailnya sedang dibuka di modal (klik baris tabel). */
   const [detailBugId, setDetailBugId] = useState<string | null>(null);
+  /** Tab sumber bug: semua / dari eksekusi TC / temuan ad-hoc. */
+  const [tab, setTab] = useState<BugTab>("ALL");
+  const [reportOpen, setReportOpen] = useState(false);
+  // Pagination tabel: ukuran halaman dikunci (tanpa pemilih "Rows per page").
+  const [page, setPage] = useState(1);
   const { toast, showToast, dismissToast } = useToast();
   // Cermin lokal daftar bug: upload/hapus evidence cukup memperbarui barisnya
   // sendiri (tanpa refetch halaman, supaya modal & posisi scroll tidak hilang).
@@ -56,12 +73,6 @@ export function BugsPageClient({
   useEffect(() => {
     setLocalBugs(bugs);
   }, [bugs]);
-
-  /** Patch daftar attachment satu bug di state lokal. */
-  const patchBugAttachments = (bugId: string, list: AttachmentItem[]) => {
-    setLocalBugs((prev) => prev.map((b) => (b.id === bugId ? { ...b, attachments: list } : b)));
-    setEvidenceBug((prev) => (prev && prev.id === bugId ? { ...prev, attachments: list } : prev));
-  };
 
   /** Patch satu baris bug di daftar lokal (status / field lain). */
   const patchBug = (bugId: string, patch: Partial<BugRow>) => {
@@ -75,12 +86,32 @@ export function BugsPageClient({
 
   const q = query.trim().toLowerCase();
   const visibleBugs = localBugs.filter((b) => {
+    if (tab !== "ALL" && sourceTypeOf(b) !== tab) return false;
     if (sevFilter && b.severity !== sevFilter) return false;
     if (statusFilter && b.status !== statusFilter) return false;
     if (!q) return true;
     const hay = `${b.title} ${b.description ?? ""} ${b.testCase?.tcId ?? ""} ${b.testCase?.title ?? ""} ${b.createdBy?.name ?? ""}`.toLowerCase();
     return hay.includes(q);
   });
+
+  // Counter per tab tidak lagi ditampilkan di UI, cukup label teksnya.
+  const tabs: { key: BugTab; label: string }[] = [
+    { key: "ALL", label: "Semua Bug" },
+    { key: "EXECUTION", label: "Test Run Bugs" },
+    { key: "GENERAL_FINDING", label: "General Findings" },
+  ];
+
+  // Balik ke halaman 1 saat tab / pencarian / filter berubah supaya tidak
+  // mendarat di halaman yang sudah kosong.
+  useEffect(() => {
+    setPage(1);
+  }, [tab, query, sevFilter, statusFilter]);
+
+  // `page` bisa tertinggal di halaman yang sudah tidak ada (mis. bug terakhir di
+  // halaman terakhir dihapus) -> pakai halaman efektif yang di-clamp.
+  const totalPages = Math.max(1, Math.ceil(visibleBugs.length / BUGS_PER_PAGE));
+  const currentPage = Math.min(page, totalPages);
+  const pagedBugs = visibleBugs.slice((currentPage - 1) * BUGS_PER_PAGE, currentPage * BUGS_PER_PAGE);
 
   /**
    * Ubah status bug langsung di barisnya. Server tetap yang menulis (termasuk
@@ -132,11 +163,6 @@ export function BugsPageClient({
           boxShadow: "0px 1px 2px rgba(16, 24, 40, 0.04), 0px 4px 12px rgba(16, 24, 40, 0.06)",
           padding: "20px 24px",
           marginBottom: 20,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: "1rem",
-          flexWrap: "wrap",
         }}
       >
         <div style={{ minWidth: 0 }}>
@@ -158,12 +184,68 @@ export function BugsPageClient({
               margin: "4px 0 0",
             }}
           >
-            Daftar bug yang tercatat dari hasil eksekusi test case. Ubah status untuk melacak penyelesaian.
+            Daftar bug dari hasil eksekusi test case maupun temuan ad-hoc. Ubah status untuk melacak penyelesaian.
           </p>
         </div>
+      </div>
 
-        {/* Quick search & filter */}
-        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+      {/* Tab sumber bug */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "0.5rem",
+          borderBottom: "1px solid #E2E8F0",
+          marginBottom: "1rem",
+        }}
+      >
+        {tabs.map((t) => {
+          const active = tab === t.key;
+          return (
+            <button
+              key={t.key}
+              type="button"
+              aria-pressed={active}
+              onClick={() => setTab(t.key)}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.4rem",
+                padding: "0.625rem 1rem",
+                marginBottom: -1,
+                border: "none",
+                borderBottom: active ? "2px solid #FFC348" : "2px solid transparent",
+                background: "transparent",
+                color: active ? "#0F172A" : "#64748B",
+                fontWeight: active ? 700 : 500,
+                fontSize: "0.75rem",
+                cursor: "pointer",
+                transition: "color 0.15s ease",
+              }}
+              onMouseEnter={(e) => {
+                if (!active) e.currentTarget.style.color = "#334155";
+              }}
+              onMouseLeave={(e) => {
+                if (!active) e.currentTarget.style.color = "#64748B";
+              }}
+            >
+              {t.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Control bar: pencarian, filter, dan aksi laporkan bug */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "flex-end",
+          gap: "0.5rem",
+          flexWrap: "wrap",
+          marginBottom: "1rem",
+        }}
+      >
           <div
             style={{
               display: "flex",
@@ -197,8 +279,34 @@ export function BugsPageClient({
             <option value="RESOLVED">Resolved</option>
             <option value="CLOSED">Closed</option>
           </select>
+          {/* Tombol lapor bug hanya relevan di tab General Findings */}
+          {tab === "GENERAL_FINDING" && (
+            <button
+              type="button"
+              onClick={() => setReportOpen(true)}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.5rem",
+                height: 36,
+                padding: "0 1rem",
+                borderRadius: 8,
+                border: "none",
+                background: "#FFC348",
+                color: "#0F172A",
+                fontSize: "0.75rem",
+                fontWeight: 700,
+                boxShadow: "0 1px 2px rgba(15, 23, 42, 0.08)",
+                cursor: "pointer",
+                transition: "background-color 0.15s ease",
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "#F0B53D")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "#FFC348")}
+            >
+              <Plus size={14} /> Laporkan Bug
+            </button>
+          )}
         </div>
-      </div>
 
       {/* Daftar Bug Table */}
       {visibleBugs.length === 0 ? (
@@ -216,7 +324,9 @@ export function BugsPageClient({
         >
           {bugs.length === 0
             ? "Belum ada bug yang tercatat di sistem."
-            : "Tidak ada bug yang cocok dengan pencarian / filter."}
+            : tab === "ALL"
+              ? "Tidak ada bug yang cocok dengan pencarian / filter."
+              : `Belum ada bug pada kategori ${tab === "EXECUTION" ? "Test Run Bugs" : "General Findings"}.`}
         </div>
       ) : (
         <div
@@ -242,7 +352,7 @@ export function BugsPageClient({
                 </tr>
               </thead>
               <tbody>
-                {visibleBugs.map((b) => {
+                {pagedBugs.map((b) => {
                   const st = statusStyle[b.status];
                   const sev = b.severity ? (severityStyle[b.severity] ?? severityStyle.LOW) : null;
                   return (
@@ -257,7 +367,7 @@ export function BugsPageClient({
                         <span
                           style={{
                             fontFamily: "var(--font-mono, monospace)",
-                            color: "#DC2626",
+                            color: "#1E293B",
                             fontWeight: 700,
                             fontSize: "0.75rem",
                             whiteSpace: "nowrap",
@@ -267,57 +377,75 @@ export function BugsPageClient({
                         </span>
                       </td>
                       <td style={{ padding: "0.6rem 0.5rem" }}>
-                        <div style={{ fontWeight: 600, display: "flex", alignItems: "center", gap: "0.4rem" }}>
-                          <span>{b.title}</span>
-                          {b.externalLink && (
-                            <a href={b.externalLink} target="_blank" rel="noreferrer" title={b.externalLink}
-                              onClick={(e) => e.stopPropagation()}
-                              style={{ display: "inline-flex", alignItems: "center", color: "var(--brand-600)", textDecoration: "none" }}>
-                              <ExternalLink size={13} />
-                            </a>
-                          )}
-                        </div>
-                        {b.testCase && (
-                          <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontFamily: "var(--font-mono, monospace)", marginTop: 2 }}>
-                            TC Ref:{" "}
+                        <div
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            alignItems: "flex-start",
+                            gap: "0.3rem",
+                            minWidth: 0,
+                          }}
+                        >
+                          {/* 1. Judul + link eksternal */}
+                          <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", minWidth: 0 }}>
+                            <span style={{ fontWeight: 600, fontSize: "0.85rem", color: "#0F172A", lineHeight: 1.4 }}>
+                              {b.title}
+                            </span>
+                            {b.externalLink && (
+                              <a
+                                href={b.externalLink}
+                                target="_blank"
+                                rel="noreferrer"
+                                title={b.externalLink}
+                                onClick={(e) => e.stopPropagation()}
+                                style={{ display: "inline-flex", alignItems: "center", color: "var(--brand-600)", textDecoration: "none", flexShrink: 0 }}
+                              >
+                                <ExternalLink size={13} />
+                              </a>
+                            )}
+                          </div>
+
+                          {/* 2. Badge kategori: rujukan TC (interaktif) atau temuan ad-hoc */}
+                          {sourceTypeOf(b) === "EXECUTION" && b.testCase ? (
                             <a
                               href={`/test-cases/${b.testCase.id}`}
                               onClick={(e) => e.stopPropagation()}
-                              style={{ color: "#2563EB", textDecoration: "none" }}
+                              title={b.testCase.title}
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "0.3rem",
+                                padding: "0.1rem 0.5rem",
+                                background: "#EFF6FF",
+                                color: "#1D4ED8",
+                                border: "1px solid #BFDBFE",
+                                borderRadius: 4,
+                                fontFamily: "var(--font-mono, monospace)",
+                                fontSize: "0.6875rem",
+                                fontWeight: 600,
+                                textDecoration: "none",
+                              }}
                             >
-                              {b.testCase.tcId}
+                              TC Ref: {b.testCase.tcId}
                             </a>
-                          </div>
-                        )}
-                        {b.description && (
-                          <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", maxWidth: 320, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                            {b.description}
-                          </div>
-                        )}
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setEvidenceBug(b);
-                          }}
-                          title="Screenshot / video evidence"
-                          style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: "0.25rem",
-                            marginTop: 3,
-                            padding: "0.1rem 0.45rem",
-                            borderRadius: 999,
-                            border: "1px solid var(--border-strong)",
-                            background: "transparent",
-                            color: (b.attachments?.length ?? 0) > 0 ? "var(--brand-600)" : "var(--text-muted)",
-                            fontSize: "0.7rem",
-                            fontWeight: 600,
-                            cursor: "pointer",
-                          }}
-                        >
-                          <Paperclip size={11} /> {b.attachments?.length ?? 0}
-                        </button>
+                          ) : (
+                            <span
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                padding: "0.1rem 0.5rem",
+                                background: "#FAF5FF",
+                                color: "#7E22CE",
+                                border: "1px solid #E9D5FF",
+                                borderRadius: 4,
+                                fontSize: "0.625rem",
+                                fontWeight: 700,
+                              }}
+                            >
+                              Ad-hoc / General
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td style={{ padding: "0.6rem 0.5rem" }}>
                         {sev ? (
@@ -366,6 +494,17 @@ export function BugsPageClient({
               </tbody>
             </table>
           </div>
+          {visibleBugs.length > 0 && (
+            <HistoryPagination
+              total={visibleBugs.length}
+              page={currentPage}
+              perPage={BUGS_PER_PAGE}
+              baseUrl="/bugs"
+              label="Bug"
+              lockPerPage
+              onPageChange={setPage}
+            />
+          )}
         </div>
       )}
 
@@ -382,18 +521,6 @@ export function BugsPageClient({
         onCancel={() => setDeleteTarget(null)}
       />
 
-      {/* Modal evidence bug */}
-      {evidenceBug && (
-        <BugAttachmentsModal
-          bugId={evidenceBug.id}
-          bugTitle={evidenceBug.title}
-          attachments={evidenceBug.attachments ?? []}
-          canEdit={canAttach}
-          onClose={() => setEvidenceBug(null)}
-          onChange={(list) => patchBugAttachments(evidenceBug.id, list)}
-        />
-      )}
-
       {/* Modal detail bug — dibuka dengan klik salah satu baris tabel */}
       {detailBugId && (
         <BugDetailModal
@@ -401,6 +528,17 @@ export function BugsPageClient({
           onClose={() => setDetailBugId(null)}
           onStatusChange={(bugId: string, status: BugStatus) => patchBug(bugId, { status })}
           onDeleted={(bugId: string) => setLocalBugs((prev) => prev.filter((b) => b.id !== bugId))}
+        />
+      )}
+
+      {/* Modal lapor bug ad-hoc (General Findings) */}
+      {reportOpen && (
+        <ReportGeneralBugModal
+          onClose={() => setReportOpen(false)}
+          onCreated={(bug) => {
+            setLocalBugs((prev) => [bug, ...prev]);
+            showToast("Bug berhasil dilaporkan.", "success");
+          }}
         />
       )}
 

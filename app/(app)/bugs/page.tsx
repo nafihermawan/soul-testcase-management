@@ -15,7 +15,7 @@ export default function BugsPage() {
       ) : loading || !data ? (
         <TableCardSkeleton />
       ) : (
-        <BugsPageClient bugs={data.bugs} canAttach={data.canAttach} />
+        <BugsPageClient bugs={data.bugs} />
       )}
     </main>
   );

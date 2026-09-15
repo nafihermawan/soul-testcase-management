@@ -10,6 +10,7 @@ export function HistoryPagination({
   perPage,
   baseUrl,
   label = "Test Runs",
+  lockPerPage = false,
   onPageChange,
   onPerPageChange,
 }: {
@@ -19,6 +20,8 @@ export function HistoryPagination({
   baseUrl: string;
   /** Nama entitas yang dipaginasi (mis. "Test Case"). */
   label?: string;
+  /** Sembunyikan pemilih "Rows per page" — ukuran halaman dikunci pemanggil. */
+  lockPerPage?: boolean;
   /** Bila diisi: pakai callback (state-based) dan TIDAK router.push. */
   onPageChange?: (page: number) => void;
   onPerPageChange?: (perPage: number) => void;
@@ -86,30 +89,34 @@ export function HistoryPagination({
         Showing {from}-{to} of {total} {label}
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
-        <select
-          value={perPage}
-          onChange={(e) => {
-            const next = Number(e.target.value);
-            if (onPerPageChange) onPerPageChange(next);
-            else router.push(buildHistoryHref(baseUrl, { page: 1, perPage: next }));
-          }}
-          style={{
-            padding: "0.3rem 0.5rem",
-            borderRadius: 6,
-            border: "1px solid #D1D5DB",
-            background: "#fff",
-            fontSize: "0.82rem",
-            color: "#0F172A",
-            outline: "none",
-          }}
-        >
-          {[10, 25, 50, 100].map((n) => (
-            <option key={n} value={n}>
-              {n}
-            </option>
-          ))}
-        </select>
-        <span style={{ color: "#94A3B8" }}>Rows per page</span>
+        {!lockPerPage && (
+          <>
+            <select
+              value={perPage}
+              onChange={(e) => {
+                const next = Number(e.target.value);
+                if (onPerPageChange) onPerPageChange(next);
+                else router.push(buildHistoryHref(baseUrl, { page: 1, perPage: next }));
+              }}
+              style={{
+                padding: "0.3rem 0.5rem",
+                borderRadius: 6,
+                border: "1px solid #D1D5DB",
+                background: "#fff",
+                fontSize: "0.82rem",
+                color: "#0F172A",
+                outline: "none",
+              }}
+            >
+              {[10, 25, 50, 100].map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+            <span style={{ color: "#94A3B8" }}>Rows per page</span>
+          </>
+        )}
 
         <button type="button" disabled={page <= 1} onClick={() => goto(page - 1)} style={{ ...selStyle, opacity: page <= 1 ? 0.4 : 1 }}>
           <ChevronLeft size={15} />

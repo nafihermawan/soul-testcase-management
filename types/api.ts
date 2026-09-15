@@ -96,6 +96,12 @@ export type DashboardPayload = {
 /* ---------- /api/bugs ---------- */
 export type BugStatus = "OPEN" | "IN_PROGRESS" | "RESOLVED" | "CLOSED";
 
+/**
+ * Asal bug, diturunkan dari relasi yang sudah ada (bukan kolom baru):
+ * punya rujukan TestCase = EXECUTION, tanpa rujukan TC = temuan ad-hoc.
+ */
+export type BugSourceType = "EXECUTION" | "GENERAL_FINDING";
+
 export type BugRow = {
   id: string;
   title: string;
@@ -108,9 +114,11 @@ export type BugRow = {
   createdBy: { name: string | null } | null;
   /** Evidence yang menempel langsung ke bug ini. */
   attachments: AttachmentItem[];
+  /** EXECUTION kalau bug terhubung ke sebuah TestCase. */
+  sourceType: BugSourceType;
 };
 
-export type BugsPayload = { bugs: BugRow[]; /** Upload attachment butuh role QA. */ canAttach: boolean };
+export type BugsPayload = { bugs: BugRow[] };
 
 /* ---------- /api/bugs/[id] ---------- */
 export type BugDetailPayload = {

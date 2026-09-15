@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { apiSession, apiRoleAtLeast, json401 } from "@/lib/api-auth";
+import { apiSession, json401 } from "@/lib/api-auth";
 import { toAttachmentItems } from "@/lib/attachments";
 import { presignGetUrls } from "@/lib/storage/r2";
 import type { BugsPayload, BugRow } from "@/types/api";
@@ -38,13 +38,11 @@ export async function GET() {
       testCase: b.testCase,
       createdBy: b.createdBy,
       attachments: await toAttachmentItems(b.attachments, urlMap),
+      sourceType: b.testCaseId ? "EXECUTION" : "GENERAL_FINDING",
     }))
   );
 
-  return NextResponse.json({
-    bugs: rows,
-    canAttach: apiRoleAtLeast(user.role, "QA"),
-  } satisfies BugsPayload);
+  return NextResponse.json({ bugs: rows } satisfies BugsPayload);
 }
 
 export const dynamic = "force-dynamic";

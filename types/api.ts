@@ -115,6 +115,8 @@ export type BugRow = {
   suite: { id: string; name: string } | null;
   /** Project pemilik suite di atas — dasar agregasi jumlah bug per project. */
   project: { id: string; name: string } | null;
+  /** Test Run tempat bug ditemukan (bug dari eksekusi); null untuk ad-hoc. */
+  run: { id: string; name: string; sprint: string | null; createdAt: string } | null;
   createdBy: { name: string | null } | null;
   /** Evidence yang menempel langsung ke bug ini. */
   attachments: AttachmentItem[];

@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useState, type CSSProperties } from "react";
+import Link from "next/link";
 import { ExternalLink, Plus, Search, Trash2 } from "lucide-react";
 import { deleteBug, updateBugStatus } from "@/lib/actions/automation-bugs";
 import { ConfirmDialog, Toast, useToast } from "@/components/ui/feedback";
 import { BugDetailModal } from "@/components/bugs/bug-detail-modal";
 import { ReportGeneralBugModal } from "@/components/bugs/report-general-bug-modal";
 import { HistoryPagination } from "@/components/test-runs/history-pagination";
-import { entityCode } from "@/lib/format";
+import { entityCode, runCodeOf } from "@/lib/format";
 import type { AttachmentItem, BugSourceType, BugStatus } from "@/types/api";
 
 export type BugRow = {
@@ -19,6 +20,8 @@ export type BugRow = {
   externalLink: string | null;
   createdAt: string;
   testCase: { id: string; tcId: string; title: string } | null;
+  /** Test Run tempat bug ditemukan; null untuk temuan ad-hoc. */
+  run?: { id: string; name: string; sprint: string | null; createdAt: string } | null;
   createdBy: { name: string | null } | null;
   attachments?: AttachmentItem[];
   /**
@@ -344,6 +347,7 @@ export function BugsPageClient({ bugs }: { bugs: BugRow[] }) {
                 <tr style={{ color: "var(--text-muted)", textAlign: "left", background: "#F8FAFC", borderBottom: "1px solid #E5E7EB" }}>
                   <th style={{ padding: "0.6rem 1.25rem", fontWeight: 600 }}>ID</th>
                   <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600 }}>Title & Linked TC</th>
+                  <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600 }}>Test Run</th>
                   <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600 }}>Severity</th>
                   <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600 }}>Status</th>
                   <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600 }}>Created By</th>
@@ -446,6 +450,43 @@ export function BugsPageClient({ bugs }: { bugs: BugRow[] }) {
                             </span>
                           )}
                         </div>
+                      </td>
+                      <td style={{ padding: "0.6rem 0.5rem" }}>
+                        {b.run ? (
+                          <div style={{ display: "flex", flexDirection: "column", gap: "0.1rem", minWidth: 0 }}>
+                            <Link
+                              href={`/test-runs/${b.run.id}`}
+                              onClick={(e) => e.stopPropagation()}
+                              title={b.run.name}
+                              style={{
+                                fontSize: "0.78rem",
+                                fontWeight: 600,
+                                color: "#2563EB",
+                                textDecoration: "none",
+                                maxWidth: 180,
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                              }}
+                              onMouseEnter={(e) => (e.currentTarget.style.textDecoration = "underline")}
+                              onMouseLeave={(e) => (e.currentTarget.style.textDecoration = "none")}
+                            >
+                              {b.run.name}
+                            </Link>
+                            <span
+                              style={{
+                                fontFamily: "var(--font-mono, monospace)",
+                                fontSize: "0.68rem",
+                                color: "#94A3B8",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              {runCodeOf({ id: b.run.id, sprint: b.run.sprint, createdAt: b.run.createdAt })}
+                            </span>
+                          </div>
+                        ) : (
+                          <span style={{ color: "#94A3B8" }}>-</span>
+                        )}
                       </td>
                       <td style={{ padding: "0.6rem 0.5rem" }}>
                         {sev ? (

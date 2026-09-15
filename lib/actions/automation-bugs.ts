@@ -7,6 +7,8 @@ import { requireRole } from "@/lib/permissions";
 export type AutomationBugActionState = {
   error?: string;
   success?: boolean;
+  /** Id bug yang baru dibuat — dipakai pemanggil untuk update daftar lokal. */
+  bugId?: string;
 };
 
 function handleError(error: unknown): AutomationBugActionState {
@@ -116,7 +118,7 @@ export async function createBug(data: {
     });
     if (linkedTestCaseId) revalidatePath(`/test-cases/${linkedTestCaseId}`);
     if (data.testRunResultId) revalidatePath(`/test-runs`);
-    return { success: true, bugId: bug.id } as AutomationBugActionState & { bugId?: string };
+    return { success: true, bugId: bug.id };
   } catch (error) {
     return handleError(error);
   }

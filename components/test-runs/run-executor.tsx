@@ -71,6 +71,14 @@ const STATUS_BADGE: Record<
   SKIPPED: { label: "Skipped", bg: "#F1F5F9", color: "#334155", border: "#CBD5E1", bold: true },
 };
 
+/** Severity bug pada Bug Reporting Form (nilai disimpan uppercase, sama dgn data Bug). */
+const SEVERITIES = [
+  { value: "LOW", label: "Low" },
+  { value: "MEDIUM", label: "Medium" },
+  { value: "HIGH", label: "High" },
+  { value: "CRITICAL", label: "Critical" },
+] as const;
+
 /**
  * Kelompokkan hasil eksekusi per Section TC, mempertahankan urutan kemunculan.
  * TC tanpa Section dikumpulkan di grup "Tanpa Section" supaya tidak ada yang
@@ -903,11 +911,42 @@ export function RunExecutor({
               actualResult: data.actualResult,
               notes: data.notes,
             });
-            if (res.success) {
-              // Patch cermin lokal (termasuk `groups` yang dirender kartunya).
-              patchResult(modalItem.id, data);
+            if (res.error) return res;
+
+            // Patch cermin lokal (termasuk `groups` yang dirender kartunya).
+            patchResult(modalItem.id, {
+              status: data.status,
+              actualResult: data.actualResult ?? null,
+              notes: data.notes ?? null,
+            });
+
+            // Mode Fail: buat Bug Ticket yang otomatis ter-link ke TC + hasil run ini.
+            if (data.bug) {
+              const bugRes = await createBug({
+                title: data.bug.title,
+                description: data.actualResult,
+                expectedResult: modalItem.testCase?.expectedResult ?? undefined,
+                severity: data.bug.severity || undefined,
+                testCaseId: modalItem.testCaseId,
+                testRunResultId: modalItem.id,
+              });
+              if (bugRes.error) return { error: bugRes.error };
+              if (bugRes.bugId) {
+                patchResult(modalItem.id, {
+                  bugs: [
+                    ...(modalItem.bugs ?? []),
+                    {
+                      id: bugRes.bugId,
+                      title: data.bug.title,
+                      severity: data.bug.severity || null,
+                      status: "OPEN",
+                      externalLink: null,
+                    },
+                  ],
+                });
+              }
             }
-            return res;
+            return { success: true };
           }}
         />
       )}
@@ -1201,41 +1240,48 @@ function RunItemCard({
   return (
     <div
       onClick={onOpenDetail}
+      onMouseEnter={(e) => (e.currentTarget.style.borderColor = "#CBD5E1")}
+      onMouseLeave={(e) => (e.currentTarget.style.borderColor = "#E2E8F0")}
       style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: "0.625rem",
+        padding: "1rem",
+        borderRadius: 12,
+        border: "1px solid #E2E8F0",
         background: "#fff",
-        border: "1px solid var(--border)",
-        borderRadius: 10,
-        boxShadow: "0px 1px 2px rgba(16, 24, 40, 0.04)",
-        overflow: "hidden",
         cursor: "pointer",
+        transition: "border-color 0.15s ease",
       }}
     >
-      <div style={{ padding: "0.9rem 1.25rem" }}>
-        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap" }}>
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontWeight: 700, fontSize: "0.95rem" }}>{item.titleSnapshot}</div>
+      {/* Blok 1 — judul + aksi sekunder (kiri), badge status pasif (kanan) */}
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "1rem" }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontWeight: 600, fontSize: "0.875rem", color: "#1E293B", lineHeight: 1.375 }}>
+            {item.titleSnapshot}
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap", marginTop: "0.3rem" }}>
             {/* Trigger: Actual result & notes -> modal */}
             <button
               type="button"
               onClick={onOpenDetail}
               style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.25rem",
                 border: "none",
                 background: "none",
-                color: "var(--brand-600)",
-                fontSize: "0.8rem",
-                fontWeight: 600,
+                color: "#2563EB",
+                fontSize: "0.75rem",
+                fontWeight: 500,
                 cursor: "pointer",
                 padding: 0,
-                marginTop: "0.3rem",
               }}
+              onMouseEnter={(e) => (e.currentTarget.style.textDecoration = "underline")}
+              onMouseLeave={(e) => (e.currentTarget.style.textDecoration = "none")}
             >
-              Detail Test Case & Notes
+              Detail Test Case &amp; Notes
             </button>
-            {item.actualResult && (
-              <div style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginTop: "0.15rem" }}>
-                Actual: {item.actualResult}
-              </div>
-            )}
             {(item.attachments?.length ?? 0) > 0 && (
               <button
                 type="button"
@@ -1245,7 +1291,6 @@ function RunItemCard({
                   display: "inline-flex",
                   alignItems: "center",
                   gap: "0.3rem",
-                  marginTop: "0.35rem",
                   padding: "0.15rem 0.5rem",
                   borderRadius: 999,
                   border: "1px solid var(--border-strong)",
@@ -1260,138 +1305,151 @@ function RunItemCard({
               </button>
             )}
           </div>
-          {/* Indikator status pasif: perubahan status hanya lewat modal detail */}
-          <span
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              padding: "0.25rem 0.75rem",
-              borderRadius: 999,
-              background: badge.bg,
-              color: badge.color,
-              border: `1px solid ${badge.border}`,
-              fontSize: "0.75rem",
-              fontWeight: badge.bold ? 700 : 600,
-              whiteSpace: "nowrap",
-            }}
-          >
-            {badge.label}
-          </span>
         </div>
-
-        {item.status === "FAIL" && canEdit && (
-          <div style={{ marginTop: "0.6rem", display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
-            {attachedBugs.length > 0 ? (
-              attachedBugs.map((b) => {
-                const bugCode = entityCode("BUG", b.id);
-                const bugBadge = (
-                  <span
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: "0.3rem",
-                      padding: "0.3rem 0.7rem",
-                      borderRadius: 999,
-                      background: "#FEF2F2",
-                      border: "1px solid #FCA5A5",
-                      color: "#B91C1C",
-                      fontFamily: "var(--font-mono, monospace)",
-                      fontSize: 12,
-                      fontWeight: 600,
-                    }}
-                  >
-                    <Bug size={12} /> {bugCode}
-                    <ExternalLink size={11} style={{ opacity: 0.7 }} />
-                  </span>
-                );
-                return (
-                  <span key={b.id} style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
-                    {b.externalLink ? (
-                      <a
-                        href={b.externalLink}
-                        target="_blank"
-                        rel="noreferrer"
-                        title="Buka detail bug"
-                        onClick={(e) => e.stopPropagation()}
-                        style={{ textDecoration: "none" }}
-                      >
-                        {bugBadge}
-                      </a>
-                    ) : (
-                      <Link
-                        href="/bugs"
-                        title="Buka daftar bug"
-                        onClick={(e) => e.stopPropagation()}
-                        style={{ textDecoration: "none" }}
-                      >
-                        {bugBadge}
-                      </Link>
-                    )}
-                    {!isCompleted && (
-                      <button
-                        type="button"
-                        title="Lepas bug dari hasil run ini"
-                        disabled={unlinkPending === b.id}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onUnlinkBug(b.id);
-                        }}
-                        style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          width: 20,
-                          height: 20,
-                          border: "none",
-                          borderRadius: 999,
-                          background: "transparent",
-                          color: "#9CA3AF",
-                          fontSize: 12,
-                          cursor: unlinkPending === b.id ? "progress" : "pointer",
-                          padding: 0,
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.background = "#FEF2F2";
-                          e.currentTarget.style.color = "#B91C1C";
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.background = "transparent";
-                          e.currentTarget.style.color = "#9CA3AF";
-                        }}
-                      >
-                        <X size={12} />
-                      </button>
-                    )}
-                  </span>
-                );
-              })
-            ) : (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onOpenBug();
-                }}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "0.35rem",
-                  padding: "0.35rem 0.85rem",
-                  borderRadius: 8,
-                  border: "1px solid var(--danger)",
-                  background: "#fff",
-                  color: "var(--danger)",
-                  fontWeight: 600,
-                  fontSize: "0.82rem",
-                  cursor: "pointer",
-                }}
-              >
-                <Bug size={13} /> Buat Bug
-              </button>
-            )}
-          </div>
-        )}
+        {/* Indikator status pasif: perubahan status hanya lewat modal detail */}
+        <span
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            flexShrink: 0,
+            padding: "0.25rem 0.75rem",
+            borderRadius: 999,
+            background: badge.bg,
+            color: badge.color,
+            border: `1px solid ${badge.border}`,
+            fontSize: "0.75rem",
+            fontWeight: badge.bold ? 700 : 600,
+            whiteSpace: "nowrap",
+          }}
+        >
+          {badge.label}
+        </span>
       </div>
+
+      {/* Blok 2 — hasil eksekusi */}
+      {item.actualResult && (
+        <div
+          style={{
+            fontSize: "0.75rem",
+            color: "#475569",
+            lineHeight: 1.55,
+            background: "#F8FAFC",
+            borderLeft: "2px solid #CBD5E1",
+            paddingLeft: "0.75rem",
+            paddingTop: "0.375rem",
+            paddingBottom: "0.375rem",
+            borderRadius: "0 6px 6px 0",
+          }}
+        >
+          <span style={{ fontWeight: 700, color: "#334155" }}>Actual Result: </span>
+          {item.actualResult}
+        </div>
+      )}
+
+      {/* Blok 3 — bug ticket yang ter-link ke hasil eksekusi ini */}
+      {item.status === "FAIL" && canEdit && (
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+          {attachedBugs.length > 0 ? (
+            attachedBugs.map((b) => {
+              const bugCode = entityCode("BUG", b.id);
+              const bugBadge = (
+                <span
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "0.375rem",
+                    padding: "0.25rem 0.625rem",
+                    background: "#FFF1F2",
+                    border: "1px solid #FECDD3",
+                    color: "#BE123C",
+                    borderRadius: 6,
+                    fontFamily: "var(--font-mono, monospace)",
+                    fontSize: "0.6875rem",
+                    fontWeight: 500,
+                  }}
+                >
+                  <Bug size={12} /> {bugCode}
+                  <ExternalLink size={11} style={{ opacity: 0.7 }} />
+                </span>
+              );
+              return (
+                <span key={b.id} style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
+                  {b.externalLink ? (
+                    <a
+                      href={b.externalLink}
+                      target="_blank"
+                      rel="noreferrer"
+                      title="Buka detail bug"
+                      onClick={(e) => e.stopPropagation()}
+                      style={{ textDecoration: "none" }}
+                    >
+                      {bugBadge}
+                    </a>
+                  ) : (
+                    <Link
+                      href="/bugs"
+                      title="Buka daftar bug"
+                      onClick={(e) => e.stopPropagation()}
+                      style={{ textDecoration: "none" }}
+                    >
+                      {bugBadge}
+                    </Link>
+                  )}
+                  {!isCompleted && (
+                    <button
+                      type="button"
+                      title="Lepas bug dari hasil run ini"
+                      disabled={unlinkPending === b.id}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onUnlinkBug(b.id);
+                      }}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        padding: 2,
+                        border: "none",
+                        borderRadius: 4,
+                        background: "transparent",
+                        color: "#BE123C",
+                        cursor: unlinkPending === b.id ? "progress" : "pointer",
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = "#FFE4E6")}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                    >
+                      <X size={12} />
+                    </button>
+                  )}
+                </span>
+              );
+            })
+          ) : (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenBug();
+              }}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.35rem",
+                padding: "0.35rem 0.85rem",
+                borderRadius: 8,
+                border: "1px solid var(--danger)",
+                background: "#fff",
+                color: "var(--danger)",
+                fontWeight: 600,
+                fontSize: "0.82rem",
+                cursor: "pointer",
+              }}
+            >
+              <Bug size={13} /> Buat Bug
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -2152,11 +2210,20 @@ function ExecutionModal({
   onClose: () => void;
   /** Teruskan daftar attachment terbaru ke parent (update in-place). */
   onAttachmentsChange?: (list: AttachmentItem[]) => void;
-  onSave: (data: { status: RunResultItem["status"]; actualResult?: string; notes?: string }) => Promise<{ success?: boolean; error?: string }>;
+  onSave: (data: {
+    status: RunResultItem["status"];
+    actualResult?: string;
+    notes?: string;
+    /** Diisi hanya di mode Fail: bug baru yang dibuat & otomatis ter-link ke TC ini. */
+    bug?: { title: string; severity: string };
+  }) => Promise<{ success?: boolean; error?: string }>;
 }) {
   const [status, setStatus] = useState<RunResultItem["status"]>(item.status);
   const [actualResult, setActualResult] = useState(item.actualResult ?? "");
   const [notes, setNotes] = useState(item.notes ?? "");
+  // Default judul bug: [BUG] - <judul TC>
+  const [bugTitle, setBugTitle] = useState(`[BUG] - ${item.titleSnapshot}`);
+  const [bugSeverity, setBugSeverity] = useState("MEDIUM");
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -2191,11 +2258,58 @@ function ExecutionModal({
     margin: "0 0 0.4rem",
   };
 
+  // Mode Fail -> form berubah jadi Bug Reporting Form.
+  const isFail = status === "FAIL";
+  const hasLinkedBug = (item.bugs?.length ?? 0) > 0;
+
+  const bugLabelStyle: React.CSSProperties = {
+    display: "block",
+    fontSize: "0.69rem",
+    fontWeight: 700,
+    color: "#64748B",
+    textTransform: "uppercase",
+    letterSpacing: "0.04em",
+    marginBottom: "0.3rem",
+  };
+
+  const bugFieldStyle: React.CSSProperties = {
+    width: "100%",
+    border: "1px solid #E2E8F0",
+    borderRadius: 8,
+    padding: "0 0.75rem",
+    fontSize: "0.75rem",
+    color: "#1F2937",
+    background: "#fff",
+    outline: "none",
+    boxSizing: "border-box",
+  };
+
   const save = async () => {
     if (saving) return; // penjaga double-click
-    setSaving(true);
     setMsg(null);
-    const res = await onSave({ status, actualResult, notes });
+
+    // Validasi khusus mode Fail: judul bug (kalau bug baru akan dibuat) dan
+    // langkah reproduksi wajib diisi.
+    if (isFail) {
+      if (!hasLinkedBug && !bugTitle.trim()) {
+        setMsg("Judul bug wajib diisi.");
+        return;
+      }
+      if (!actualResult.trim()) {
+        setMsg("Actual result / langkah reproduksi wajib diisi.");
+        return;
+      }
+    }
+
+    setSaving(true);
+    const res = await onSave({
+      status,
+      actualResult,
+      notes,
+      // Bug hanya dibuat sekali per hasil eksekusi; kalau sudah ada yang
+      // ter-link, submit berikutnya cukup memperbarui detail eksekusi.
+      bug: isFail && !hasLinkedBug ? { title: bugTitle.trim(), severity: bugSeverity } : undefined,
+    });
     if (res.error) {
       setSaving(false);
       setMsg(res.error);
@@ -2411,53 +2525,128 @@ function ExecutionModal({
               })}
             </div>
 
-            <div>
-              <label style={{ display: "block", fontSize: "0.72rem", fontWeight: 600, color: "#4B5563", marginBottom: "0.3rem" }}>
-                Actual Result
-              </label>
-              <textarea
-                value={actualResult}
-                onChange={(e) => setActualResult(e.target.value)}
-                disabled={!canEdit}
-                rows={2}
-                placeholder="Tulis hasil aktual eksekusi..."
-                style={{
-                  width: "100%",
-                  border: "1px solid #D1D5DB",
-                  borderRadius: 6,
-                  padding: "0.5rem 0.6rem",
-                  fontSize: "0.78rem",
-                  color: "#1F2937",
-                  outline: "none",
-                  resize: "vertical",
-                  background: "#fff",
-                }}
-              />
-            </div>
+            {isFail ? (
+              <>
+                {/* Bug Reporting Form: tampil otomatis ketika status Fail */}
+                {hasLinkedBug ? (
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "flex-start",
+                      gap: "0.4rem",
+                      padding: "0.5rem 0.7rem",
+                      borderRadius: 8,
+                      background: "#FEF2F2",
+                      border: "1px solid #FECDD3",
+                      color: "#B91C1C",
+                      fontSize: "0.72rem",
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    <Bug size={13} style={{ flexShrink: 0, marginTop: 2 }} />
+                    <span>
+                      Bug sudah terhubung ke hasil eksekusi ini — menyimpan hanya memperbarui detail
+                      eksekusi, bukan membuat bug baru.
+                    </span>
+                  </div>
+                ) : (
+                  <>
+                    <div>
+                      <label style={bugLabelStyle}>
+                        Bug Title <span style={{ color: "#E11D48" }}>*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={bugTitle}
+                        onChange={(e) => setBugTitle(e.target.value)}
+                        disabled={!canEdit}
+                        placeholder="Ringkasan singkat isu/bug yang ditemukan..."
+                        style={{ ...bugFieldStyle, height: 36 }}
+                      />
+                    </div>
 
-            <div>
-              <label style={{ display: "block", fontSize: "0.72rem", fontWeight: 600, color: "#4B5563", marginBottom: "0.3rem" }}>
-                Notes
-              </label>
-              <textarea
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                disabled={!canEdit}
-                rows={2}
-                placeholder="Catatan tambahan..."
-                style={{
-                  width: "100%",
-                  border: "1px solid #D1D5DB",
-                  borderRadius: 6,
-                  padding: "0.5rem 0.6rem",
-                  fontSize: "0.78rem",
-                  color: "#1F2937",
-                  outline: "none",
-                  resize: "vertical",
-                  background: "#fff",
-                }}
-              />
-            </div>
+                    <div>
+                      <label style={bugLabelStyle}>Severity</label>
+                      <select
+                        value={bugSeverity}
+                        onChange={(e) => setBugSeverity(e.target.value)}
+                        disabled={!canEdit}
+                        style={{ ...bugFieldStyle, height: 36, cursor: canEdit ? "pointer" : "not-allowed" }}
+                      >
+                        {SEVERITIES.map((s) => (
+                          <option key={s.value} value={s.value}>
+                            {s.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </>
+                )}
+
+                <div>
+                  <label style={bugLabelStyle}>
+                    Actual Result / Reproduction Steps <span style={{ color: "#E11D48" }}>*</span>
+                  </label>
+                  <textarea
+                    value={actualResult}
+                    onChange={(e) => setActualResult(e.target.value)}
+                    disabled={!canEdit}
+                    placeholder="Jelaskan hasil aktual dan langkah reproduksi ditemukannya bug..."
+                    style={{ ...bugFieldStyle, height: 80, padding: "0.5rem 0.75rem", resize: "vertical" }}
+                  />
+                </div>
+              </>
+            ) : (
+              <>
+                <div>
+                  <label style={{ display: "block", fontSize: "0.72rem", fontWeight: 600, color: "#4B5563", marginBottom: "0.3rem" }}>
+                    Actual Result
+                  </label>
+                  <textarea
+                    value={actualResult}
+                    onChange={(e) => setActualResult(e.target.value)}
+                    disabled={!canEdit}
+                    rows={2}
+                    placeholder="Tulis hasil aktual eksekusi..."
+                    style={{
+                      width: "100%",
+                      border: "1px solid #D1D5DB",
+                      borderRadius: 6,
+                      padding: "0.5rem 0.6rem",
+                      fontSize: "0.78rem",
+                      color: "#1F2937",
+                      outline: "none",
+                      resize: "vertical",
+                      background: "#fff",
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: "block", fontSize: "0.72rem", fontWeight: 600, color: "#4B5563", marginBottom: "0.3rem" }}>
+                    Notes
+                  </label>
+                  <textarea
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    disabled={!canEdit}
+                    rows={2}
+                    placeholder="Catatan tambahan..."
+                    style={{
+                      width: "100%",
+                      border: "1px solid #D1D5DB",
+                      borderRadius: 6,
+                      padding: "0.5rem 0.6rem",
+                      fontSize: "0.78rem",
+                      color: "#1F2937",
+                      outline: "none",
+                      resize: "vertical",
+                      background: "#fff",
+                    }}
+                  />
+                </div>
+              </>
+            )}
 
             {/* Evidence: screenshot/video untuk hasil eksekusi ini */}
             <div style={{ marginTop: "0.9rem" }}>
@@ -2487,17 +2676,21 @@ function ExecutionModal({
                     padding: "0.45rem 1.1rem",
                     border: "none",
                     borderRadius: 3,
-                    background: "#FFC107",
-                    color: "#0F172A",
+                    background: isFail ? "#E11D48" : "#FFC107",
+                    color: isFail ? "#fff" : "#0F172A",
                     fontSize: "0.78rem",
                     fontWeight: 700,
                     cursor: saving ? "wait" : "pointer",
                     transition: "background-color 0.15s ease",
                   }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = "#E0A800")}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = "#FFC107")}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = isFail ? "#BE123C" : "#E0A800")}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = isFail ? "#E11D48" : "#FFC107")}
                 >
-                  {saving ? "Menyimpan..." : "Simpan Detail"}
+                  {saving
+                    ? "Menyimpan..."
+                    : isFail && !hasLinkedBug
+                      ? "Laporkan Bug & Simpan"
+                      : "Simpan Detail"}
                 </button>
               </div>
             )}

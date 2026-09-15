@@ -16,7 +16,7 @@ export async function GET() {
       suite: { select: { id: true, name: true } },
       project: { select: { id: true, name: true } },
       testRunResult: {
-        select: { run: { select: { id: true, name: true, sprint: true, createdAt: true } } },
+        select: { run: { select: { id: true, name: true } } },
       },
       createdBy: { select: { name: true } },
       attachments: {
@@ -43,14 +43,7 @@ export async function GET() {
       testCase: b.testCase,
       suite: b.suite,
       project: b.project,
-      run: b.testRunResult?.run
-        ? {
-            id: b.testRunResult.run.id,
-            name: b.testRunResult.run.name,
-            sprint: b.testRunResult.run.sprint,
-            createdAt: b.testRunResult.run.createdAt.toISOString(),
-          }
-        : null,
+      run: b.testRunResult?.run ?? null,
       createdBy: b.createdBy,
       attachments: await toAttachmentItems(b.attachments, urlMap),
       sourceType: b.testCaseId ? "EXECUTION" : "GENERAL_FINDING",

@@ -8,7 +8,7 @@ import { ConfirmDialog, Toast, useToast } from "@/components/ui/feedback";
 import { BugDetailModal } from "@/components/bugs/bug-detail-modal";
 import { ReportGeneralBugModal } from "@/components/bugs/report-general-bug-modal";
 import { HistoryPagination } from "@/components/test-runs/history-pagination";
-import { entityCode, runCodeOf } from "@/lib/format";
+import { entityCode } from "@/lib/format";
 import type { AttachmentItem, BugSourceType, BugStatus } from "@/types/api";
 
 export type BugRow = {
@@ -21,7 +21,7 @@ export type BugRow = {
   createdAt: string;
   testCase: { id: string; tcId: string; title: string } | null;
   /** Test Run tempat bug ditemukan; null untuk temuan ad-hoc. */
-  run?: { id: string; name: string; sprint: string | null; createdAt: string } | null;
+  run?: { id: string; name: string } | null;
   createdBy: { name: string | null } | null;
   attachments?: AttachmentItem[];
   /**
@@ -381,109 +381,47 @@ export function BugsPageClient({ bugs }: { bugs: BugRow[] }) {
                         </span>
                       </td>
                       <td style={{ padding: "0.6rem 0.5rem" }}>
-                        <div
-                          style={{
-                            display: "flex",
-                            flexDirection: "column",
-                            alignItems: "flex-start",
-                            gap: "0.3rem",
-                            minWidth: 0,
-                          }}
-                        >
-                          {/* 1. Judul + link eksternal */}
-                          <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", minWidth: 0 }}>
-                            <span style={{ fontWeight: 600, fontSize: "0.85rem", color: "#0F172A", lineHeight: 1.4 }}>
-                              {b.title}
-                            </span>
-                            {b.externalLink && (
-                              <a
-                                href={b.externalLink}
-                                target="_blank"
-                                rel="noreferrer"
-                                title={b.externalLink}
-                                onClick={(e) => e.stopPropagation()}
-                                style={{ display: "inline-flex", alignItems: "center", color: "var(--brand-600)", textDecoration: "none", flexShrink: 0 }}
-                              >
-                                <ExternalLink size={13} />
-                              </a>
-                            )}
-                          </div>
-
-                          {/* 2. Badge kategori: rujukan TC (interaktif) atau temuan ad-hoc */}
-                          {sourceTypeOf(b) === "EXECUTION" && b.testCase ? (
+                        <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", minWidth: 0 }}>
+                          <span style={{ fontWeight: 600, fontSize: "0.85rem", color: "#0F172A", lineHeight: 1.4 }}>
+                            {b.title}
+                          </span>
+                          {b.externalLink && (
                             <a
-                              href={`/test-cases/${b.testCase.id}`}
+                              href={b.externalLink}
+                              target="_blank"
+                              rel="noreferrer"
+                              title={b.externalLink}
                               onClick={(e) => e.stopPropagation()}
-                              title={b.testCase.title}
-                              style={{
-                                display: "inline-flex",
-                                alignItems: "center",
-                                gap: "0.3rem",
-                                padding: "0.1rem 0.5rem",
-                                background: "#EFF6FF",
-                                color: "#1D4ED8",
-                                border: "1px solid #BFDBFE",
-                                borderRadius: 4,
-                                fontFamily: "var(--font-mono, monospace)",
-                                fontSize: "0.6875rem",
-                                fontWeight: 600,
-                                textDecoration: "none",
-                              }}
+                              style={{ display: "inline-flex", alignItems: "center", color: "var(--brand-600)", textDecoration: "none", flexShrink: 0 }}
                             >
-                              TC Ref: {b.testCase.tcId}
+                              <ExternalLink size={13} />
                             </a>
-                          ) : (
-                            <span
-                              style={{
-                                display: "inline-flex",
-                                alignItems: "center",
-                                padding: "0.1rem 0.5rem",
-                                background: "#FAF5FF",
-                                color: "#7E22CE",
-                                border: "1px solid #E9D5FF",
-                                borderRadius: 4,
-                                fontSize: "0.625rem",
-                                fontWeight: 700,
-                              }}
-                            >
-                              Ad-hoc / General
-                            </span>
                           )}
                         </div>
                       </td>
                       <td style={{ padding: "0.6rem 0.5rem" }}>
                         {b.run ? (
-                          <div style={{ display: "flex", flexDirection: "column", gap: "0.1rem", minWidth: 0 }}>
-                            <Link
-                              href={`/test-runs/${b.run.id}`}
-                              onClick={(e) => e.stopPropagation()}
-                              title={b.run.name}
-                              style={{
-                                fontSize: "0.78rem",
-                                fontWeight: 600,
-                                color: "#2563EB",
-                                textDecoration: "none",
-                                maxWidth: 180,
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                                whiteSpace: "nowrap",
-                              }}
-                              onMouseEnter={(e) => (e.currentTarget.style.textDecoration = "underline")}
-                              onMouseLeave={(e) => (e.currentTarget.style.textDecoration = "none")}
-                            >
-                              {b.run.name}
-                            </Link>
-                            <span
-                              style={{
-                                fontFamily: "var(--font-mono, monospace)",
-                                fontSize: "0.68rem",
-                                color: "#94A3B8",
-                                whiteSpace: "nowrap",
-                              }}
-                            >
-                              {runCodeOf({ id: b.run.id, sprint: b.run.sprint, createdAt: b.run.createdAt })}
-                            </span>
-                          </div>
+                          <Link
+                            href={`/test-runs/${b.run.id}`}
+                            onClick={(e) => e.stopPropagation()}
+                            title={b.run.name}
+                            style={{
+                              display: "inline-block",
+                              fontSize: "0.78rem",
+                              fontWeight: 600,
+                              color: "#2563EB",
+                              textDecoration: "none",
+                              maxWidth: 200,
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                              verticalAlign: "bottom",
+                            }}
+                            onMouseEnter={(e) => (e.currentTarget.style.textDecoration = "underline")}
+                            onMouseLeave={(e) => (e.currentTarget.style.textDecoration = "none")}
+                          >
+                            {b.run.name}
+                          </Link>
                         ) : (
                           <span style={{ color: "#94A3B8" }}>-</span>
                         )}

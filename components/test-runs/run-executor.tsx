@@ -57,6 +57,21 @@ const STATUSES = [
 ] as const;
 
 /**
+ * Gaya badge status pasif pada baris TC. Status tidak lagi bisa diubah dari
+ * baris — QA harus membuka modal detail eksekusi.
+ */
+const STATUS_BADGE: Record<
+  RunResultItem["status"],
+  { label: string; bg: string; color: string; border: string; bold?: boolean }
+> = {
+  NOT_RUN: { label: "Untested", bg: "#F1F5F9", color: "#475569", border: "#E2E8F0" },
+  PASS: { label: "Passed", bg: "#ECFDF5", color: "#047857", border: "#A7F3D0", bold: true },
+  FAIL: { label: "Failed", bg: "#FFF1F2", color: "#BE123C", border: "#FECDD3", bold: true },
+  BLOCKED: { label: "Blocked", bg: "#FFFBEB", color: "#B45309", border: "#FDE68A", bold: true },
+  SKIPPED: { label: "Skipped", bg: "#F1F5F9", color: "#334155", border: "#CBD5E1", bold: true },
+};
+
+/**
  * Kelompokkan hasil eksekusi per Section TC, mempertahankan urutan kemunculan.
  * TC tanpa Section dikumpulkan di grup "Tanpa Section" supaya tidak ada yang
  * hilang dari tampilan.
@@ -156,7 +171,6 @@ export function RunExecutor({
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
   const toggleSection = (key: string) =>
     setCollapsedSections((prev) => ({ ...prev, [key]: !prev[key] }));
-  const [pendingId, setPendingId] = useState<string | null>(null);
   const [modalItem, setModalItem] = useState<RunResultItem | null>(null);
   const [bugItem, setBugItem] = useState<RunResultItem | null>(null);
   const [metaOpen, setMetaOpen] = useState(true);
@@ -180,27 +194,6 @@ export function RunExecutor({
   // Modal report
   const [reportOpen, setReportOpen] = useState(false);
   const { toast, showToast, dismissToast } = useToast();
-
-  const setStatus = async (item: RunResultItem, status: RunResultItem["status"]) => {
-    if (isCompleted) return;
-    if (pendingId === item.id) return; // hindari double-trigger saat masih proses
-    setPendingId(item.id);
-    try {
-      const res = await updateRunResult(item.id, { status });
-      if (res?.error) {
-        showToast(res.error, "error");
-        return;
-      }
-      if (res?.success) {
-        patchResult(item.id, { status });
-      }
-    } catch (err) {
-      console.error("Gagal update status run result:", err);
-      showToast("Gagal mengubah status. Coba lagi.", "error");
-    } finally {
-      setPendingId(null);
-    }
-  };
 
   /**
    * Patch satu hasil run di SEMUA cermin lokal sekaligus: flat list (`items`),
@@ -871,9 +864,7 @@ export function RunExecutor({
                               item={item}
                               isCompleted={isCompleted}
                               canEdit={canEdit}
-                              pendingId={pendingId}
                               unlinkPending={unlinkPending}
-                              onSetStatus={(status) => void setStatus(item, status)}
                               onOpenDetail={() => setModalItem(item)}
                               onUnlinkBug={(bugId) => void unlinkBug(bugId, item.id)}
                               onOpenBug={() => {
@@ -1276,9 +1267,7 @@ function RunItemCard({
   item,
   isCompleted,
   canEdit,
-  pendingId,
   unlinkPending,
-  onSetStatus,
   onOpenDetail,
   onUnlinkBug,
   onOpenBug,
@@ -1286,22 +1275,23 @@ function RunItemCard({
   item: RunResultItem;
   isCompleted: boolean;
   canEdit: boolean;
-  pendingId: string | null;
   unlinkPending: string | null;
-  onSetStatus: (status: RunResultItem["status"]) => void;
   onOpenDetail: () => void;
   onUnlinkBug: (bugId: string) => void;
   onOpenBug: () => void;
 }) {
   const attachedBugs = item.bugs ?? [];
+  const badge = STATUS_BADGE[item.status];
   return (
     <div
+      onClick={onOpenDetail}
       style={{
         background: "#fff",
         border: "1px solid var(--border)",
         borderRadius: 10,
         boxShadow: "0px 1px 2px rgba(16, 24, 40, 0.04)",
         overflow: "hidden",
+        cursor: "pointer",
       }}
     >
       <div style={{ padding: "0.9rem 1.25rem" }}>
@@ -1323,7 +1313,7 @@ function RunItemCard({
                 marginTop: "0.3rem",
               }}
             >
-              Actual result & notes
+              Detail Test Case & Notes
             </button>
             {item.actualResult && (
               <div style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginTop: "0.15rem" }}>
@@ -1354,65 +1344,23 @@ function RunItemCard({
               </button>
             )}
           </div>
-          {/* Grup tombol aksi: layer teratas agar tidak tertutup elemen lain */}
-          <div
+          {/* Indikator status pasif: perubahan status hanya lewat modal detail */}
+          <span
             style={{
-              display: "flex",
-              gap: "0.4rem",
-              flexWrap: "wrap",
-              position: "relative",
-              zIndex: 5,
-              pointerEvents: "auto",
+              display: "inline-flex",
+              alignItems: "center",
+              padding: "0.25rem 0.75rem",
+              borderRadius: 999,
+              background: badge.bg,
+              color: badge.color,
+              border: `1px solid ${badge.border}`,
+              fontSize: "0.75rem",
+              fontWeight: badge.bold ? 700 : 600,
+              whiteSpace: "nowrap",
             }}
           >
-            {STATUSES.map((s) => {
-              const Icon = s.icon;
-              const active = item.status === s.value;
-              const disabled = isCompleted || !canEdit || pendingId === item.id;
-              return (
-                <button
-                  key={s.value}
-                  type="button"
-                  disabled={disabled}
-                  aria-pressed={active}
-                  title={active ? "Klik lagi untuk membatalkan (Untested)" : `Tandai ${s.label}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    // Tombol bersifat toggle: klik status yang sedang aktif
-                    // membatalkan pilihan dan mengembalikan TC ke Untested.
-                    onSetStatus(active ? "NOT_RUN" : s.value);
-                  }}
-                  style={{
-                    position: "relative",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "0.3rem",
-                    padding: "0.35rem 0.8rem",
-                    borderRadius: 8,
-                    border: active ? `1.5px solid ${s.color}` : "1px solid var(--border-strong)",
-                    background: active ? s.activeBg : "#fff",
-                    color: active ? "#fff" : "var(--text-secondary)",
-                    fontWeight: 700,
-                    fontSize: "0.82rem",
-                    cursor: disabled ? "not-allowed" : "pointer",
-                    transition: "background 0.15s ease, color 0.15s ease",
-                  }}
-                  onMouseEnter={(e) => {
-                    if (disabled || active) return;
-                    e.currentTarget.style.background = s.activeBg;
-                    e.currentTarget.style.color = "#fff";
-                  }}
-                  onMouseLeave={(e) => {
-                    if (disabled || active) return;
-                    e.currentTarget.style.background = "#fff";
-                    e.currentTarget.style.color = "var(--text-secondary)";
-                  }}
-                >
-                  <Icon size={14} /> {s.label}
-                </button>
-              );
-            })}
-          </div>
+            {badge.label}
+          </span>
         </div>
 
         {item.status === "FAIL" && canEdit && (
@@ -1420,7 +1368,7 @@ function RunItemCard({
             {attachedBugs.length > 0 ? (
               attachedBugs.map((b) => {
                 const bugCode = entityCode("BUG", b.id);
-                const badge = (
+                const bugBadge = (
                   <span
                     style={{
                       display: "inline-flex",
@@ -1443,12 +1391,24 @@ function RunItemCard({
                 return (
                   <span key={b.id} style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
                     {b.externalLink ? (
-                      <a href={b.externalLink} target="_blank" rel="noreferrer" title="Buka detail bug" style={{ textDecoration: "none" }}>
-                        {badge}
+                      <a
+                        href={b.externalLink}
+                        target="_blank"
+                        rel="noreferrer"
+                        title="Buka detail bug"
+                        onClick={(e) => e.stopPropagation()}
+                        style={{ textDecoration: "none" }}
+                      >
+                        {bugBadge}
                       </a>
                     ) : (
-                      <Link href="/bugs" title="Buka daftar bug" style={{ textDecoration: "none" }}>
-                        {badge}
+                      <Link
+                        href="/bugs"
+                        title="Buka daftar bug"
+                        onClick={(e) => e.stopPropagation()}
+                        style={{ textDecoration: "none" }}
+                      >
+                        {bugBadge}
                       </Link>
                     )}
                     {!isCompleted && (
@@ -1456,7 +1416,10 @@ function RunItemCard({
                         type="button"
                         title="Lepas bug dari hasil run ini"
                         disabled={unlinkPending === b.id}
-                        onClick={() => onUnlinkBug(b.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onUnlinkBug(b.id);
+                        }}
                         style={{
                           display: "inline-flex",
                           alignItems: "center",
@@ -1489,7 +1452,10 @@ function RunItemCard({
             ) : (
               <button
                 type="button"
-                onClick={onOpenBug}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenBug();
+                }}
                 style={{
                   display: "inline-flex",
                   alignItems: "center",
@@ -2200,7 +2166,9 @@ function ExecutionModal({
                     key={s.value}
                     type="button"
                     disabled={!canEdit}
-                    onClick={() => setStatus(s.value)}
+                    aria-pressed={isActive}
+                    title={isActive ? "Klik lagi untuk membatalkan (Untested)" : `Tandai ${s.label}`}
+                    onClick={() => setStatus(isActive ? "NOT_RUN" : s.value)}
                     style={{
                       display: "inline-flex",
                       alignItems: "center",

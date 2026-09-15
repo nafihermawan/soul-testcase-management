@@ -268,6 +268,16 @@ export function BugDetailModal({
                   Ad-hoc / General
                 </span>
               )}
+              {bug.suite && (
+                <span style={{ fontSize: "0.75rem", color: "#64748B" }}>
+                  Suite: <strong style={{ color: "#334155", fontWeight: 600 }}>{bug.suite.name}</strong>
+                </span>
+              )}
+              {bug.project && (
+                <span style={{ fontSize: "0.75rem", color: "#64748B" }}>
+                  Project: <strong style={{ color: "#334155", fontWeight: 600 }}>{bug.project.name}</strong>
+                </span>
+              )}
               {bug.externalLink && (
                 <a
                   href={bug.externalLink}

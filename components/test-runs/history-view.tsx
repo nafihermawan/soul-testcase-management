@@ -23,7 +23,6 @@ export type HistorySearchParams = {
   sort_by?: string;
   order?: string;
   page?: string;
-  perPage?: string;
 };
 
 export function HistoryView({ searchParams }: { searchParams: HistorySearchParams }) {
@@ -37,7 +36,8 @@ export function HistoryView({ searchParams }: { searchParams: HistorySearchParam
     if (searchParams.from) sp.set("from", searchParams.from);
     if (searchParams.to) sp.set("to", searchParams.to);
     if (searchParams.page) sp.set("page", searchParams.page);
-    if (searchParams.perPage) sp.set("perPage", searchParams.perPage);
+    // `perPage` sengaja tidak diteruskan: ukuran halaman dikunci 25 di server,
+    // jadi URL lama (?perPage=…) tidak bisa lagi mengubahnya.
     // Urutan default: run terbaru selesai di atas.
     sp.set("sort_by", searchParams.sort_by ?? "completed_at");
     sp.set("order", searchParams.order ?? "desc");
@@ -272,8 +272,14 @@ export function HistoryView({ searchParams }: { searchParams: HistorySearchParam
           </div>
         )}
 
-        {/* Pagination footer */}
-        <HistoryPagination total={total} page={page} perPage={perPage} baseUrl="/test-runs/history" />
+        {/* Pagination footer — ukuran halaman dikunci 25, tanpa pemilih rows */}
+        <HistoryPagination
+          total={total}
+          page={page}
+          perPage={perPage}
+          baseUrl="/test-runs/history"
+          lockPerPage
+        />
       </div>
 
       <Toast toast={toast} onDismiss={dismissToast} />

@@ -36,7 +36,8 @@ export function buildHistoryHref(
   if (f.from) params.set("from", f.from);
   if (f.to) params.set("to", f.to);
   if (f.page && f.page > 1) params.set("page", String(f.page));
-  if (f.perPage && f.perPage !== 10) params.set("perPage", String(f.perPage));
+  // Ukuran halaman standar 25 -> hanya ditulis ke URL kalau memang berbeda.
+  if (f.perPage && f.perPage !== 25) params.set("perPage", String(f.perPage));
   const qs = params.toString();
   return qs ? `${base}?${qs}` : base;
 }

@@ -13,6 +13,8 @@ export async function GET() {
     orderBy: { createdAt: "desc" },
     include: {
       testCase: { select: { id: true, tcId: true, title: true } },
+      suite: { select: { id: true, name: true } },
+      project: { select: { id: true, name: true } },
       createdBy: { select: { name: true } },
       attachments: {
         orderBy: { createdAt: "desc" },
@@ -36,6 +38,8 @@ export async function GET() {
       externalLink: b.externalLink,
       createdAt: b.createdAt.toISOString(),
       testCase: b.testCase,
+      suite: b.suite,
+      project: b.project,
       createdBy: b.createdBy,
       attachments: await toAttachmentItems(b.attachments, urlMap),
       sourceType: b.testCaseId ? "EXECUTION" : "GENERAL_FINDING",

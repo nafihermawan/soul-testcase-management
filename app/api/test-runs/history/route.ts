@@ -36,7 +36,8 @@ export async function GET(req: NextRequest) {
       ? { completedAt: { sort: order as "asc" | "desc", nulls: "last" as const } }
       : { createdAt: order as "asc" | "desc" };
   const page = Math.max(1, parseInt(sp.get("page") ?? "1", 10) || 1);
-  const perPage = Math.min(100, Math.max(10, parseInt(sp.get("perPage") ?? "10", 10) || 10));
+  // Ukuran halaman distandarkan: default 25 (UI tidak lagi mengirim perPage).
+  const perPage = Math.min(100, Math.max(10, parseInt(sp.get("perPage") ?? "25", 10) || 25));
 
   // Query where — kombinasi AND antar kriteria, OR di dalam kriteria
   const where: Record<string, unknown> = { status: "COMPLETED" };

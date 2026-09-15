@@ -79,6 +79,8 @@ export async function createBug(data: {
   externalLink?: string;
   testCaseId?: string | null;
   testRunResultId?: string | null;
+  /** Suite/modul tempat temuan ad-hoc berada. */
+  suiteId?: string | null;
 }): Promise<AutomationBugActionState> {
   const user = await requireRole("DEVELOPER");
   const title = data.title.trim();
@@ -104,6 +106,32 @@ export async function createBug(data: {
       }
     }
 
+    /**
+     * Suite + project ditentukan DI SERVER, bukan dari klien:
+     * - bug dari eksekusi run mewarisi suite dari TestCase-nya;
+     * - bug ad-hoc memakai suite yang dipilih QA di form.
+     * Project selalu diturunkan dari suite supaya keduanya tidak pernah
+     * bertentangan, dan tiap bug pasti punya rujukan untuk diagregasi.
+     */
+    let linkedSuiteId = data.suiteId?.trim() || null;
+    if (!linkedSuiteId && linkedTestCaseId) {
+      const tc = await prisma.testCase.findUnique({
+        where: { id: linkedTestCaseId },
+        select: { suiteId: true },
+      });
+      linkedSuiteId = tc?.suiteId ?? null;
+    }
+
+    let linkedProjectId: string | null = null;
+    if (linkedSuiteId) {
+      const suite = await prisma.suite.findUnique({
+        where: { id: linkedSuiteId },
+        select: { projectId: true },
+      });
+      if (!suite) return { error: "Suite tidak ditemukan." };
+      linkedProjectId = suite.projectId;
+    }
+
     const bug = await prisma.bug.create({
       data: {
         title,
@@ -113,6 +141,8 @@ export async function createBug(data: {
         externalLink: data.externalLink?.trim() || null,
         testCaseId: linkedTestCaseId,
         testRunResultId: data.testRunResultId || null,
+        suiteId: linkedSuiteId,
+        projectId: linkedProjectId,
         createdById: user.id,
       },
     });

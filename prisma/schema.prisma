@@ -113,6 +113,7 @@ model Project {
   createdBy User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
   suites    Suite[]
   testRuns  TestRun[]
+  bugs      Bug[]
 }
 
 model Suite {
@@ -136,6 +137,7 @@ model Suite {
 
   testCases TestCase[]
   sections  Section[]
+  bugs      Bug[]
 
   @@unique([projectId, parentId, code])
   @@index([projectId, order])
@@ -281,6 +283,10 @@ model Bug {
   externalLink String?
   testCaseId  String?
   testRunResultId String?
+  /** Suite/modul tempat temuan ad-hoc berada (bug non-eksekusi). */
+  suiteId     String?
+  /** Project pemilik suite di atas — dipakai untuk agregasi jumlah bug. */
+  projectId   String?
   createdById String?
   resolvedAt  DateTime?
   createdAt   DateTime   @default(now())
@@ -288,12 +294,18 @@ model Bug {
 
   testCase      TestCase?      @relation(fields: [testCaseId], references: [id], onDelete: SetNull)
   testRunResult TestRunResult? @relation(fields: [testRunResultId], references: [id], onDelete: SetNull)
+  // Hapus suite tidak boleh menghapus riwayat bug — cukup lepas rujukannya.
+  suite         Suite?         @relation(fields: [suiteId], references: [id], onDelete: SetNull)
+  project       Project?       @relation(fields: [projectId], references: [id], onDelete: SetNull)
   createdBy     User?          @relation(fields: [createdById], references: [id], onDelete: SetNull)
 
   attachments   Attachment[]
 
   @@index([testCaseId, createdAt])
   @@index([testRunResultId, createdAt])
+  @@index([suiteId])
+  // Agregasi "project/suite mana paling banyak bug" -> GROUP BY kolom ini.
+  @@index([projectId])
   // Dipakai daftar Bugs & laporan mingguan (filter status OPEN/IN_PROGRESS).
   @@index([status])
 }

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { createBug } from "@/lib/actions/automation-bugs";
-import type { BugDetailPayload, BugRow } from "@/types/api";
+import type { BugDetailPayload, BugRow, SuiteOption, SuitesPayload } from "@/types/api";
 
 const SEVERITIES = [
   { value: "LOW", label: "Low" },
@@ -19,17 +19,19 @@ const labelStyle: React.CSSProperties = {
   fontWeight: 700,
   color: "#64748B",
   textTransform: "uppercase",
-  letterSpacing: "0.04em",
+  letterSpacing: "0.05em",
   marginBottom: "0.3rem",
 };
 
+/** Field teks/select: tinggi seragam 36px sesuai control bar. */
 const fieldStyle: React.CSSProperties = {
   width: "100%",
+  height: 36,
+  padding: "0 0.75rem",
   border: "1px solid #E2E8F0",
   borderRadius: 8,
-  padding: "0.5rem 0.75rem",
   fontSize: "0.75rem",
-  color: "#1F2937",
+  color: "#1E293B",
   background: "#fff",
   outline: "none",
   boxSizing: "border-box",
@@ -50,10 +52,33 @@ export function ReportGeneralBugModal({
 }) {
   const [title, setTitle] = useState("");
   const [severity, setSeverity] = useState("MEDIUM");
+  const [suiteId, setSuiteId] = useState("");
+  const [suites, setSuites] = useState<SuiteOption[]>([]);
+  const [suitesLoading, setSuitesLoading] = useState(true);
   const [description, setDescription] = useState("");
   const [externalLink, setExternalLink] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // Opsi Suite / Module: daftar flat lintas project dari /api/suites.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/suites", { cache: "no-store" });
+        if (!res.ok) throw new Error();
+        const data = (await res.json()) as SuitesPayload;
+        if (!cancelled) setSuites(data.suites);
+      } catch {
+        if (!cancelled) setError("Gagal memuat daftar suite.");
+      } finally {
+        if (!cancelled) setSuitesLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -77,6 +102,11 @@ export function ReportGeneralBugModal({
       setError("Judul bug wajib diisi.");
       return;
     }
+    // Setiap bug harus punya rujukan suite (project diturunkan dari suite).
+    if (!suiteId) {
+      setError("Suite / Module wajib dipilih.");
+      return;
+    }
     setError(null);
     setSaving(true);
     const res = await createBug({
@@ -84,6 +114,7 @@ export function ReportGeneralBugModal({
       description: description.trim() || undefined,
       severity: severity || undefined,
       externalLink: externalLink.trim() || undefined,
+      suiteId: suiteId || undefined,
     });
     if (res.error) {
       setSaving(false);
@@ -213,23 +244,48 @@ export function ReportGeneralBugModal({
             />
           </div>
 
-          <div>
-            <label htmlFor="general-bug-severity" style={labelStyle}>
-              Severity
-            </label>
-            <select
-              id="general-bug-severity"
-              value={severity}
-              onChange={(e) => setSeverity(e.target.value)}
-              disabled={saving}
-              style={{ ...fieldStyle, cursor: saving ? "not-allowed" : "pointer" }}
-            >
-              {SEVERITIES.map((s) => (
-                <option key={s.value} value={s.value}>
-                  {s.label}
+          {/* Severity + Suite / Module sejajar dalam satu baris grid */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "1rem" }}>
+            <div>
+              <label htmlFor="general-bug-severity" style={labelStyle}>
+                Severity
+              </label>
+              <select
+                id="general-bug-severity"
+                value={severity}
+                onChange={(e) => setSeverity(e.target.value)}
+                disabled={saving}
+                style={{ ...fieldStyle, cursor: saving ? "not-allowed" : "pointer" }}
+              >
+                {SEVERITIES.map((s) => (
+                  <option key={s.value} value={s.value}>
+                    {s.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label htmlFor="general-bug-suite" style={labelStyle}>
+                Suite / Module <span style={{ color: "#E11D48" }}>*</span>
+              </label>
+              <select
+                id="general-bug-suite"
+                value={suiteId}
+                onChange={(e) => setSuiteId(e.target.value)}
+                disabled={saving || suitesLoading}
+                style={{ ...fieldStyle, cursor: saving || suitesLoading ? "not-allowed" : "pointer" }}
+              >
+                <option value="">
+                  {suitesLoading ? "Memuat suite…" : "Pilih Suite / Modul..."}
                 </option>
-              ))}
-            </select>
+                {suites.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name} — {s.projectName}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <div>
@@ -243,7 +299,7 @@ export function ReportGeneralBugModal({
               disabled={saving}
               rows={4}
               placeholder="Jelaskan temuan, langkah reproduksi, dan dampaknya..."
-              style={{ ...fieldStyle, resize: "vertical", lineHeight: 1.55 }}
+              style={{ ...fieldStyle, height: "auto", padding: "0.5rem 0.75rem", resize: "vertical", lineHeight: 1.55 }}
             />
           </div>
 
@@ -275,7 +331,7 @@ export function ReportGeneralBugModal({
             gap: "0.75rem",
             padding: "1rem 1.5rem",
             borderTop: "1px solid #F1F5F9",
-            background: "rgba(248, 250, 252, 0.5)",
+            background: "#fff",
           }}
         >
           <button
@@ -283,7 +339,8 @@ export function ReportGeneralBugModal({
             onClick={onClose}
             disabled={saving}
             style={{
-              padding: "0.5rem 1rem",
+              height: 36,
+              padding: "0 1rem",
               border: "none",
               borderRadius: 8,
               background: "transparent",
@@ -302,20 +359,22 @@ export function ReportGeneralBugModal({
             onClick={() => void save()}
             disabled={saving}
             style={{
-              padding: "0.5rem 1.25rem",
+              height: 36,
+              padding: "0 1.25rem",
               border: "none",
               borderRadius: 8,
-              background: "#0F172A",
-              color: "#fff",
+              background: "#FFC348",
+              color: "#0F172A",
               fontSize: "0.75rem",
               fontWeight: 700,
+              boxShadow: "0 1px 2px rgba(15, 23, 42, 0.08)",
               cursor: saving ? "wait" : "pointer",
               transition: "background-color 0.15s ease",
             }}
             onMouseEnter={(e) => {
-              if (!saving) e.currentTarget.style.background = "#1E293B";
+              if (!saving) e.currentTarget.style.background = "#F0B53D";
             }}
-            onMouseLeave={(e) => (e.currentTarget.style.background = "#0F172A")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "#FFC348")}
           >
             {saving ? "Menyimpan..." : "Laporkan Bug"}
           </button>

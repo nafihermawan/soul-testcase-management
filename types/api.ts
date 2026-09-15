@@ -111,6 +111,10 @@ export type BugRow = {
   externalLink: string | null;
   createdAt: string;
   testCase: { id: string; tcId: string; title: string } | null;
+  /** Suite/modul tempat bug ditemukan (diisi untuk temuan ad-hoc). */
+  suite: { id: string; name: string } | null;
+  /** Project pemilik suite di atas — dasar agregasi jumlah bug per project. */
+  project: { id: string; name: string } | null;
   createdBy: { name: string | null } | null;
   /** Evidence yang menempel langsung ke bug ini. */
   attachments: AttachmentItem[];
@@ -119,6 +123,16 @@ export type BugRow = {
 };
 
 export type BugsPayload = { bugs: BugRow[] };
+
+/* ---------- /api/suites ---------- */
+export type SuiteOption = {
+  id: string;
+  name: string;
+  code: string;
+  projectName: string;
+};
+
+export type SuitesPayload = { suites: SuiteOption[] };
 
 /* ---------- /api/bugs/[id] ---------- */
 export type BugDetailPayload = {

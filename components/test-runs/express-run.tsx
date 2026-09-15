@@ -540,7 +540,7 @@ export function ExpressRunForm({
         >
           <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
             <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)" }}>
-              Nama Run <span style={{ color: "#EF4444" }}>*</span>
+              Run Name<span style={{ color: "#EF4444" }}>*</span>
             </label>
             <input
               value={runName}

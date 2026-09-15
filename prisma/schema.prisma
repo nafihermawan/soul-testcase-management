@@ -219,6 +219,8 @@ model TestRun {
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
   completedAt  DateTime?
+  /** Rangkuman pengujian makro yang diisi QA di Completion Summary Modal. */
+  overallNotes String?
 
   project Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
   createdBy User?         @relation(fields: [createdById], references: [id], onDelete: SetNull)

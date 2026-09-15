@@ -290,12 +290,19 @@ export async function setRunStatus(
 }
 
 /** Tandai run selesai. */
-export async function completeRun(runId: string): Promise<TestRunActionState> {
+export async function completeRun(
+  runId: string,
+  overallNotes?: string
+): Promise<TestRunActionState> {
   await requireRole("QA");
   try {
     await prisma.testRun.update({
       where: { id: runId },
-      data: { status: "COMPLETED", completedAt: new Date() },
+      data: {
+        status: "COMPLETED",
+        completedAt: new Date(),
+        overallNotes: overallNotes?.trim() || null,
+      },
     });
     revalidatePath(`/test-runs/${runId}`);
     revalidatePath("/test-runs");
@@ -306,7 +313,10 @@ export async function completeRun(runId: string): Promise<TestRunActionState> {
 }
 
 /** Selesaikan run dan tandai otomatis semua TC yang belum dieksekusi sebagai SKIPPED. */
-export async function completeRunWithSkip(runId: string): Promise<TestRunActionState> {
+export async function completeRunWithSkip(
+  runId: string,
+  overallNotes?: string
+): Promise<TestRunActionState> {
   await requireRole("QA");
   try {
     await prisma.$transaction([
@@ -316,7 +326,11 @@ export async function completeRunWithSkip(runId: string): Promise<TestRunActionS
       }),
       prisma.testRun.update({
         where: { id: runId },
-        data: { status: "COMPLETED", completedAt: new Date() },
+        data: {
+          status: "COMPLETED",
+          completedAt: new Date(),
+          overallNotes: overallNotes?.trim() || null,
+        },
       }),
     ]);
     revalidatePath(`/test-runs/${runId}`);

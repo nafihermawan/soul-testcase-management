@@ -187,8 +187,9 @@ export function RunExecutor({
   const [unlinkPending, setUnlinkPending] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deletePending, setDeletePending] = useState(false);
-  // Modal konfirmasi complete dgn untested
-  const [completeWarnOpen, setCompleteWarnOpen] = useState(false);
+  // Modal ringkasan + overall notes sebelum Complete (Completion Summary)
+  const [completeOpen, setCompleteOpen] = useState(false);
+  const [overallNotes, setOverallNotes] = useState("");
   const [editOpen, setEditOpen] = useState(false);
   const [completing, setCompleting] = useState(false);
   // Modal report
@@ -320,25 +321,25 @@ export function RunExecutor({
   };
 
   // --- Complete Run flow ---
+  // Complete selalu lewat Completion Summary Modal dulu: QA me-review catatan
+  // per TC dan mengisi overall notes sebelum status run diubah.
   const handleCompleteClick = () => {
-    if (untested > 0) {
-      setCompleteWarnOpen(true);
-    } else {
-      void finalizeComplete(false);
-    }
+    setCompleteOpen(true);
   };
 
-  const finalizeComplete = async (skipUntested: boolean) => {
+  const finalizeComplete = async () => {
     setCompleting(true);
-    const res = skipUntested
-      ? await completeRunWithSkip(runId)
-      : await completeRun(runId);
+    // Ada TC untested -> server menandainya SKIPPED sekaligus menyelesaikan run.
+    const res =
+      untested > 0
+        ? await completeRunWithSkip(runId, overallNotes)
+        : await completeRun(runId, overallNotes);
     setCompleting(false);
-    setCompleteWarnOpen(false);
     if (res.error) {
       showToast(res.error, "error");
       return;
     }
+    setCompleteOpen(false);
     showToast("Test run diselesaikan.", "success");
     refresh();
   };
@@ -959,103 +960,18 @@ export function RunExecutor({
         onCancel={() => setConfirmDelete(false)}
       />
 
-      {/* Modal: peringatan untested sebelum Complete */}
-      {completeWarnOpen &&
-        createPortal(
-          <div
-            role="alertdialog"
-            aria-modal="true"
-            style={{
-              position: "fixed",
-              inset: 0,
-              zIndex: 260,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              padding: "1rem",
-              background: "rgba(0,0,0,0.5)",
-              backdropFilter: "blur(4px)",
-            }}
-            onClick={() => setCompleteWarnOpen(false)}
-          >
-            <div
-              style={{
-                width: "100%",
-                maxWidth: 420,
-                background: "#fff",
-                borderRadius: 12,
-                boxShadow: "0 25px 50px -12px rgba(0,0,0,0.25)",
-                padding: "1.5rem",
-                textAlign: "center",
-                animation: "modalIn 0.18s ease-out",
-              }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div
-                style={{
-                  margin: "0 auto 0.75rem",
-                  width: 48,
-                  height: 48,
-                  borderRadius: "50%",
-                  background: "#FFFBEB",
-                  color: "#B45309",
-                  border: "1px solid #FDE68A",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontSize: 22,
-                }}
-              >
-                ⚠️
-              </div>
-              <h3 style={{ fontSize: "1.05rem", fontWeight: 700, margin: "0 0 0.5rem", color: "#111827" }}>
-                Masih Terdapat Test Case Belum Dieksekusi
-              </h3>
-              <p style={{ fontSize: "0.85rem", color: "#374151", margin: "0 0 1.25rem", lineHeight: 1.55 }}>
-                Masih terdapat <strong>{untested} Test Case</strong> yang belum dieksekusi. Test Case
-                tersebut akan otomatis ditandai sebagai <strong>Skipped</strong>.
-              </p>
-              <div style={{ display: "flex", gap: "0.5rem" }}>
-                <button
-                  type="button"
-                  onClick={() => setCompleteWarnOpen(false)}
-                  style={{
-                    flex: 1,
-                    padding: "0.5rem 0",
-                    borderRadius: "3px !important",
-                    border: "1px solid #D1D5DB",
-                    background: "#fff",
-                    color: "#374151",
-                    fontWeight: 500,
-                    fontSize: "0.85rem",
-                    cursor: "pointer",
-                  }}
-                >
-                  Batal
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void finalizeComplete(true)}
-                  disabled={completing}
-                  style={{
-                    flex: 1,
-                    padding: "0.5rem 0",
-                    borderRadius: "3px !important",
-                    border: "none",
-                    background: "#F59E0B",
-                    color: "#0F172A",
-                    fontWeight: 600,
-                    fontSize: "0.85rem",
-                    cursor: completing ? "wait" : "pointer",
-                  }}
-                >
-                  {completing ? "Memproses..." : "Selesaikan Run"}
-                </button>
-              </div>
-            </div>
-          </div>,
-          document.body
-        )}
+      {/* Modal: Completion Summary — review catatan per TC + overall notes */}
+      {completeOpen && (
+        <CompleteRunModal
+          items={items}
+          untested={untested}
+          overallNotes={overallNotes}
+          onOverallNotesChange={setOverallNotes}
+          onCancel={() => setCompleteOpen(false)}
+          onConfirm={() => void finalizeComplete()}
+          completing={completing}
+        />
+      )}
 
       {/* Modal: Report export options */}
       {reportOpen &&
@@ -1477,6 +1393,310 @@ function RunItemCard({
         )}
       </div>
     </div>
+  );
+}
+
+/* Modal: ringkasan hasil pengujian sebelum run diselesaikan (Completion Summary). */
+function CompleteRunModal({
+  items,
+  untested,
+  overallNotes,
+  onOverallNotesChange,
+  onCancel,
+  onConfirm,
+  completing,
+}: {
+  items: RunResultItem[];
+  untested: number;
+  overallNotes: string;
+  onOverallNotesChange: (v: string) => void;
+  onCancel: () => void;
+  onConfirm: () => void;
+  completing: boolean;
+}) {
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !completing) onCancel();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [onCancel, completing]);
+
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, []);
+
+  // Rangkum hanya TC yang benar-benar diisi QA (notes dan/atau actual result).
+  const noted = items.filter((i) => (i.notes ?? "").trim() || (i.actualResult ?? "").trim());
+
+  const labelStyle: React.CSSProperties = {
+    display: "block",
+    fontSize: "0.75rem",
+    fontWeight: 700,
+    color: "#64748B",
+    textTransform: "uppercase",
+    letterSpacing: "0.05em",
+    marginBottom: "0.5rem",
+  };
+
+  return createPortal(
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Complete Test Run"
+      onClick={() => {
+        if (!completing) onCancel();
+      }}
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 260,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "1rem",
+        background: "rgba(15, 23, 42, 0.4)",
+        backdropFilter: "blur(4px)",
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: "100%",
+          maxWidth: 576,
+          maxHeight: "85vh",
+          background: "#fff",
+          borderRadius: 16,
+          border: "1px solid #F1F5F9",
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
+          boxShadow: "0 25px 50px -12px rgba(0,0,0,0.25)",
+          animation: "modalIn 0.18s ease-out",
+        }}
+      >
+        {/* Body: satu-satunya area yang scroll; footer di bawahnya tetap terlihat. */}
+        <div
+          style={{
+            flex: 1,
+            minHeight: 0,
+            overflowY: "auto",
+            padding: "1.5rem",
+            display: "flex",
+            flexDirection: "column",
+            gap: "1.25rem",
+          }}
+        >
+          <div>
+            <h3 style={{ margin: 0, fontSize: "1.125rem", fontWeight: 700, color: "#0F172A" }}>
+              Complete Test Run
+            </h3>
+            <p style={{ margin: "0.35rem 0 0", fontSize: "0.85rem", color: "#64748B", lineHeight: 1.5 }}>
+              Review hasil pengujian dan tambahkan catatan akhir sebelum menyelesaikan run.
+            </p>
+          </div>
+
+          {untested > 0 && (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "flex-start",
+                gap: "0.5rem",
+                padding: "0.65rem 0.85rem",
+                borderRadius: 8,
+                background: "#FFFBEB",
+                border: "1px solid #FDE68A",
+                color: "#B45309",
+                fontSize: "0.78rem",
+                lineHeight: 1.5,
+              }}
+            >
+              <span aria-hidden="true">⚠️</span>
+              <span>
+                Masih terdapat <strong>{untested} Test Case</strong> yang belum dieksekusi. Test Case
+                tersebut akan otomatis ditandai sebagai <strong>Skipped</strong>.
+              </span>
+            </div>
+          )}
+
+          <div>
+            <div style={labelStyle}>Case Notes</div>
+            <div
+              style={{
+                maxHeight: 220,
+                overflowY: "auto",
+                padding: "0.75rem",
+                paddingRight: 4,
+                border: "1px solid #E2E8F0",
+                borderRadius: 12,
+                background: "rgba(248, 250, 252, 0.5)",
+                display: "flex",
+                flexDirection: "column",
+                gap: "0.75rem",
+              }}
+            >
+              {noted.length === 0 ? (
+                <div style={{ fontSize: "0.75rem", color: "#94A3B8", fontStyle: "italic", padding: "0.5rem" }}>
+                  Tidak ada catatan spesifik pada test case.
+                </div>
+              ) : (
+                noted.map((it) => {
+                  const b = STATUS_BADGE[it.status];
+                  return (
+                    <div
+                      key={it.id}
+                      style={{ background: "#fff", border: "1px solid #E2E8F0", borderRadius: 8, padding: "0.6rem 0.75rem" }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.5rem" }}>
+                        <span
+                          style={{
+                            fontFamily: "var(--font-mono, monospace)",
+                            fontSize: "0.7rem",
+                            fontWeight: 700,
+                            color: "#475569",
+                          }}
+                        >
+                          {it.testCase?.tcId ?? "—"}
+                        </span>
+                        <span
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            padding: "0.15rem 0.55rem",
+                            borderRadius: 999,
+                            background: b.bg,
+                            color: b.color,
+                            border: `1px solid ${b.border}`,
+                            fontSize: "0.68rem",
+                            fontWeight: b.bold ? 700 : 600,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {b.label}
+                        </span>
+                      </div>
+                      <div style={{ marginTop: "0.2rem", fontSize: "0.78rem", fontWeight: 600, color: "#1F2937" }}>
+                        {it.titleSnapshot}
+                      </div>
+                      {(it.actualResult ?? "").trim() !== "" && (
+                        <div style={{ marginTop: "0.25rem", fontSize: "0.74rem", color: "#475569", lineHeight: 1.5 }}>
+                          <span style={{ fontWeight: 600, color: "#64748B" }}>Actual: </span>
+                          {it.actualResult}
+                        </div>
+                      )}
+                      {(it.notes ?? "").trim() !== "" && (
+                        <div style={{ marginTop: "0.2rem", fontSize: "0.74rem", color: "#475569", lineHeight: 1.5 }}>
+                          <span style={{ fontWeight: 600, color: "#64748B" }}>Notes: </span>
+                          {it.notes}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+
+          <div>
+            <label htmlFor="overall-testing-notes" style={labelStyle}>
+              Overall Testing Notes
+            </label>
+            <textarea
+              id="overall-testing-notes"
+              value={overallNotes}
+              onChange={(e) => onOverallNotesChange(e.target.value)}
+              placeholder="Tuliskan rangkuman hasil pengujian seluruh run di sini..."
+              style={{
+                width: "100%",
+                height: 96,
+                padding: "0.75rem",
+                border: "1px solid #E2E8F0",
+                borderRadius: 8,
+                fontSize: "0.75rem",
+                color: "#1F2937",
+                background: "#fff",
+                outline: "none",
+                resize: "vertical",
+                boxSizing: "border-box",
+                transition: "border-color 0.15s ease, box-shadow 0.15s ease",
+              }}
+              onFocus={(e) => {
+                e.currentTarget.style.borderColor = "#FBBF24";
+                e.currentTarget.style.boxShadow = "0 0 0 2px #FDE68A";
+              }}
+              onBlur={(e) => {
+                e.currentTarget.style.borderColor = "#E2E8F0";
+                e.currentTarget.style.boxShadow = "none";
+              }}
+            />
+          </div>
+        </div>
+
+        {/* Footer: di luar area scroll supaya tombol aksi selalu terlihat. */}
+        <div
+          style={{
+            flex: "none",
+            padding: "1rem 1.5rem",
+            borderTop: "1px solid #F1F5F9",
+            background: "#fff",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "flex-end",
+            gap: "0.75rem",
+          }}
+        >
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={completing}
+            style={{
+              height: 40,
+              padding: "0 1rem",
+              fontSize: "0.75rem",
+              fontWeight: 600,
+              color: "#475569",
+              background: "transparent",
+              border: "none",
+              borderRadius: 8,
+              cursor: completing ? "not-allowed" : "pointer",
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = "#F1F5F9")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={completing}
+            style={{
+              height: 40,
+              padding: "0 1.25rem",
+              fontSize: "0.75rem",
+              fontWeight: 700,
+              color: "#fff",
+              background: "#2563EB",
+              border: "none",
+              borderRadius: 8,
+              boxShadow: "0 1px 2px rgba(15, 23, 42, 0.1)",
+              cursor: completing ? "wait" : "pointer",
+              transition: "background-color 0.15s ease",
+            }}
+            onMouseEnter={(e) => {
+              if (!completing) e.currentTarget.style.background = "#1D4ED8";
+            }}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "#2563EB")}
+          >
+            {completing ? "Menyelesaikan..." : "Complete Run"}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
   );
 }
 

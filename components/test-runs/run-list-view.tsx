@@ -53,16 +53,16 @@ const TABLE_COLUMNS: {
   align?: "left" | "right";
   nowrap?: boolean;
 }[] = [
-  { label: "Run ID", width: "13%", pad: "0.65rem 1rem", nowrap: true },
-  { label: "Nama Run", width: "14%", pad: "0.65rem 1rem" },
+  { label: "ID", width: "13%", pad: "0.65rem 1rem", nowrap: true },
+  { label: "Run Name", width: "14%", pad: "0.65rem 1rem" },
   { label: "Projects Covered", width: "11%", pad: "0.65rem 0.5rem" },
   { label: "Suites Included", width: "11%", pad: "0.65rem 0.5rem" },
   { label: "Sprint", width: "6%", pad: "0.65rem 0.5rem" },
   { label: "Status", width: "12%", pad: "0.65rem 0.5rem" },
   { label: "Pass Rate", width: "6%", pad: "0.65rem 0.5rem" },
-  { label: "Dibuat Oleh", width: "9%", pad: "0.65rem 0.5rem" },
-  { label: "Tanggal", width: "10%", pad: "0.65rem 1rem" },
-  { label: "Aksi", width: "8%", pad: "0.65rem 1rem", align: "right" },
+  { label: "Assignee", width: "9%", pad: "0.65rem 0.5rem" },
+  { label: "Created Date", width: "10%", pad: "0.65rem 1rem" },
+  { label: "Actions", width: "8%", pad: "0.65rem 1rem", align: "right" },
 ];
 
 export type ActiveRunsSearchParams = {

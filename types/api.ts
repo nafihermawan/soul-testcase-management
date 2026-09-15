@@ -112,6 +112,17 @@ export type BugRow = {
 
 export type BugsPayload = { bugs: BugRow[]; /** Upload attachment butuh role QA. */ canAttach: boolean };
 
+/* ---------- /api/bugs/[id] ---------- */
+export type BugDetailPayload = {
+  bug: BugRow;
+  /** Upload attachment butuh role QA. */
+  canAttach: boolean;
+  /** Ubah status bug butuh role DEVELOPER. */
+  canUpdateStatus: boolean;
+  /** Hapus bug butuh role QA. */
+  canDelete: boolean;
+};
+
 /* ---------- /api/automation ---------- */
 export type AutomationRowStatus =
   | "NOT_AUTOMATED"

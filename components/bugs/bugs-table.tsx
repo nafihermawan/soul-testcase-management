@@ -5,8 +5,9 @@ import { ExternalLink, Paperclip, Search, Trash2 } from "lucide-react";
 import { deleteBug, updateBugStatus } from "@/lib/actions/automation-bugs";
 import { ConfirmDialog, Toast, useToast } from "@/components/ui/feedback";
 import { BugAttachmentsModal } from "@/components/bugs/bug-attachments-modal";
+import { BugDetailModal } from "@/components/bugs/bug-detail-modal";
 import { entityCode } from "@/lib/format";
-import type { AttachmentItem } from "@/types/api";
+import type { AttachmentItem, BugStatus } from "@/types/api";
 
 export type BugRow = {
   id: string;
@@ -38,16 +39,16 @@ const severityStyle: Record<string, { bg: string; color: string }> = {
 export function BugsPageClient({
   bugs,
   canAttach = false,
-  reload,
 }: {
   bugs: BugRow[];
   /** Upload/hapus attachment butuh role QA. */
   canAttach?: boolean;
-  reload?: () => void;
 }) {
   const [deleteTarget, setDeleteTarget] = useState<BugRow | null>(null);
   const [deletePending, setDeletePending] = useState(false);
   const [evidenceBug, setEvidenceBug] = useState<BugRow | null>(null);
+  /** Bug yang detailnya sedang dibuka di modal (klik baris tabel). */
+  const [detailBugId, setDetailBugId] = useState<string | null>(null);
   const { toast, showToast, dismissToast } = useToast();
   // Cermin lokal daftar bug: upload/hapus evidence cukup memperbarui barisnya
   // sendiri (tanpa refetch halaman, supaya modal & posisi scroll tidak hilang).
@@ -60,6 +61,11 @@ export function BugsPageClient({
   const patchBugAttachments = (bugId: string, list: AttachmentItem[]) => {
     setLocalBugs((prev) => prev.map((b) => (b.id === bugId ? { ...b, attachments: list } : b)));
     setEvidenceBug((prev) => (prev && prev.id === bugId ? { ...prev, attachments: list } : prev));
+  };
+
+  /** Patch satu baris bug di daftar lokal (status / field lain). */
+  const patchBug = (bugId: string, patch: Partial<BugRow>) => {
+    setLocalBugs((prev) => prev.map((b) => (b.id === bugId ? { ...b, ...patch } : b)));
   };
 
   // Filter pencarian header banner
@@ -76,26 +82,33 @@ export function BugsPageClient({
     return hay.includes(q);
   });
 
+  /**
+   * Ubah status bug langsung di barisnya. Server tetap yang menulis (termasuk
+   * auto-PASS hasil run yang FAIL); daftar lokal di-patch di tempat supaya
+   * halaman tidak tertukar ke skeleton hanya karena satu baris berubah.
+   */
   const changeStatus = async (bugId: string, status: BugRow["status"]) => {
     const res = await updateBugStatus(bugId, status);
     if (res?.error) {
       showToast(res.error, "error");
+      return;
     }
-    reload?.();
+    patchBug(bugId, { status });
   };
 
   const removeBug = async () => {
     if (!deleteTarget) return;
+    const targetId = deleteTarget.id;
     setDeletePending(true);
-    const res = await deleteBug(deleteTarget.id);
+    const res = await deleteBug(targetId);
     setDeletePending(false);
     setDeleteTarget(null);
     if (res?.error) {
       showToast(res.error, "error");
       return;
     }
+    setLocalBugs((prev) => prev.filter((b) => b.id !== targetId));
     showToast("Bug dihapus.", "success");
-    reload?.();
   };
 
   const selectStyle: CSSProperties = {
@@ -233,7 +246,13 @@ export function BugsPageClient({
                   const st = statusStyle[b.status];
                   const sev = b.severity ? (severityStyle[b.severity] ?? severityStyle.LOW) : null;
                   return (
-                    <tr key={b.id} style={{ borderTop: "1px solid var(--border)" }}>
+                    <tr
+                      key={b.id}
+                      onClick={() => setDetailBugId(b.id)}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = "#F8FAFC")}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = "")}
+                      style={{ borderTop: "1px solid var(--border)", cursor: "pointer" }}
+                    >
                       <td style={{ padding: "0.6rem 1.25rem" }}>
                         <span
                           style={{
@@ -252,6 +271,7 @@ export function BugsPageClient({
                           <span>{b.title}</span>
                           {b.externalLink && (
                             <a href={b.externalLink} target="_blank" rel="noreferrer" title={b.externalLink}
+                              onClick={(e) => e.stopPropagation()}
                               style={{ display: "inline-flex", alignItems: "center", color: "var(--brand-600)", textDecoration: "none" }}>
                               <ExternalLink size={13} />
                             </a>
@@ -262,6 +282,7 @@ export function BugsPageClient({
                             TC Ref:{" "}
                             <a
                               href={`/test-cases/${b.testCase.id}`}
+                              onClick={(e) => e.stopPropagation()}
                               style={{ color: "#2563EB", textDecoration: "none" }}
                             >
                               {b.testCase.tcId}
@@ -275,7 +296,10 @@ export function BugsPageClient({
                         )}
                         <button
                           type="button"
-                          onClick={() => setEvidenceBug(b)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEvidenceBug(b);
+                          }}
                           title="Screenshot / video evidence"
                           style={{
                             display: "inline-flex",
@@ -307,6 +331,7 @@ export function BugsPageClient({
                       <td style={{ padding: "0.6rem 0.5rem" }}>
                         <select
                           value={b.status}
+                          onClick={(e) => e.stopPropagation()}
                           onChange={(e) => changeStatus(b.id, e.target.value as BugRow["status"])}
                           style={{ padding: "0.25rem 0.5rem", borderRadius: 6, border: "1px solid var(--border-strong)", fontSize: "0.78rem", fontWeight: 600, background: st.bg, color: st.color, cursor: "pointer" }}
                         >
@@ -325,7 +350,10 @@ export function BugsPageClient({
                       <td style={{ padding: "0.6rem 1.25rem", textAlign: "right" }}>
                         <button
                           type="button"
-                          onClick={() => setDeleteTarget(b)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeleteTarget(b);
+                          }}
                           title="Hapus bug"
                           style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 30, height: 30, borderRadius: 8, border: "none", background: "var(--danger-bg)", color: "var(--danger)", cursor: "pointer" }}
                         >
@@ -363,6 +391,16 @@ export function BugsPageClient({
           canEdit={canAttach}
           onClose={() => setEvidenceBug(null)}
           onChange={(list) => patchBugAttachments(evidenceBug.id, list)}
+        />
+      )}
+
+      {/* Modal detail bug — dibuka dengan klik salah satu baris tabel */}
+      {detailBugId && (
+        <BugDetailModal
+          bugId={detailBugId}
+          onClose={() => setDetailBugId(null)}
+          onStatusChange={(bugId: string, status: BugStatus) => patchBug(bugId, { status })}
+          onDeleted={(bugId: string) => setLocalBugs((prev) => prev.filter((b) => b.id !== bugId))}
         />
       )}
 

@@ -11,9 +11,10 @@ import { createBug, unlinkBugFromRunResult } from "@/lib/actions/automation-bugs
 import { ConfirmDialog, Spinner, Toast, useToast } from "@/components/ui/feedback";
 import { entityCode, runCodeOf } from "@/lib/format";
 import { AttachmentsPanel } from "@/components/attachments/attachments-panel";
+import { BugDetailModal } from "@/components/bugs/bug-detail-modal";
 import { EditRunModal } from "@/components/test-runs/edit-run-modal";
 import type { ExpressRunInitial } from "@/components/test-runs/express-run";
-import type { AttachmentItem } from "@/types/api";
+import type { AttachmentItem, BugStatus } from "@/types/api";
 
 export type RunResultItem = {
   id: string;
@@ -180,6 +181,8 @@ export function RunExecutor({
   const toggleSection = (key: string) =>
     setCollapsedSections((prev) => ({ ...prev, [key]: !prev[key] }));
   const [modalItem, setModalItem] = useState<RunResultItem | null>(null);
+  // Bug yang sedang dibuka di Bug Detail Modal (dari badge bug di baris TC).
+  const [bugDetailId, setBugDetailId] = useState<string | null>(null);
   const [bugItem, setBugItem] = useState<RunResultItem | null>(null);
   const [metaOpen, setMetaOpen] = useState(true);
   // Popover breakdown project & suite
@@ -223,6 +226,41 @@ export function RunExecutor({
       )
     );
     setModalItem((prev) => (prev && prev.id === resultId ? { ...prev, ...patch } : prev));
+  };
+
+  /** Terapkan perubahan pada daftar hasil run, di flat list maupun mirror per-project. */
+  const mapResults = (fn: (r: RunResultItem) => RunResultItem) => {
+    setItems((prev) => prev.map(fn));
+    setGroups((prev) => prev.map((g) => ({ ...g, items: g.items.map(fn) })));
+    setModalItem((prev) => (prev ? fn(prev) : prev));
+  };
+
+  /** Patch satu bug di semua cermin lokal (dipakai Bug Detail Modal). */
+  const patchBug = (bugId: string, patch: Partial<NonNullable<RunResultItem["bugs"]>[number]>) => {
+    mapResults((r) =>
+      r.bugs?.some((b) => b.id === bugId)
+        ? { ...r, bugs: r.bugs.map((b) => (b.id === bugId ? { ...b, ...patch } : b)) }
+        : r
+    );
+  };
+
+  /** Buang satu bug dari semua cermin lokal setelah dihapus. */
+  const removeBug = (bugId: string) => {
+    mapResults((r) =>
+      r.bugs?.some((b) => b.id === bugId) ? { ...r, bugs: r.bugs.filter((b) => b.id !== bugId) } : r
+    );
+  };
+
+  /**
+   * Bug yang di-RESOLVED/CLOSED otomatis membuat TestRunResult FAIL-nya jadi
+   * PASS di server; cermin lokal disamakan supaya kartu tidak menampilkan data
+   * basi sampai halaman di-reload.
+   */
+  const handleBugStatusChange = (bugId: string, status: BugStatus) => {
+    patchBug(bugId, { status });
+    if (status !== "RESOLVED" && status !== "CLOSED") return;
+    const owner = items.find((r) => r.bugs?.some((b) => b.id === bugId));
+    if (owner && owner.status === "FAIL") patchResult(owner.id, { status: "PASS" });
   };
 
   const saveBug = async () => {
@@ -875,6 +913,7 @@ export function RunExecutor({
                               canEdit={canEdit}
                               unlinkPending={unlinkPending}
                               onOpenDetail={() => setModalItem(item)}
+                              onOpenBugDetail={setBugDetailId}
                               onUnlinkBug={(bugId) => void unlinkBug(bugId, item.id)}
                               onOpenBug={() => {
                                 setBugItem(item);
@@ -955,6 +994,16 @@ export function RunExecutor({
         <div style={{ display: "flex", justifyContent: "flex-end" }}>
 
         </div>
+      )}
+
+      {/* Modal: Detail Bug (dibuka dari badge bug di baris TC) */}
+      {bugDetailId && (
+        <BugDetailModal
+          bugId={bugDetailId}
+          onClose={() => setBugDetailId(null)}
+          onStatusChange={handleBugStatusChange}
+          onDeleted={removeBug}
+        />
       )}
 
       {/* Modal: Buat Bug Baru (dari hasil Fail) */}
@@ -1224,6 +1273,7 @@ function RunItemCard({
   canEdit,
   unlinkPending,
   onOpenDetail,
+  onOpenBugDetail,
   onUnlinkBug,
   onOpenBug,
 }: {
@@ -1232,6 +1282,8 @@ function RunItemCard({
   canEdit: boolean;
   unlinkPending: string | null;
   onOpenDetail: () => void;
+  /** Buka Bug Detail Modal untuk bug yang menempel di hasil eksekusi ini. */
+  onOpenBugDetail: (bugId: string) => void;
   onUnlinkBug: (bugId: string) => void;
   onOpenBug: () => void;
 }) {
@@ -1352,48 +1404,51 @@ function RunItemCard({
           {attachedBugs.length > 0 ? (
             attachedBugs.map((b) => {
               const bugCode = entityCode("BUG", b.id);
-              const bugBadge = (
-                <span
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "0.375rem",
-                    padding: "0.25rem 0.625rem",
-                    background: "#FFF1F2",
-                    border: "1px solid #FECDD3",
-                    color: "#BE123C",
-                    borderRadius: 6,
-                    fontFamily: "var(--font-mono, monospace)",
-                    fontSize: "0.6875rem",
-                    fontWeight: 500,
-                  }}
-                >
-                  <Bug size={12} /> {bugCode}
-                  <ExternalLink size={11} style={{ opacity: 0.7 }} />
-                </span>
-              );
               return (
                 <span key={b.id} style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
-                  {b.externalLink ? (
+                  {/* Badge -> Bug Detail Modal (bukan lagi lompat ke /bugs) */}
+                  <button
+                    type="button"
+                    title="Buka detail bug"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onOpenBugDetail(b.id);
+                    }}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "0.375rem",
+                      padding: "0.25rem 0.625rem",
+                      background: "#FFF1F2",
+                      border: "1px solid #FECDD3",
+                      color: "#BE123C",
+                      borderRadius: 6,
+                      fontFamily: "var(--font-mono, monospace)",
+                      fontSize: "0.6875rem",
+                      fontWeight: 500,
+                      cursor: "pointer",
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = "#FFE4E6")}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = "#FFF1F2")}
+                  >
+                    <Bug size={12} /> {bugCode}
+                  </button>
+                  {b.externalLink && (
                     <a
                       href={b.externalLink}
                       target="_blank"
                       rel="noreferrer"
-                      title="Buka detail bug"
+                      title="Buka link eksternal bug"
                       onClick={(e) => e.stopPropagation()}
-                      style={{ textDecoration: "none" }}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        color: "#BE123C",
+                        opacity: 0.7,
+                      }}
                     >
-                      {bugBadge}
+                      <ExternalLink size={12} />
                     </a>
-                  ) : (
-                    <Link
-                      href="/bugs"
-                      title="Buka daftar bug"
-                      onClick={(e) => e.stopPropagation()}
-                      style={{ textDecoration: "none" }}
-                    >
-                      {bugBadge}
-                    </Link>
                   )}
                   {!isCompleted && (
                     <button

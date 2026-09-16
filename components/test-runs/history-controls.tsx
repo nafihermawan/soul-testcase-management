@@ -859,12 +859,23 @@ export function HistoryControls({
             gap: "0.4rem",
             padding: "0.5rem 0.9rem",
             borderRadius: 8,
-            border: "1px solid #D1D5DB",
+            // Outlined/ghost amber — disamakan dengan tombol Filter di
+            // komponen FilterModal (Bugs Tracker / Dashboard / Reports).
+            border: "1px solid #FFC348",
             background: "#fff",
-            color: "#374151",
-            fontWeight: 600,
+            color: "#F59E0B",
+            fontWeight: 500,
             fontSize: "0.83rem",
             cursor: "pointer",
+            transition: "background-color 0.15s ease, border-color 0.15s ease",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = "rgba(255, 251, 235, 0.5)";
+            e.currentTarget.style.borderColor = "#FBBF24";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = "#fff";
+            e.currentTarget.style.borderColor = "#FFC348";
           }}
         >
           <SlidersHorizontal size={14} />

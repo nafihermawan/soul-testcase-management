@@ -12,8 +12,9 @@ export const filterLabelStyle: React.CSSProperties = {
   fontSize: 11,
   fontWeight: 700,
   color: "#64748B",
-  textTransform: "uppercase",
-  letterSpacing: "0.05em",
+  // Title Case — huruf besar di awal kata, bukan kapital semua.
+  textTransform: "none",
+  letterSpacing: "0.01em",
   marginBottom: 4,
 };
 

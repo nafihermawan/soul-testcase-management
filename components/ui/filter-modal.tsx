@@ -25,9 +25,44 @@ export function FilterModal({
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+  // `mounted` menahan portal selama animasi keluar; `shown` adalah target
+  // transisi (fade + scale-up) supaya buka & tutup sama-sama halus.
+  const [mounted, setMounted] = useState(false);
+  const [shown, setShown] = useState(false);
 
   useEffect(() => {
-    if (!open) return;
+    if (open) {
+      setMounted(true);
+      return;
+    }
+    // Tutup: biarkan transisi keluar selesai dulu, baru lepas dari DOM.
+    setShown(false);
+    const t = setTimeout(() => setMounted(false), 200);
+    return () => clearTimeout(t);
+  }, [open]);
+
+  /**
+   * Animasi MASUK dijalankan terpisah dari `mounted`, dengan DUA rAF.
+   *
+   * Satu rAF saja tidak cukup: callback-nya bisa ikut ter-batch dengan commit
+   * React yang baru memasang elemen, sehingga frame "kondisi awal" (opacity 0)
+   * tidak pernah dilukis dan transisinya tidak jalan sama sekali. rAF kedua
+   * memastikan frame awal sudah tergambar sebelum target transisi dipasang.
+   */
+  useEffect(() => {
+    if (!mounted) return;
+    let raf2 = 0;
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => setShown(true));
+    });
+    return () => {
+      cancelAnimationFrame(raf1);
+      cancelAnimationFrame(raf2);
+    };
+  }, [mounted]);
+
+  useEffect(() => {
+    if (!mounted) return;
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") setOpen(false);
     };
@@ -38,7 +73,7 @@ export function FilterModal({
       document.removeEventListener("keydown", onKeyDown);
       document.body.style.overflow = prev;
     };
-  }, [open]);
+  }, [mounted]);
 
   return (
     <>
@@ -51,16 +86,25 @@ export function FilterModal({
           gap: 8,
           height: 40,
           padding: "0 16px",
-          border: "1px solid #E2E8F0",
+          // Outlined/ghost amber: border tipis, latar putih, teks + ikon amber.
+          border: "1px solid #FFC348",
           background: "#fff",
-          color: "#334155",
-          fontWeight: 600,
+          color: "#F59E0B",
+          fontWeight: 500,
           fontSize: 12,
+          borderRadius: 8,
           cursor: "pointer",
-          transition: "background-color 0.15s ease",
+          transition: "background-color 0.15s ease, border-color 0.15s ease",
         }}
-        onMouseEnter={(e) => (e.currentTarget.style.background = "#F8FAFC")}
-        onMouseLeave={(e) => (e.currentTarget.style.background = "#fff")}
+        onMouseEnter={(e) => {
+          // amber-50/50 — tint kuning sangat tipis saat hover.
+          e.currentTarget.style.background = "rgba(255, 251, 235, 0.5)";
+          e.currentTarget.style.borderColor = "#FBBF24";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = "#fff";
+          e.currentTarget.style.borderColor = "#FFC348";
+        }}
       >
         <SlidersHorizontal size={14} />
         Filter
@@ -81,7 +125,7 @@ export function FilterModal({
         )}
       </button>
 
-      {open &&
+      {mounted &&
         typeof document !== "undefined" &&
         createPortal(
           <div
@@ -99,6 +143,8 @@ export function FilterModal({
               padding: 16,
               background: "rgba(15, 23, 42, 0.4)",
               backdropFilter: "blur(4px)",
+              opacity: shown ? 1 : 0,
+              transition: "opacity 0.2s ease-out",
             }}
           >
             <div
@@ -114,6 +160,13 @@ export function FilterModal({
                 display: "flex",
                 flexDirection: "column",
                 gap: 20,
+                opacity: shown ? 1 : 0,
+                // Naik sedikit sambil membesar — gerakan kecil ini membuat
+                // transisinya terasa jelas, bukan sekadar kedip.
+                transform: shown ? "translateY(0) scale(1)" : "translateY(-8px) scale(0.97)",
+                transition:
+                  "opacity 0.2s ease-out, transform 0.2s cubic-bezier(0.16, 1, 0.3, 1)",
+                willChange: "opacity, transform",
               }}
             >
               <div
@@ -122,6 +175,9 @@ export function FilterModal({
                   alignItems: "center",
                   justifyContent: "space-between",
                   gap: 12,
+                  // Garis pemisah di bawah judul; ter-inset oleh padding dialog.
+                  paddingBottom: 14,
+                  borderBottom: "1px solid #F1F5F9",
                 }}
               >
                 <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "#0F172A" }}>

@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ExternalLink, Plus, Search, Trash2 } from "lucide-react";
 import { deleteBug, updateBugStatus } from "@/lib/actions/automation-bugs";
 import { ConfirmDialog, Toast, useToast } from "@/components/ui/feedback";
 import { FilterModal } from "@/components/ui/filter-modal";
 import { CustomSelect, filterLabelStyle } from "@/components/ui/custom-select";
+import { MonthPicker } from "@/components/ui/month-picker";
 import { Select } from "@/components/ui/select";
 import { BugDetailModal } from "@/components/bugs/bug-detail-modal";
 import { ReportGeneralBugModal } from "@/components/bugs/report-general-bug-modal";
@@ -97,36 +98,32 @@ export function BugsPageClient({
   // Filter yang sudah DITERAPKAN (committed).
   const [sevFilter, setSevFilter] = useState<string>("");
   const [statusFilter, setStatusFilter] = useState<string>("");
-  const [fromDate, setFromDate] = useState<string>("");
-  const [toDate, setToDate] = useState<string>("");
+  /** Periode laporan "YYYY-MM" (filter bulan pembuatan bug); "" = semua. */
+  const [monthFilter, setMonthFilter] = useState<string>("");
   // Draft filter: baru berlaku setelah tombol Terapkan di modal filter diklik.
   const [draftSev, setDraftSev] = useState("");
   const [draftStatus, setDraftStatus] = useState("");
-  const [draftFrom, setDraftFrom] = useState("");
-  const [draftTo, setDraftTo] = useState("");
+  const [draftMonth, setDraftMonth] = useState("");
 
   // Sinkronkan draft bila filter yang berlaku berubah dari luar (mis. reset).
   useEffect(() => {
     setDraftSev(sevFilter);
     setDraftStatus(statusFilter);
-    setDraftFrom(fromDate);
-    setDraftTo(toDate);
-  }, [sevFilter, statusFilter, fromDate, toDate]);
+    setDraftMonth(monthFilter);
+  }, [sevFilter, statusFilter, monthFilter]);
 
-  /** Rentang tanggal memakai hari lokal: mulai 00:00 s/d selesai 23:59:59.999. */
-  const fromMs = fromDate ? new Date(`${fromDate}T00:00:00`).getTime() : null;
-  const toMs = toDate ? new Date(`${toDate}T23:59:59.999`).getTime() : null;
+  /** Kunci bulan lokal dari createdAt, mis. "2026-09". */
+  const monthKeyOf = (iso: string): string => {
+    const d = new Date(iso);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  };
 
   const q = query.trim().toLowerCase();
   const visibleBugs = localBugs.filter((b) => {
     if (tab !== "ALL" && sourceTypeOf(b) !== tab) return false;
     if (sevFilter && b.severity !== sevFilter) return false;
     if (statusFilter && b.status !== statusFilter) return false;
-    if (fromMs !== null || toMs !== null) {
-      const created = new Date(b.createdAt).getTime();
-      if (fromMs !== null && created < fromMs) return false;
-      if (toMs !== null && created > toMs) return false;
-    }
+    if (monthFilter && monthKeyOf(b.createdAt) !== monthFilter) return false;
     if (!q) return true;
     const hay = `${b.title} ${b.description ?? ""} ${b.testCase?.tcId ?? ""} ${b.testCase?.title ?? ""} ${b.createdBy?.name ?? ""}`.toLowerCase();
     return hay.includes(q);
@@ -143,7 +140,7 @@ export function BugsPageClient({
   // mendarat di halaman yang sudah kosong.
   useEffect(() => {
     setPage(1);
-  }, [tab, query, sevFilter, statusFilter, fromDate, toDate]);
+  }, [tab, query, sevFilter, statusFilter, monthFilter]);
 
   // `page` bisa tertinggal di halaman yang sudah tidak ada (mis. bug terakhir di
   // halaman terakhir dihapus) -> pakai halaman efektif yang di-clamp.
@@ -178,20 +175,6 @@ export function BugsPageClient({
     }
     setLocalBugs((prev) => prev.filter((b) => b.id !== targetId));
     showToast("Bug dihapus.", "success");
-  };
-
-  const dateFieldStyle: CSSProperties = {
-    flex: 1,
-    minWidth: 0,
-    height: 36,
-    padding: "0 0.5rem",
-    border: "1px solid #E2E8F0",
-    borderRadius: 6,
-    background: "#fff",
-    fontSize: "0.78rem",
-    color: "#1E293B",
-    outline: "none",
-    boxSizing: "border-box",
   };
 
   return (
@@ -310,19 +293,17 @@ export function BugsPageClient({
           <FilterModal
             title="Filter Bugs"
             activeCount={
-              (sevFilter ? 1 : 0) + (statusFilter ? 1 : 0) + (fromDate ? 1 : 0) + (toDate ? 1 : 0)
+              (sevFilter ? 1 : 0) + (statusFilter ? 1 : 0) + (monthFilter ? 1 : 0)
             }
             onReset={() => {
               setDraftSev("");
               setDraftStatus("");
-              setDraftFrom("");
-              setDraftTo("");
+              setDraftMonth("");
             }}
             onApply={() => {
               setSevFilter(draftSev);
               setStatusFilter(draftStatus);
-              setFromDate(draftFrom);
-              setToDate(draftTo);
+              setMonthFilter(draftMonth);
             }}
           >
             <div>
@@ -358,26 +339,12 @@ export function BugsPageClient({
             </div>
 
             <div>
-              <span style={filterLabelStyle}>Date Range</span>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <input
-                  type="date"
-                  aria-label="Tanggal mulai"
-                  value={draftFrom}
-                  max={draftTo || undefined}
-                  onChange={(e) => setDraftFrom(e.target.value)}
-                  style={dateFieldStyle}
-                />
-                <span style={{ color: "#94A3B8", fontSize: 12 }}>–</span>
-                <input
-                  type="date"
-                  aria-label="Tanggal selesai"
-                  value={draftTo}
-                  min={draftFrom || undefined}
-                  onChange={(e) => setDraftTo(e.target.value)}
-                  style={dateFieldStyle}
-                />
-              </div>
+              <span style={filterLabelStyle}>Periode Laporan</span>
+              <MonthPicker
+                ariaLabel="Filter periode laporan"
+                value={draftMonth}
+                onChange={setDraftMonth}
+              />
             </div>
           </FilterModal>
           {/* Tombol lapor bug hanya relevan di tab General Findings */}

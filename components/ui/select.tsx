@@ -49,7 +49,7 @@ function parseOptions(children: ReactNode): ParsedOption[] {
   return out;
 }
 
-const MENU_MAX_HEIGHT = 260;
+const MENU_MAX_HEIGHT = 240;
 const ITEM_HEIGHT = 32;
 
 /**
@@ -127,17 +127,25 @@ export function Select({
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") setOpen(false);
     };
-    // Menutup saat halaman bergeser supaya menu tidak "nyangkut" di posisi lama.
-    const dismiss = () => setOpen(false);
+    /**
+     * Tutup saat HALAMAN bergeser, tapi JANGAN saat yang di-scroll adalah
+     * daftar opsi di dalam menu itu sendiri — kalau tidak, menggulir opsi yang
+     * panjang akan menutup dropdown sebelum sempat memilih.
+     */
+    const onScroll = (e: Event) => {
+      if (menuRef.current?.contains(e.target as Node)) return;
+      setOpen(false);
+    };
+    const onResize = () => setOpen(false);
     document.addEventListener("mousedown", onDocMouseDown);
     document.addEventListener("keydown", onKeyDown);
-    window.addEventListener("scroll", dismiss, true);
-    window.addEventListener("resize", dismiss);
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onResize);
     return () => {
       document.removeEventListener("mousedown", onDocMouseDown);
       document.removeEventListener("keydown", onKeyDown);
-      window.removeEventListener("scroll", dismiss, true);
-      window.removeEventListener("resize", dismiss);
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onResize);
     };
   }, [open]);
 
@@ -267,6 +275,8 @@ export function Select({
               zIndex: 400,
               maxHeight: MENU_MAX_HEIGHT,
               overflowY: "auto",
+              // Scroll di dalam daftar opsi tidak merembet ke halaman utama.
+              overscrollBehavior: "contain",
               background: "#fff",
               borderRadius: 10,
               border: "1px solid #E2E8F0",

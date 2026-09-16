@@ -163,12 +163,15 @@ export function EditRunView({ runId }: { runId: string }) {
           overflow: "hidden",
         }}
       >
-        <div style={{ padding: "1rem 1.25rem", borderBottom: "1px solid #E5E7EB" }}>
+        <div style={{ padding: "1rem 1.25rem" }}>
           <div style={{ fontWeight: 700, fontSize: 16, color: "#0F172A" }}>Express Run</div>
           <p style={{ fontSize: 13, color: "#6B7280", margin: "0.25rem 0 0" }}>
             Ubah detail run atau sesuaikan suite/test case yang ikut dieksekusi.
           </p>
         </div>
+        {/* Garis pemisah di-inset mengikuti padding body form (1.25rem) supaya
+            sejajar vertikal dengan input field, bukan full-width kartu. */}
+        <div style={{ height: 1, background: "#E5E7EB", margin: "0 1.25rem" }} />
         <ExpressRunForm
           projectId=""
           projects={options.data.projects}

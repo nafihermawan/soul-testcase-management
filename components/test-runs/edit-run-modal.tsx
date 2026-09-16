@@ -82,7 +82,6 @@ export function EditRunModal({
             justifyContent: "space-between",
             gap: 12,
             padding: "1rem 1.25rem",
-            borderBottom: "1px solid #E5E7EB",
           }}
         >
           <div style={{ minWidth: 0 }}>
@@ -114,6 +113,10 @@ export function EditRunModal({
             <X size={18} />
           </button>
         </div>
+
+        {/* Garis pemisah di-inset mengikuti padding body form (1.25rem) supaya
+            sejajar vertikal dengan input field, bukan full-width modal. */}
+        <div style={{ height: 1, background: "#E5E7EB", margin: "0 1.25rem", flexShrink: 0 }} />
 
         <div style={{ overflowY: "auto", flex: 1 }}>
           {options.error ? (

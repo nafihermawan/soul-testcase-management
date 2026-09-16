@@ -81,6 +81,14 @@ button {
   font-family: inherit;
 }
 
+/* Checkbox & radio memakai accent kuning/amber, bukan biru bawaan browser.
+   Global supaya semua input native seragam: Platform, Select All, Test Cases,
+   Suites, dan checkbox di halaman Automation. */
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: #f59e0b;
+}
+
 button {
   cursor: pointer;
 }

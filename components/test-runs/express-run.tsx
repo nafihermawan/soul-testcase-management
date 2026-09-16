@@ -2,7 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { FolderOpen, Play, RotateCcw, Search, X } from "lucide-react";
+import { ClipboardList, FolderOpen, Inbox, Play, RotateCcw, Search, X } from "lucide-react";
 import { createTestRun, updateTestRun } from "@/lib/actions/test-runs";
 import { getJSON, invalidateApiCache } from "@/lib/client/use-api";
 import { Select } from "@/components/ui/select";
@@ -85,6 +85,58 @@ const PLATFORM_ENUM_TO_LABEL: Record<string, string> = {
   API: "API",
 };
 
+/**
+ * Empty state di dalam box daftar (Suites & Test Cases): ikon netral + teks,
+ * dipusatkan horizontal DAN vertikal. `minHeight: "100%"` dipakai karena
+ * container-nya (`listScrollStyle`) ber-`flex: 1` tanpa tinggi eksplisit —
+ * tanpa itu `justifyContent: center` tidak punya ruang untuk memusatkan.
+ */
+function ListEmptyState({ icon, text }: { icon: React.ReactNode; text: string }) {
+  return (
+    <div
+      style={{
+        minHeight: "100%",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: "0.5rem",
+        padding: "1rem 0.75rem",
+        textAlign: "center",
+      }}
+    >
+      <span style={{ color: "#CBD5E1", display: "inline-flex" }} aria-hidden="true">
+        {icon}
+      </span>
+      <p style={{ margin: 0, fontSize: "0.8rem", color: "var(--text-muted)", lineHeight: 1.5 }}>
+        {text}
+      </p>
+    </div>
+  );
+}
+
+/**
+ * Skeleton baris daftar selama `options` project dimuat dari API.
+ * Memakai `.skeleton-block` (animasi `skeletonPulse` di globals.css) supaya
+ * bahasanya sama dengan skeleton halaman lain.
+ */
+function ListSkeleton({ rows }: { rows: number }) {
+  return (
+    <div
+      aria-hidden="true"
+      style={{ display: "flex", flexDirection: "column", gap: "0.4rem", padding: "0.35rem 0.25rem" }}
+    >
+      {Array.from({ length: rows }).map((_, i) => (
+        <div
+          key={i}
+          className="skeleton-block"
+          style={{ height: 30, width: i % 3 === 2 ? "68%" : "100%" }}
+        />
+      ))}
+    </div>
+  );
+}
+
 export function ExpressRunForm({
   projectId,
   projects,
@@ -95,6 +147,8 @@ export function ExpressRunForm({
 }: Props) {
   const router = useRouter();
   const isEdit = mode === "edit";
+  // Default KOSONG. Sebelumnya ada fallback ke `projects[0].id` yang membuat
+  // project pertama ("Main Dashboard") otomatis terpilih begitu form dibuka.
   const [selectedProjectIds, setSelectedProjectIds] = useState<Set<string>>(
     () =>
       new Set(
@@ -102,9 +156,7 @@ export function ExpressRunForm({
           ? initial.projectIds
           : projectId
             ? [projectId]
-            : projects[0]?.id
-              ? [projects[0].id]
-              : []
+            : []
       )
   );
   // Global selection (persisten lintas suite/project)
@@ -133,11 +185,21 @@ export function ExpressRunForm({
   const [sections, setSections] = useState<{ id: string; name: string }[]>([]);
   const loadedProjects = useRef<Set<string>>(new Set());
   const loadingProjects = useRef<Set<string>>(new Set());
+  /**
+   * `loadingProjects` sengaja berupa ref karena hanya untuk dedupe request —
+   * perubahannya tidak memicu render, jadi tidak bisa dipakai UI. Flag di
+   * bawah ini yang reaktif: dihitung dari jumlah request yang masih in-flight,
+   * sehingga skeleton bertahan sampai request TERAKHIR selesai.
+   */
+  const [loadingOptions, setLoadingOptions] = useState(false);
+  const inflightRef = useRef(0);
 
   useEffect(() => {
     for (const id of Array.from(selectedProjectIds)) {
       if (loadedProjects.current.has(id) || loadingProjects.current.has(id)) continue;
       loadingProjects.current.add(id);
+      inflightRef.current += 1;
+      setLoadingOptions(true);
       getJSON<RunOptionsPayload>(
         `/api/test-runs/options?projectId=${encodeURIComponent(id)}`
       )
@@ -157,7 +219,11 @@ export function ExpressRunForm({
         .catch(() => {
           // Gagal memuat: biarkan kosong; user bisa toggle project untuk coba lagi.
         })
-        .finally(() => loadingProjects.current.delete(id));
+        .finally(() => {
+          loadingProjects.current.delete(id);
+          inflightRef.current -= 1;
+          if (inflightRef.current === 0) setLoadingOptions(false);
+        });
     }
   }, [selectedProjectIds]);
 
@@ -169,12 +235,13 @@ export function ExpressRunForm({
   /**
    * Cascading: Platform yang dicentang membatasi project yang boleh dipilih
    * (dan otomatis membatasi suite & TC, karena keduanya turunan project).
-   * Tanpa platform terpilih, semua project tersedia.
+   * Tanpa platform terpilih, tidak ada project yang tersedia.
    */
   const matchesPlatform = useCallback(
     (p: { platform: PlatformCode | null }) =>
-      platforms.size === 0 ||
-      (!!p.platform && platforms.has(PLATFORM_ENUM_TO_LABEL[p.platform] ?? "")),
+      platforms.size > 0 &&
+      !!p.platform &&
+      platforms.has(PLATFORM_ENUM_TO_LABEL[p.platform] ?? ""),
     [platforms]
   );
 
@@ -182,6 +249,9 @@ export function ExpressRunForm({
     () => projects.filter(matchesPlatform),
     [projects, matchesPlatform]
   );
+
+  /** Field Project terkunci sampai minimal satu Platform dicentang. */
+  const hasSelectedPlatform = platforms.size > 0;
 
   /**
    * Auto-reset seleksi saat Platform berubah: buang project terpilih, suite
@@ -531,15 +601,22 @@ export function ExpressRunForm({
     <div style={{ width: "100%", display: "flex", flexDirection: "column" }}>
       {/* Body */}
       <div style={{ padding: "1.25rem" }}>
-        {/* Form inputs: 3x2 grid */}
+        {/* Form inputs: 4 baris — Run Name full width, sisanya 2 kolom */}
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(3, 1fr)",
+            gridTemplateColumns: "1fr 1fr",
             gap: "16px",
           }}
         >
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: "0.3rem",
+              gridColumn: "1 / -1",
+            }}
+          >
             <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)" }}>
               Run Name<span style={{ color: "#EF4444" }}>*</span>
             </label>
@@ -586,62 +663,6 @@ export function ExpressRunForm({
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
             <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)" }}>
-              Platform <span style={{ color: "#EF4444" }}>*</span>
-            </label>
-            {/* Multi-select platform tags */}
-            <div
-              style={{
-                display: "flex",
-                flexWrap: "wrap",
-                gap: "0.35rem",
-                padding: "0.35rem 0.4rem",
-                border: "1px solid var(--border-strong)",
-                borderRadius: 8,
-                minHeight: 38,
-                background: "#fff",
-                alignItems: "center",
-              }}
-            >
-              {PLATFORM_OPTIONS.map((opt) => {
-                const checked = platforms.has(opt);
-                return (
-                  <label
-                    key={opt}
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: "0.25rem",
-                      padding: "0.2rem 0.5rem",
-                      borderRadius: 999,
-                      fontSize: 12,
-                      fontWeight: 600,
-                      cursor: "pointer",
-                      background: checked ? "#FEF3C7" : "#F3F4F6",
-                      color: checked ? "#92400E" : "#4B5563",
-                      border: checked ? "1px solid #FCD34D" : "1px solid transparent",
-                    }}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() =>
-                        setPlatforms((prev) => {
-                          const next = new Set(prev);
-                          if (next.has(opt)) next.delete(opt);
-                          else next.add(opt);
-                          return next;
-                        })
-                      }
-                      style={{ margin: 0, cursor: "pointer" }}
-                    />
-                    {opt}
-                  </label>
-                );
-              })}
-            </div>
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
-            <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)" }}>
               Sprint <span style={{ color: "#EF4444" }}>*</span>
             </label>
             <input
@@ -665,9 +686,59 @@ export function ExpressRunForm({
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
             <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)" }}>
+              Platform <span style={{ color: "#EF4444" }}>*</span>
+            </label>
+            {/* Checkbox inline — tanpa box pembungkus & tanpa pill, karena
+                Platform mendukung multi-selection. */}
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                alignItems: "center",
+                gap: "1.25rem",
+                minHeight: 38,
+              }}
+            >
+              {PLATFORM_OPTIONS.map((opt) => {
+                const checked = platforms.has(opt);
+                return (
+                  <label
+                    key={opt}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "0.4rem",
+                      fontSize: 13,
+                      fontWeight: 500,
+                      color: "#334155",
+                      cursor: "pointer",
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() =>
+                        setPlatforms((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(opt)) next.delete(opt);
+                          else next.add(opt);
+                          return next;
+                        })
+                      }
+                      style={{ margin: 0, cursor: "pointer" }}
+                    />
+                    {opt}
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
+            <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)" }}>
               Project <span style={{ color: "#EF4444" }}>*</span>
             </label>
-            {/* Multi-Select Tag Input */}
+            {/* Multi-Select Tag Input — terkunci sampai Platform dipilih,
+                karena daftar project memang bergantung pada Platform. */}
             <div
               style={{
                 display: "flex",
@@ -677,19 +748,22 @@ export function ExpressRunForm({
                 border: "1px solid var(--border-strong)",
                 borderRadius: 8,
                 minHeight: 38,
-                background: "#fff",
+                background: hasSelectedPlatform ? "#fff" : "#F8FAFC",
                 alignItems: "center",
+                opacity: hasSelectedPlatform ? 1 : 0.7,
               }}
             >
-              {Array.from(selectedProjectIds).map((pid) => (
+              {/* Saat disabled tidak ada badge sama sekali — hanya placeholder. */}
+              {hasSelectedPlatform &&
+                Array.from(selectedProjectIds).map((pid) => (
                 <span
                   key={pid}
                   style={{
                     display: "inline-flex",
                     alignItems: "center",
                     gap: "0.3rem",
-                    background: "#EFF6FF",
-                    color: "#1D4ED8",
+                    background: "#FCD34D",
+                    color: "#0F172A",
                     fontSize: 12,
                     fontWeight: 600,
                     padding: "0.2rem 0.45rem",
@@ -707,9 +781,10 @@ export function ExpressRunForm({
                       padding: 0,
                       display: "inline-flex",
                       cursor: "pointer",
-                      color: "#1D4ED8",
-                      opacity: 0.7,
+                      color: "#334155",
                     }}
+                    onMouseEnter={(e) => (e.currentTarget.style.color = "#000000")}
+                    onMouseLeave={(e) => (e.currentTarget.style.color = "#334155")}
                   >
                     <X size={12} />
                   </button>
@@ -718,6 +793,7 @@ export function ExpressRunForm({
               <Select
                 value=""
                 ariaLabel="Tambah project"
+                disabled={!hasSelectedPlatform}
                 style={{
                   flex: 1,
                   minWidth: 90,
@@ -728,7 +804,9 @@ export function ExpressRunForm({
                   if (e.target.value) toggleProject(e.target.value);
                 }}
               >
-                <option value="">+ Tambah project</option>
+                <option value="">
+                  {hasSelectedPlatform ? "+ Tambah project" : "Pilih Platform terlebih dahulu"}
+                </option>
                 {selectableProjects
                   .filter((p) => !selectedProjectIds.has(p.id))
                   .map((p) => (
@@ -745,15 +823,12 @@ export function ExpressRunForm({
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginTop: "1rem" }}>
           {/* Suites column: klik suite untuk melihat TC-nya (single active) */}
           <div style={listBoxStyle}>
-            <div style={{ padding: "0.6rem 0.75rem", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <div style={{ padding: "0.6rem 0.75rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
               <div style={{ fontWeight: 700, fontSize: "0.88rem", flexShrink: 0 }}>
                 Suites
               </div>
-              <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
-                {availableSuites.length} tersedia
-              </span>
             </div>
-            <div style={{ padding: "0.5rem 0.75rem", borderBottom: "1px solid var(--border)" }}>
+            <div style={{ padding: "0.5rem 0.75rem" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", border: "1px solid var(--border-strong)", borderRadius: 7, padding: "0.3rem 0.55rem" }}>
                 <Search size={13} style={{ color: "var(--text-muted)", flexShrink: 0 }} />
                 <input
@@ -765,14 +840,18 @@ export function ExpressRunForm({
               </div>
             </div>
             <div style={listScrollStyle}>
-              {selectedProjectIds.size === 0 ? (
-                <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", padding: "0.5rem" }}>
-                  Pilih project terlebih dahulu.
-                </p>
+              {loadingOptions ? (
+                <ListSkeleton rows={5} />
+              ) : selectedProjectIds.size === 0 ? (
+                <ListEmptyState
+                  icon={<FolderOpen size={26} strokeWidth={1.5} />}
+                  text="Pilih project terlebih dahulu."
+                />
               ) : filteredSuites.length === 0 ? (
-                <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", padding: "0.5rem" }}>
-                  Belum ada suite untuk project terpilih.
-                </p>
+                <ListEmptyState
+                  icon={<Inbox size={26} strokeWidth={1.5} />}
+                  text="Belum ada suite untuk project terpilih."
+                />
               ) : (
                 filteredSuites.map((s) => {
                   const active = s.id === activeSuiteId;
@@ -802,17 +881,14 @@ export function ExpressRunForm({
                         style={{
                           fontSize: "0.68rem",
                           fontWeight: 600,
-                          color: "#1D4ED8",
-                          background: "#EFF6FF",
+                          color: "#0F172A",
+                          background: "#FCD34D",
                           padding: "0.05rem 0.4rem",
                           borderRadius: 999,
                           flexShrink: 0,
                         }}
                       >
                         {projectNameMap.get(s.projectId) ?? ""}
-                      </span>
-                      <span style={{ color: "var(--text-muted)", fontSize: "0.72rem", flexShrink: 0, fontFamily: "var(--font-mono, monospace)" }}>
-                        {s.code}
                       </span>
                     </label>
                   );
@@ -823,22 +899,10 @@ export function ExpressRunForm({
 
           {/* Test Cases column: menampilkan TC suite aktif, checkbox sync global */}
           <div style={listBoxStyle}>
-            <div style={{ padding: "0.6rem 0.75rem", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <div style={{ padding: "0.6rem 0.75rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
               <div style={{ fontWeight: 700, fontSize: "0.88rem", flexShrink: 0 }}>
                 Test Cases
               </div>
-              <span
-                style={{
-                  fontSize: "0.75rem",
-                  fontWeight: 700,
-                  color: selectedTCs.size > 0 ? "var(--brand-600)" : "var(--text-muted)",
-                  background: selectedTCs.size > 0 ? "var(--brand-50)" : "transparent",
-                  padding: "0.1rem 0.5rem",
-                  borderRadius: 999,
-                }}
-              >
-                {selectedTCs.size} Test Case{selectedTCs.size === 1 ? "" : "s"} Selected
-              </span>
               <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "0.6rem", flexShrink: 0 }}>
                 {activeSuiteId && (
                   <label style={{ display: "inline-flex", alignItems: "center", gap: "0.3rem", fontSize: "0.78rem", fontWeight: 600, color: "var(--text-secondary)", cursor: "pointer" }}>
@@ -849,13 +913,15 @@ export function ExpressRunForm({
                 <button
                   type="button"
                   onClick={() => setSelectedTCs(new Set())}
-                  style={{ border: "none", background: "none", color: "var(--text-muted)", fontSize: "0.78rem", fontWeight: 600, cursor: "pointer", padding: 0 }}
+                  style={{ border: "none", background: "none", color: "#EF4444", fontSize: "0.78rem", fontWeight: 600, cursor: "pointer", padding: 0, transition: "color 0.12s ease" }}
+                  onMouseEnter={(e) => (e.currentTarget.style.color = "#DC2626")}
+                  onMouseLeave={(e) => (e.currentTarget.style.color = "#EF4444")}
                 >
                   Clear
                 </button>
               </div>
             </div>
-            <div style={{ padding: "0.5rem 0.75rem", borderBottom: "1px solid var(--border)" }}>
+            <div style={{ padding: "0.5rem 0.75rem" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", border: "1px solid var(--border-strong)", borderRadius: 7, padding: "0.3rem 0.55rem" }}>
                 <Search size={13} style={{ color: "var(--text-muted)", flexShrink: 0 }} />
                 <input
@@ -867,14 +933,18 @@ export function ExpressRunForm({
               </div>
             </div>
             <div style={listScrollStyle}>
-              {!activeSuiteId ? (
-                <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", padding: "0.5rem" }}>
-                  Pilih suite di kolom kiri untuk melihat test case.
-                </p>
+              {loadingOptions ? (
+                <ListSkeleton rows={5} />
+              ) : !activeSuiteId ? (
+                <ListEmptyState
+                  icon={<ClipboardList size={26} strokeWidth={1.5} />}
+                  text="Pilih suite di kolom kiri untuk melihat test case."
+                />
               ) : filteredTCs.length === 0 ? (
-                <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", padding: "0.5rem" }}>
-                  Tidak ada test case di suite ini.
-                </p>
+                <ListEmptyState
+                  icon={<Inbox size={26} strokeWidth={1.5} />}
+                  text="Tidak ada test case di suite ini."
+                />
               ) : (
                 tcSectionGroups.map((g) => (
                   <div key={g.key}>
@@ -913,24 +983,8 @@ export function ExpressRunForm({
                       }}
                     >
                       <input type="checkbox" checked={checked} onChange={() => toggleTC(t.id)} />
-                      <span style={{ fontFamily: "var(--font-mono, monospace)", fontSize: "0.72rem", color: "var(--brand-600)", fontWeight: 600, flexShrink: 0 }}>
-                        {t.tcId}
-                      </span>
                       <span style={{ fontWeight: 500, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                         {t.title}
-                      </span>
-                      <span
-                        style={{
-                          fontSize: "0.68rem",
-                          fontWeight: 600,
-                          color: "#1D4ED8",
-                          background: "#EFF6FF",
-                          padding: "0.05rem 0.4rem",
-                          borderRadius: 999,
-                          flexShrink: 0,
-                        }}
-                      >
-                        {t.projectId ? (projectNameMap.get(t.projectId) ?? "") : ""}
                       </span>
                     </label>
                     );
@@ -1004,8 +1058,8 @@ export function ExpressRunForm({
                           style={{
                             fontSize: "0.7rem",
                             fontWeight: 600,
-                            color: "#1D4ED8",
-                            background: "#EFF6FF",
+                            color: "#0F172A",
+                            background: "#FCD34D",
                             padding: "0.1rem 0.45rem",
                             borderRadius: 999,
                             whiteSpace: "nowrap",

@@ -98,16 +98,24 @@ export function CustomSelect({
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") setOpen(false);
     };
-    const dismiss = () => setOpen(false);
+    /**
+     * Tutup saat HALAMAN bergeser, tapi bukan saat yang di-scroll adalah daftar
+     * opsi di dalam menu itu sendiri (menu panjang harus bisa digulir).
+     */
+    const onScroll = (e: Event) => {
+      if (menuRef.current?.contains(e.target as Node)) return;
+      setOpen(false);
+    };
+    const onResize = () => setOpen(false);
     document.addEventListener("mousedown", onDocMouseDown);
     document.addEventListener("keydown", onKeyDown);
-    window.addEventListener("scroll", dismiss, true);
-    window.addEventListener("resize", dismiss);
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onResize);
     return () => {
       document.removeEventListener("mousedown", onDocMouseDown);
       document.removeEventListener("keydown", onKeyDown);
-      window.removeEventListener("scroll", dismiss, true);
-      window.removeEventListener("resize", dismiss);
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onResize);
     };
   }, [open]);
 
@@ -198,8 +206,10 @@ export function CustomSelect({
               boxShadow: "0 12px 24px -6px rgba(15, 23, 42, 0.18)",
               padding: 4,
               animation: "dropdownIn 0.12s ease-out",
-              maxHeight: 240,
+              maxHeight: MENU_MAX_HEIGHT,
               overflowY: "auto",
+              // Scroll di dalam daftar opsi tidak merembet ke halaman utama.
+              overscrollBehavior: "contain",
             }}
           >
             {searchable && (

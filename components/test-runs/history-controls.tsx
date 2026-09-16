@@ -110,14 +110,14 @@ const checkBox = (on: boolean): CSSProperties => ({
   flexShrink: 0,
 });
 
-/* Warna badge/pill (kuning lembut berbasis #FFC348).
+/* Warna badge/pill (kuning pekat berbasis #FFC348).
    Teks sengaja netral gelap, bukan kuning/cokelat, agar mudah dibaca. */
-const PILL_BG = "rgba(255, 195, 72, 0.20)";
-const PILL_BG_HOVER = "rgba(255, 195, 72, 0.40)";
-const PILL_BORDER = "rgba(255, 195, 72, 0.40)";
-const PILL_TEXT = "#1E293B"; // slate-800
-const PILL_ICON = "#64748B"; // slate-500
-const PILL_ICON_HOVER = "#1E293B"; // slate-800
+const PILL_BG = "#FCD34D"; // amber-300 (senada #FFC348)
+const PILL_BG_HOVER = "#FBBF24"; // amber-400 — hover tombol tutup
+const PILL_BORDER = "#FBBF24"; // amber-400
+const PILL_TEXT = "#0F172A"; // slate-900
+const PILL_ICON = "#334155"; // slate-700
+const PILL_ICON_HOVER = "#000000"; // hitam
 
 /**
  * Tutup dropdown aktif saat klik di luar area field.

@@ -3,11 +3,10 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { FileVideo, Image as ImageIcon, Loader2, Paperclip, Trash2, X } from "lucide-react";
 import {
-  confirmAttachment,
   deleteAttachment,
-  presignAttachmentUpload,
   type AttachmentOwner,
 } from "@/lib/actions/attachments";
+import { uploadAttachmentFile } from "@/lib/client/attachments";
 import { MAX_ATTACHMENT_BYTES } from "@/lib/storage/limits";
 import type { AttachmentItem } from "@/types/api";
 
@@ -89,53 +88,14 @@ export function AttachmentsPanel({
 
       setUploading(true);
       setProgress(0);
-      try {
-        const presign = await presignAttachmentUpload({
-          fileName: file.name,
-          mimeType: file.type,
-          size: file.size,
-          owner,
-        });
-        if (presign.error || !presign.uploadUrl || !presign.storageKey) {
-          setError(presign.error ?? "Gagal menyiapkan upload.");
-          continue;
-        }
-
-        // PUT langsung ke R2 — pakai XHR agar progres upload bisa ditampilkan
-        // (fetch tidak menyediakan progress upload).
-        await new Promise<void>((resolve, reject) => {
-          const xhr = new XMLHttpRequest();
-          xhr.open("PUT", presign.uploadUrl!);
-          xhr.setRequestHeader("Content-Type", file.type);
-          xhr.upload.onprogress = (e) => {
-            if (e.lengthComputable) setProgress(Math.round((e.loaded / e.total) * 100));
-          };
-          xhr.onload = () =>
-            xhr.status >= 200 && xhr.status < 300
-              ? resolve()
-              : reject(new Error(`Upload gagal (HTTP ${xhr.status}).`));
-          xhr.onerror = () => reject(new Error("Upload gagal — periksa koneksi."));
-          xhr.send(file);
-        });
-
-        const confirmed = await confirmAttachment({
-          storageKey: presign.storageKey,
-          fileName: file.name,
-          mimeType: file.type,
-          size: file.size,
-          owner,
-        });
-        if (confirmed.error) {
-          setError(confirmed.error);
-          continue;
-        }
-        if (confirmed.attachment) created.push(confirmed.attachment);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Upload gagal.");
-      } finally {
-        setUploading(false);
-        setProgress(0);
+      const result = await uploadAttachmentFile(file, owner, setProgress);
+      setUploading(false);
+      setProgress(0);
+      if (!result.ok) {
+        setError(result.error);
+        continue;
       }
+      created.push(result.attachment);
     }
 
     if (inputRef.current) inputRef.current.value = "";

@@ -19,7 +19,7 @@ export async function GET() {
       id: true,
       name: true,
       code: true,
-      project: { select: { name: true } },
+      project: { select: { name: true, platform: true } },
     },
     orderBy: [{ project: { name: "asc" } }, { order: "asc" }, { createdAt: "asc" }],
   });
@@ -29,6 +29,7 @@ export async function GET() {
     name: s.name,
     code: s.code,
     projectName: s.project.name,
+    platform: s.project.platform,
   }));
 
   return NextResponse.json({ suites: rows } satisfies SuitesPayload);

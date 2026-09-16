@@ -59,7 +59,14 @@ const severityStyle: Record<string, { bg: string; color: string }> = {
   LOW: { bg: "var(--surface-muted)", color: "var(--text-secondary)" },
 };
 
-export function BugsPageClient({ bugs }: { bugs: BugRow[] }) {
+export function BugsPageClient({
+  bugs,
+  canAttach = false,
+}: {
+  bugs: BugRow[];
+  /** Upload evidence butuh role QA — server action-nya akan redirect kalau bukan. */
+  canAttach?: boolean;
+}) {
   const [deleteTarget, setDeleteTarget] = useState<BugRow | null>(null);
   const [deletePending, setDeletePending] = useState(false);
   /** Bug yang detailnya sedang dibuka di modal (klik baris tabel). */
@@ -513,10 +520,14 @@ export function BugsPageClient({ bugs }: { bugs: BugRow[] }) {
       {/* Modal lapor bug ad-hoc (General Findings) */}
       {reportOpen && (
         <ReportGeneralBugModal
+          canAttach={canAttach}
           onClose={() => setReportOpen(false)}
-          onCreated={(bug) => {
-            setLocalBugs((prev) => [bug, ...prev]);
-            showToast("Bug berhasil dilaporkan.", "success");
+          onCreated={(bug, warning) => {
+            if (bug) setLocalBugs((prev) => [bug, ...prev]);
+            showToast(
+              warning ?? (bug ? "Bug berhasil dilaporkan." : "Bug dibuat — refresh halaman untuk melihatnya."),
+              warning || !bug ? "error" : "success"
+            );
           }}
         />
       )}

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, ChevronDown } from "lucide-react";
 
-export type CustomSelectOption = { value: string; label: string };
+export type CustomSelectOption = { value: string; label: string; /** Tag kecil di samping label (mis. platform). */ badge?: string };
 
 /** Gaya label field di dalam modal/popover filter (dipakai Dashboard & Reports). */
 export const filterLabelStyle: React.CSSProperties = {
@@ -16,27 +16,51 @@ export const filterLabelStyle: React.CSSProperties = {
   marginBottom: 4,
 };
 
+const badgeStyle: React.CSSProperties = {
+  flexShrink: 0,
+  padding: "0 6px",
+  borderRadius: 4,
+  background: "#F1F5F9",
+  border: "1px solid #E2E8F0",
+  color: "#475569",
+  fontSize: 10,
+  fontWeight: 700,
+  lineHeight: "16px",
+  letterSpacing: "0.02em",
+};
+
 /**
  * Dropdown select bertema terang (pengganti <select> native yang tampilannya
  * mengikuti OS). Trigger + menu melayang dengan z-index di atas popover.
+ *
+ * `searchable` menambahkan input pencarian di atas menu — dipakai kalau
+ * opsinya banyak (mis. daftar Suite/Module).
  */
 export function CustomSelect({
   value,
   options,
   onChange,
   ariaLabel,
+  searchable = false,
+  placeholder = "Pilih...",
 }: {
   value: string;
   options: CustomSelectOption[];
   onChange: (value: string) => void;
   ariaLabel?: string;
+  searchable?: boolean;
+  placeholder?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
   const ref = useRef<HTMLDivElement>(null);
   const selected = options.find((o) => o.value === value);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      setQuery("");
+      return;
+    }
     const onDocMouseDown = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     };
@@ -50,6 +74,11 @@ export function CustomSelect({
       document.removeEventListener("keydown", onKeyDown);
     };
   }, [open]);
+
+  const needle = query.trim().toLowerCase();
+  const visible = needle
+    ? options.filter((o) => `${o.label} ${o.badge ?? ""}`.toLowerCase().includes(needle))
+    : options;
 
   return (
     <div ref={ref} style={{ position: "relative" }}>
@@ -74,8 +103,19 @@ export function CustomSelect({
           cursor: "pointer",
         }}
       >
-        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {selected?.label ?? "—"}
+        <span
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            minWidth: 0,
+            overflow: "hidden",
+          }}
+        >
+          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {selected?.label ?? placeholder}
+          </span>
+          {selected?.badge && <span style={badgeStyle}>{selected.badge}</span>}
         </span>
         <ChevronDown
           size={14}
@@ -107,7 +147,34 @@ export function CustomSelect({
             overflowY: "auto",
           }}
         >
-          {options.map((o) => {
+          {searchable && (
+            <div style={{ padding: "4px 8px 6px", position: "sticky", top: 0, background: "#fff" }}>
+              <input
+                autoFocus
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Cari…"
+                aria-label="Cari opsi"
+                style={{
+                  width: "100%",
+                  height: 30,
+                  padding: "0 8px",
+                  border: "1px solid #E2E8F0",
+                  borderRadius: 6,
+                  fontSize: 12,
+                  color: "#1E293B",
+                  outline: "none",
+                  boxSizing: "border-box",
+                }}
+              />
+            </div>
+          )}
+          {visible.length === 0 && (
+            <div style={{ padding: "8px 12px", fontSize: 12, color: "#94A3B8" }}>
+              Tidak ada hasil.
+            </div>
+          )}
+          {visible.map((o) => {
             const isSelected = o.value === value;
             return (
               <button
@@ -142,8 +209,19 @@ export function CustomSelect({
                   if (!isSelected) e.currentTarget.style.background = "transparent";
                 }}
               >
-                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {o.label}
+                <span
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                    minWidth: 0,
+                    overflow: "hidden",
+                  }}
+                >
+                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {o.label}
+                  </span>
+                  {o.badge && <span style={badgeStyle}>{o.badge}</span>}
                 </span>
                 {isSelected && <Check size={13} style={{ color: "#B45309", flexShrink: 0 }} />}
               </button>

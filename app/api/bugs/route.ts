@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { apiSession, json401 } from "@/lib/api-auth";
+import { apiSession, apiRoleAtLeast, json401 } from "@/lib/api-auth";
 import { toAttachmentItems } from "@/lib/attachments";
 import { presignGetUrls } from "@/lib/storage/r2";
 import type { BugsPayload, BugRow } from "@/types/api";
@@ -50,7 +50,10 @@ export async function GET() {
     }))
   );
 
-  return NextResponse.json({ bugs: rows } satisfies BugsPayload);
+  return NextResponse.json({
+    bugs: rows,
+    canAttach: apiRoleAtLeast(user.role, "QA"),
+  } satisfies BugsPayload);
 }
 
 export const dynamic = "force-dynamic";

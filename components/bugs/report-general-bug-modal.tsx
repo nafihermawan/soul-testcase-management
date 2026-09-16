@@ -1,10 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { X } from "lucide-react";
+import { FileVideo, Image as ImageIcon, X } from "lucide-react";
 import { createBug } from "@/lib/actions/automation-bugs";
+import { CustomSelect } from "@/components/ui/custom-select";
+import { uploadAttachmentFile } from "@/lib/client/attachments";
+import { MAX_ATTACHMENT_BYTES } from "@/lib/storage/limits";
 import type { BugDetailPayload, BugRow, SuiteOption, SuitesPayload } from "@/types/api";
+
+const MAX_MB = Math.round(MAX_ATTACHMENT_BYTES / 1024 / 1024);
 
 const SEVERITIES = [
   { value: "LOW", label: "Low" },
@@ -12,6 +17,17 @@ const SEVERITIES = [
   { value: "HIGH", label: "High" },
   { value: "CRITICAL", label: "Critical" },
 ];
+
+/** Label platform project untuk badge di combobox Suite. */
+const PLATFORM_LABEL: Record<string, string> = {
+  WEB: "Web",
+  MOBILE: "Mobile",
+  HARDWARE: "Hardware",
+  API: "API",
+};
+
+/** File yang ditahan di klien sampai bug-nya jadi (attachment wajib punya owner). */
+type StagedFile = { id: string; file: File; /** Object URL untuk thumbnail gambar. */ preview: string | null };
 
 const labelStyle: React.CSSProperties = {
   display: "block",
@@ -43,12 +59,19 @@ const fieldStyle: React.CSSProperties = {
  * masuk kategori GENERAL_FINDING.
  */
 export function ReportGeneralBugModal({
+  canAttach,
   onClose,
   onCreated,
 }: {
+  /** Role QA — kalau false, section Upload Evidence disembunyikan (server action-nya akan redirect). */
+  canAttach: boolean;
   onClose: () => void;
-  /** Bug yang baru dibuat (bentuk BugRow lengkap) untuk ditambahkan ke daftar lokal. */
-  onCreated: (bug: BugRow) => void;
+  /**
+   * `bug` null = bug sudah dibuat di server tapi barisnya gagal diambil,
+   * sehingga daftar lokal tidak bisa ditambal (parent sebaiknya minta refresh).
+   * `warning` diisi bila evidence gagal diunggah setelah bug-nya jadi.
+   */
+  onCreated: (bug: BugRow | null, warning?: string) => void;
 }) {
   const [title, setTitle] = useState("");
   const [severity, setSeverity] = useState("MEDIUM");
@@ -57,8 +80,54 @@ export function ReportGeneralBugModal({
   const [suitesLoading, setSuitesLoading] = useState(true);
   const [description, setDescription] = useState("");
   const [externalLink, setExternalLink] = useState("");
+  const [files, setFiles] = useState<StagedFile[]>([]);
+  const [dragging, setDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [uploadingEvidence, setUploadingEvidence] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  // Dipakai untuk merevoke object URL saat modal ditutup.
+  const filesRef = useRef<StagedFile[]>([]);
+  filesRef.current = files;
+
+  const addFiles = (list: FileList | null) => {
+    if (!list || list.length === 0) return;
+    const accepted: StagedFile[] = [];
+    for (const file of Array.from(list)) {
+      if (!file.type.startsWith("image/") && !file.type.startsWith("video/")) {
+        setError(`"${file.name}": hanya file gambar atau video yang diperbolehkan.`);
+        continue;
+      }
+      if (file.size > MAX_ATTACHMENT_BYTES) {
+        setError(`"${file.name}": ukuran melebihi ${MAX_MB} MB.`);
+        continue;
+      }
+      accepted.push({
+        id: `${file.name}-${file.size}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        file,
+        preview: file.type.startsWith("image/") ? URL.createObjectURL(file) : null,
+      });
+    }
+    if (accepted.length > 0) setFiles((prev) => [...prev, ...accepted]);
+    if (inputRef.current) inputRef.current.value = "";
+  };
+
+  const removeFile = (id: string) => {
+    setFiles((prev) => {
+      const target = prev.find((f) => f.id === id);
+      if (target?.preview) URL.revokeObjectURL(target.preview);
+      return prev.filter((f) => f.id !== id);
+    });
+  };
+
+  useEffect(
+    () => () => {
+      filesRef.current.forEach((f) => {
+        if (f.preview) URL.revokeObjectURL(f.preview);
+      });
+    },
+    []
+  );
 
   // Opsi Suite / Module: daftar flat lintas project dari /api/suites.
   useEffect(() => {
@@ -116,23 +185,45 @@ export function ReportGeneralBugModal({
       externalLink: externalLink.trim() || undefined,
       suiteId: suiteId || undefined,
     });
-    if (res.error) {
+    if (res.error || !res.bugId) {
       setSaving(false);
-      setError(res.error);
-      return;
+      setError(res.error ?? "Gagal membuat bug.");
+      return; // bug belum jadi -> aman kalau user submit ulang
     }
-    // Ambil bentuk lengkap baris bug (termasuk createdBy + sourceType) supaya
-    // daftar bisa ditambah di tempat tanpa refetch halaman.
+
+    /**
+     * Sejak titik ini bug SUDAH ada. Apa pun yang gagal setelahnya tidak boleh
+     * membuat user menekan submit lagi (akan jadi bug duplikat), jadi kegagalan
+     * upload evidence dilaporkan sebagai peringatan lalu modal tetap ditutup.
+     */
+    let warning: string | undefined;
+    if (files.length > 0) {
+      setUploadingEvidence(true);
+      const failed: string[] = [];
+      for (const staged of files) {
+        const up = await uploadAttachmentFile(staged.file, { bugId: res.bugId });
+        if (!up.ok) failed.push(staged.file.name);
+      }
+      setUploadingEvidence(false);
+      if (failed.length > 0) {
+        warning = `Bug tersimpan, tapi ${failed.length} evidence gagal diunggah (${failed.join(", ")}). Tambahkan lewat detail bug.`;
+      }
+    }
+
+    // Ambil bentuk lengkap baris bug (termasuk createdBy + suite + project)
+    // supaya daftar bisa ditambah di tempat tanpa refetch halaman.
+    let created: BugRow | null = null;
     try {
       const detail = await fetch(`/api/bugs/${res.bugId}`, { cache: "no-store" });
       if (detail.ok) {
         const data = (await detail.json()) as BugDetailPayload;
-        onCreated(data.bug);
+        created = data.bug;
       }
     } catch {
-      // Baris akan muncul setelah halaman dimuat ulang berikutnya.
+      created = null;
     }
     setSaving(false);
+    onCreated(created, warning);
     onClose();
   };
 
@@ -161,7 +252,8 @@ export function ReportGeneralBugModal({
         style={{
           width: "100%",
           maxWidth: 512,
-          maxHeight: "90vh",
+          // Header & footer tetap di tempat; hanya body yang scroll (flex:1).
+          maxHeight: "85vh",
           display: "flex",
           flexDirection: "column",
           background: "#fff",
@@ -266,25 +358,21 @@ export function ReportGeneralBugModal({
             </div>
 
             <div>
-              <label htmlFor="general-bug-suite" style={labelStyle}>
+              <span style={labelStyle}>
                 Suite / Module <span style={{ color: "#E11D48" }}>*</span>
-              </label>
-              <select
-                id="general-bug-suite"
+              </span>
+              <CustomSelect
+                ariaLabel="Suite / Module"
+                searchable
                 value={suiteId}
-                onChange={(e) => setSuiteId(e.target.value)}
-                disabled={saving || suitesLoading}
-                style={{ ...fieldStyle, cursor: saving || suitesLoading ? "not-allowed" : "pointer" }}
-              >
-                <option value="">
-                  {suitesLoading ? "Memuat suite…" : "Pilih Suite / Modul..."}
-                </option>
-                {suites.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name} — {s.projectName}
-                  </option>
-                ))}
-              </select>
+                placeholder={suitesLoading ? "Memuat suite…" : "Pilih Suite / Modul..."}
+                onChange={setSuiteId}
+                options={suites.map((s) => ({
+                  value: s.id,
+                  label: `${s.name} — ${s.projectName}`,
+                  badge: s.platform ? PLATFORM_LABEL[s.platform] ?? s.platform : undefined,
+                }))}
+              />
             </div>
           </div>
 
@@ -317,6 +405,141 @@ export function ReportGeneralBugModal({
               style={fieldStyle}
             />
           </div>
+
+          {/* Upload Evidence — file ditahan dulu, diunggah setelah bug-nya dibuat.
+              Attachment wajib punya owner, dan bug-nya belum ada saat form ini diisi.
+              Hanya untuk QA: presign/confirm butuh role QA. */}
+          {canAttach && (
+          <div>
+            <span style={labelStyle}>Upload Evidence</span>
+            <div
+              onDragOver={(e) => {
+                e.preventDefault();
+                if (!saving) setDragging(true);
+              }}
+              onDragLeave={() => setDragging(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setDragging(false);
+                if (!saving) addFiles(e.dataTransfer.files);
+              }}
+              onClick={() => {
+                if (!saving) inputRef.current?.click();
+              }}
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: "0.25rem",
+                padding: "1rem",
+                borderRadius: 12,
+                border: `1px dashed ${dragging ? "#FFC348" : "#CBD5E1"}`,
+                background: dragging ? "#FFFBEB" : "#F8FAFC",
+                cursor: saving ? "not-allowed" : "pointer",
+                transition: "border-color 0.15s ease, background-color 0.15s ease",
+              }}
+            >
+              <input
+                ref={inputRef}
+                type="file"
+                multiple
+                accept="image/*,video/*"
+                hidden
+                onChange={(e) => addFiles(e.target.files)}
+              />
+              <ImageIcon size={20} color="#94A3B8" />
+              <div style={{ fontSize: "0.75rem", fontWeight: 600, color: "#475569" }}>
+                Tarik &amp; lepas file di sini, atau klik untuk memilih
+              </div>
+              <div style={{ fontSize: "0.68rem", color: "#94A3B8" }}>
+                Gambar (JPG/PNG) atau video (MP4) · maks {MAX_MB} MB per file
+              </div>
+            </div>
+
+            {files.length > 0 && (
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fill, minmax(92px, 1fr))",
+                  gap: "0.5rem",
+                  marginTop: "0.5rem",
+                }}
+              >
+                {files.map((f) => (
+                  <div
+                    key={f.id}
+                    style={{
+                      position: "relative",
+                      border: "1px solid #E2E8F0",
+                      borderRadius: 8,
+                      overflow: "hidden",
+                      background: "#fff",
+                    }}
+                  >
+                    <div
+                      style={{
+                        height: 62,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        background: "#F1F5F9",
+                      }}
+                    >
+                      {f.preview ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={f.preview}
+                          alt={f.file.name}
+                          style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                        />
+                      ) : (
+                        <FileVideo size={20} color="#64748B" />
+                      )}
+                    </div>
+                    <div
+                      title={f.file.name}
+                      style={{
+                        padding: "0.2rem 0.35rem",
+                        fontSize: "0.62rem",
+                        color: "#64748B",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {f.file.name}
+                    </div>
+                    {!saving && (
+                      <button
+                        type="button"
+                        aria-label={`Hapus ${f.file.name}`}
+                        onClick={() => removeFile(f.id)}
+                        style={{
+                          position: "absolute",
+                          top: 3,
+                          right: 3,
+                          width: 20,
+                          height: 20,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          border: "none",
+                          borderRadius: 999,
+                          background: "rgba(15, 23, 42, 0.6)",
+                          color: "#fff",
+                          cursor: "pointer",
+                          padding: 0,
+                        }}
+                      >
+                        <X size={11} />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          )}
 
           {error && <div style={{ fontSize: "0.75rem", color: "#B91C1C" }}>{error}</div>}
         </div>
@@ -376,7 +599,7 @@ export function ReportGeneralBugModal({
             }}
             onMouseLeave={(e) => (e.currentTarget.style.background = "#FFC348")}
           >
-            {saving ? "Menyimpan..." : "Laporkan Bug"}
+            {uploadingEvidence ? "Mengunggah evidence…" : saving ? "Menyimpan..." : "Laporkan Bug"}
           </button>
         </div>
       </div>

@@ -124,7 +124,7 @@ export type BugRow = {
   sourceType: BugSourceType;
 };
 
-export type BugsPayload = { bugs: BugRow[] };
+export type BugsPayload = { bugs: BugRow[]; /** Upload evidence butuh role QA. */ canAttach: boolean };
 
 /* ---------- /api/suites ---------- */
 export type SuiteOption = {
@@ -132,6 +132,8 @@ export type SuiteOption = {
   name: string;
   code: string;
   projectName: string;
+  /** Platform project pemilik suite (WEB/MOBILE/HARDWARE/API), null bila belum diisi. */
+  platform: string | null;
 };
 
 export type SuitesPayload = { suites: SuiteOption[] };

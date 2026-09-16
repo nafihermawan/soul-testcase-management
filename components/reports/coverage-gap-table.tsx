@@ -25,31 +25,6 @@ export function CoverageGapTable({
     <Card style={{ display: "flex", flexDirection: "column" }}>
       <PanelHeader title="Celah Coverage per Suite" />
 
-      {noExecutionYet && rows.length > 0 && (
-        <div
-          style={{
-            display: "flex",
-            alignItems: "flex-start",
-            gap: "0.6rem",
-            margin: "1rem 1.5rem 0",
-            padding: "0.65rem 0.85rem",
-            background: "var(--warning-bg)",
-            border: "1px solid #FDE68A",
-            borderRadius: 8,
-            fontSize: "0.8rem",
-            color: "#B45309",
-            lineHeight: 1.5,
-          }}
-        >
-          <Info size={15} style={{ flexShrink: 0, marginTop: 1 }} />
-          <span>
-            <strong>Belum ada eksekusi sama sekali.</strong> Seluruh test case di bawah masih
-            berstatus belum pernah di-test — angka ini akan turun setelah test run dijalankan dan
-            diselesaikan.
-          </span>
-        </div>
-      )}
-
       {rows.length === 0 ? (
         <EmptyState
           icon={<FolderTree size={22} />}
@@ -57,7 +32,40 @@ export function CoverageGapTable({
           subtext="Tambahkan test case ke suite untuk melihat celah coverage di sini."
         />
       ) : (
-        <div style={{ overflowX: "auto", marginTop: "0.5rem" }}>
+        // Body kartu standar: p-6 — disamakan dengan kartu Reports lainnya.
+        <div
+          style={{
+            padding: "1.5rem",
+            display: "flex",
+            flexDirection: "column",
+            gap: "1rem",
+          }}
+        >
+          {noExecutionYet && (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "flex-start",
+                gap: "0.6rem",
+                padding: "0.65rem 0.85rem",
+                background: "var(--warning-bg)",
+                border: "1px solid #FDE68A",
+                borderRadius: 8,
+                fontSize: "0.8rem",
+                color: "#B45309",
+                lineHeight: 1.5,
+              }}
+            >
+              <Info size={15} style={{ flexShrink: 0, marginTop: 1 }} />
+              <span>
+                <strong>Belum ada eksekusi sama sekali.</strong> Seluruh test case di bawah masih
+                berstatus belum pernah di-test — angka ini akan turun setelah test run dijalankan dan
+                diselesaikan.
+              </span>
+            </div>
+          )}
+
+          <div style={{ overflowX: "auto" }}>
           <table
             style={{
               width: "100%",
@@ -74,7 +82,7 @@ export function CoverageGapTable({
                   borderBottom: "1px solid var(--border)",
                 }}
               >
-                <th style={{ padding: "0.55rem 1.5rem", fontWeight: 600 }}>Suite</th>
+                <th style={{ padding: "0.55rem 0", fontWeight: 600 }}>Suite</th>
                 <th style={{ padding: "0.55rem 0.5rem", fontWeight: 600, width: 64, textAlign: "right" }}>
                   TC
                 </th>
@@ -84,7 +92,7 @@ export function CoverageGapTable({
                 <th style={{ padding: "0.55rem 0.5rem", fontWeight: 600, width: 76, textAlign: "right" }}>
                   Belum
                 </th>
-                <th style={{ padding: "0.55rem 1.5rem", fontWeight: 600, width: 260 }}>Gap</th>
+                <th style={{ padding: "0.55rem 0", fontWeight: 600, width: 260 }}>Gap</th>
               </tr>
             </thead>
             <tbody>
@@ -99,7 +107,7 @@ export function CoverageGapTable({
                   >
                     <td
                       style={{
-                        padding: "0.55rem 1.5rem",
+                        padding: "0.55rem 0",
                         overflow: "hidden",
                         textOverflow: "ellipsis",
                         whiteSpace: "nowrap",
@@ -138,7 +146,7 @@ export function CoverageGapTable({
                     >
                       {s.untested}
                     </td>
-                    <td style={{ padding: "0.55rem 1.5rem" }}>
+                    <td style={{ padding: "0.55rem 0" }}>
                       {gapPct === null ? (
                         <span style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>
                           Belum ada TC
@@ -181,6 +189,7 @@ export function CoverageGapTable({
               })}
             </tbody>
           </table>
+          </div>
         </div>
       )}
     </Card>

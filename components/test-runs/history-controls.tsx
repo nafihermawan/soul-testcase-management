@@ -685,6 +685,7 @@ export function HistoryControls({
   baseUrl = "/test-runs/history",
   dialogTitle = "Filter Run History",
   showFilterButton = true,
+  onSearch,
 }: {
   projects: ProjectFilterOption[];
   initial: HistoryFilterState;
@@ -693,6 +694,11 @@ export function HistoryControls({
   dialogTitle?: string;
   /** Halaman Active Runs memakai pencarian saja, tanpa tombol & modal filter. */
   showFilterButton?: boolean;
+  /**
+   * Bila diisi, pencarian TIDAK mengubah URL — nilainya (sudah di-debounce)
+   * dikirim ke pemanggil untuk difilter di sisi klien.
+   */
+  onSearch?: (q: string) => void;
 }) {
   const router = useRouter();
   const [q, setQ] = useState(initial.q);
@@ -756,13 +762,21 @@ export function HistoryControls({
     };
   }, []);
 
-  // Search: debounce + push ke URL, reset ke page 1.
+  // Search: debounce 350ms, lalu salah satu dari dua mode:
+  // - `onSearch` diisi  -> filtering CLIENT-SIDE, tanpa menyentuh URL sama
+  //   sekali (dipakai Active Runs; mengetik tidak boleh memicu reload).
+  // - `onSearch` kosong -> push q ke URL supaya server memfilter (Run History,
+  //   yang memang dipaginasi di server).
   // Mempertahankan filter yang SUDAH diterapkan (dari URL), bukan pilihan
   // yang masih tertunda di modal, supaya tidak bocor ke URL.
   const onSearchChange = (val: string) => {
     setQ(val);
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
+      if (onSearch) {
+        onSearch(val.trim());
+        return;
+      }
       router.replace(
         buildHistoryHref(baseUrl, {
           q: val.trim(),
@@ -836,8 +850,10 @@ export function HistoryControls({
           placeholder="Cari Run ID, Nama Run..."
           className="filter-field"
           style={{
-            width: 220,
-            padding: "0.5rem 0.75rem 0.5rem 2rem",
+            // Ringkas: h-8 (32px) & w-52 (208px).
+            width: 208,
+            height: 32,
+            padding: "0 0.75rem 0 2rem",
             borderRadius: 8,
             border: "1px solid #CBD5E1",
             background: "#fff",

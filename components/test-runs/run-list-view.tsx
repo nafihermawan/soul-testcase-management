@@ -83,7 +83,8 @@ export type ActiveRunsSearchParams = {
 export function RunListView({ searchParams }: { searchParams: ActiveRunsSearchParams }) {
   const apiPath = useMemo(() => {
     const sp = new URLSearchParams();
-    if (searchParams.q) sp.set("q", searchParams.q);
+    // `q` sengaja TIDAK dikirim ke server: pencarian Active Runs difilter di
+    // klien supaya mengetik tidak memicu request + skeleton.
     if (searchParams.platforms) sp.set("platforms", searchParams.platforms);
     if (searchParams.projects) sp.set("projects", searchParams.projects);
     if (searchParams.project) sp.set("project", searchParams.project);
@@ -94,6 +95,12 @@ export function RunListView({ searchParams }: { searchParams: ActiveRunsSearchPa
   }, [searchParams]);
 
   const { data, error, loading, reload } = useApi<ActiveRunsPayload>(apiPath);
+  /**
+   * Query pencarian (sudah di-debounce oleh HistoryControls). Disaring di klien
+   * dari daftar penuh yang sudah dimuat, jadi mengetik tidak memicu request,
+   * perubahan URL, maupun skeleton.
+   */
+  const [query, setQuery] = useState(searchParams.q ?? "");
   const [pendingStatusId, setPendingStatusId] = useState<string | null>(null);
   const [pendingAssigneeId, setPendingAssigneeId] = useState<string | null>(null);
   // Accordion per status: default terbuka. Yang disimpan hanya yang ditutup.
@@ -181,10 +188,17 @@ export function RunListView({ searchParams }: { searchParams: ActiveRunsSearchPa
   const toggleGroup = (status: string) =>
     setCollapsedGroups((prev) => ({ ...prev, [status]: !prev[status] }));
 
+  /** Hasil pencarian klien: cocok pada Run ID maupun nama run. */
+  const filteredRuns = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return list.runs;
+    return list.runs.filter((r) => `${r.runCode} ${r.name}`.toLowerCase().includes(needle));
+  }, [list.runs, query]);
+
   /** Kelompokkan run per status, urut sesuai GROUP_ORDER; grup kosong dibuang. */
   const groups = useMemo(() => {
     const map = new Map<string, ActiveRunsPayload["runs"]>();
-    for (const run of list.runs) {
+    for (const run of filteredRuns) {
       const bucket = map.get(run.status);
       if (bucket) bucket.push(run);
       else map.set(run.status, [run]);
@@ -195,7 +209,7 @@ export function RunListView({ searchParams }: { searchParams: ActiveRunsSearchPa
     return order
       .filter((status) => (map.get(status)?.length ?? 0) > 0)
       .map((status) => ({ status, runs: map.get(status)! }));
-  }, [list.runs]);
+  }, [filteredRuns]);
 
   if (error) {
     return (
@@ -220,7 +234,8 @@ export function RunListView({ searchParams }: { searchParams: ActiveRunsSearchPa
   const columns = data.canEdit ? TABLE_COLUMNS : TABLE_COLUMNS.slice(0, -1);
 
   const hasFilter = !!(
-    searchParams.q ||
+    // Query pencarian kini hidup di state klien, bukan di URL.
+    query.trim() ||
     searchParams.platforms ||
     searchParams.projects ||
     searchParams.project ||
@@ -272,6 +287,9 @@ export function RunListView({ searchParams }: { searchParams: ActiveRunsSearchPa
             baseUrl="/test-runs"
             dialogTitle="Filter Active Runs"
             showFilterButton={false}
+            // Pencarian difilter di klien: tidak mengubah URL, jadi tidak ada
+            // request ulang maupun skeleton saat mengetik.
+            onSearch={setQuery}
             initial={{
               q: searchParams.q ?? "",
               platforms: (searchParams.platforms ?? "")
@@ -295,7 +313,7 @@ export function RunListView({ searchParams }: { searchParams: ActiveRunsSearchPa
       {/* Daftar card per kelompok status — tiap grup punya kontainernya sendiri,
           bukan lagi satu tabel raksasa. */}
       <div style={{ display: "flex", flexDirection: "column" }}>
-        {runs.length === 0 ? (
+        {filteredRuns.length === 0 ? (
           <div
             style={{
               background: "#fff",
@@ -409,6 +427,12 @@ export function RunListView({ searchParams }: { searchParams: ActiveRunsSearchPa
                         <span style={{ fontSize: 12, fontWeight: 500, color: "#94A3B8" }}>
                           {group.runs.length}
                         </span>
+                        {/* Garis fleksibel mengisi sisa lebar — batas visual antar
+                            seksi status. */}
+                        <span
+                          aria-hidden="true"
+                          style={{ flex: 1, height: 1, background: "#E2E8F0" }}
+                        />
                       </div>
 
                       {/* Tabel kolom + baris data — hanya dirender saat grup

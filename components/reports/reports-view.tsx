@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { ErrorBlock, StatsCardsSkeleton, TableCardSkeleton } from "@/components/ui/data-states";
+import { Card } from "@/components/ui";
 import { FilterModal } from "@/components/ui/filter-modal";
 import { CustomSelect, filterLabelStyle } from "@/components/ui/custom-select";
 import { useApi } from "@/lib/client/use-api";
@@ -101,22 +102,26 @@ export function ReportsView() {
         gap: "1.5rem",
       }}
     >
-      {/* Header + filter */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "flex-start",
-          justifyContent: "space-between",
-          gap: "1rem",
-          flexWrap: "wrap",
-        }}
-      >
-        <div>
-          <h1 style={{ fontSize: "1.4rem", fontWeight: 800, margin: 0 }}>Reports</h1>
-          <p style={{ margin: "0.25rem 0 0", fontSize: "0.85rem", color: "var(--text-muted)" }}>
-            Inventaris test case &amp; celah coverage repository.
-          </p>
-        </div>
+      {/* Header + filter — dibungkus kartu standar, sama seperti banner
+          halaman Bugs Tracker & Run History. Batas kartunya jadi garis
+          pemisah antara header dan daftar section di bawahnya. */}
+      <Card>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            justifyContent: "space-between",
+            gap: "1rem",
+            flexWrap: "wrap",
+            padding: "1.25rem 1.5rem",
+          }}
+        >
+          <div>
+            <h1 style={{ fontSize: "1.4rem", fontWeight: 800, margin: 0 }}>Reports</h1>
+            <p style={{ margin: "0.25rem 0 0", fontSize: "0.85rem", color: "var(--text-muted)" }}>
+              Inventaris test case &amp; celah coverage repository.
+            </p>
+          </div>
         <FilterModal
           title="Filter Reports"
           activeCount={(platform !== ALL ? 1 : 0) + (project !== ALL ? 1 : 0)}
@@ -172,7 +177,8 @@ export function ReportsView() {
             />
           </div>
         </FilterModal>
-      </div>
+        </div>
+      </Card>
 
       {/* Laporan mingguan (dikirim tiap Jumat) */}
       <WeeklyReportSection />

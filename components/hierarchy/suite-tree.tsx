@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Pencil, Plus, Trash2, X } from "lucide-react";
 import {
   createSuite,
@@ -109,6 +110,8 @@ function SuiteRow({
   const [movePending, setMovePending] = useState(false);
   const { dragType, draggedId, onDragStart, onDragEnd } = useDragReorder();
   const hasChildren = (suite.children?.length ?? 0) > 0;
+  const router = useRouter();
+  const suiteHref = `/suites/${suite.id}`;
 
   const handleDelete = useCallback(async () => {
     setDeletePending(true);
@@ -151,6 +154,9 @@ function SuiteRow({
     <>
       <tr
         draggable={canEdit}
+        // Seluruh baris jadi target klik — tapi kolom Opsi dikecualikan
+        // (lihat stopPropagation di sel Opsi & link nama suite).
+        onClick={() => router.push(suiteHref)}
         onDragStart={(e) => {
           e.dataTransfer.effectAllowed = "move";
           onDragStart("suite", suite.id);
@@ -164,10 +170,10 @@ function SuiteRow({
         data-id={suite.id}
         style={{
           borderBottom: "1px solid var(--border)",
-          cursor: "grab",
+          cursor: "pointer",
           transition: "background 0.15s ease",
         }}
-        onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-muted)")}
+        onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(248, 250, 252, 0.8)")}
         onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
       >
         <td style={{ padding: "0.6rem 1.25rem", textAlign: "left" }}>
@@ -184,16 +190,19 @@ function SuiteRow({
         </td>
         <td style={{ padding: "0.6rem 0.5rem" }}>
           <Link
-            href={`/suites/${suite.id}`}
+            href={suiteHref}
+            // Link-nya sendiri sudah menavigasi; jangan sampai baris ikut
+            // memicu push kedua.
+            onClick={(e) => e.stopPropagation()}
             style={{
-              fontWeight: 500,
-              color: "#2563EB",
+              // Netral & tebal: interaksi ditandai oleh hover background baris,
+              // bukan warna link atau underline.
+              fontWeight: 700,
+              color: "#1E293B",
               textDecoration: "none",
               display: "inline-block",
               paddingLeft: depth * 20,
             }}
-            onMouseEnter={(e) => (e.currentTarget.style.textDecoration = "underline")}
-            onMouseLeave={(e) => (e.currentTarget.style.textDecoration = "none")}
           >
             {suite.name}
           </Link>
@@ -221,7 +230,12 @@ function SuiteRow({
         </td>
         {canEdit && (
           <td style={{ padding: "0.6rem 0.5rem", textAlign: "center", width: 64 }}>
-            <div style={{ display: "flex", justifyContent: "center", alignItems: "center" }}>
+            {/* Kolom Opsi dikecualikan dari navigasi baris. Menu-nya sendiri
+                dirender lewat portal, jadi cukup trigger di sini. */}
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{ display: "flex", justifyContent: "center", alignItems: "center" }}
+            >
               <RowActionsMenu
                 actions={[
                   {

@@ -81,9 +81,21 @@ const SEVERITIES = [
 ] as const;
 
 /**
- * Kelompokkan hasil eksekusi per Section TC, mempertahankan urutan kemunculan.
- * TC tanpa Section dikumpulkan di grup "Tanpa Section" supaya tidak ada yang
- * hilang dari tampilan.
+ * Bandingkan TC ID secara natural — segmen angkanya dibandingkan sebagai angka
+ * ("ovrtm-2" < "ovrtm-10"), dan TC tanpa ID ditaruh paling akhir.
+ */
+function compareTcId(a: string, b: string): number {
+  if (!a && !b) return 0;
+  if (!a) return 1;
+  if (!b) return -1;
+  return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
+}
+
+/**
+ * Kelompokkan hasil eksekusi per Section TC.
+ * Urutan di DALAM tiap section selalu ascending berdasarkan TC ID (bukan urutan
+ * kemunculan dari API) supaya daftar mudah dipindai QA. TC tanpa Section
+ * dikumpulkan di grup "Tanpa Section" supaya tidak ada yang hilang.
  */
 function groupItemsBySection(items: RunResultItem[]) {
   const groups = new Map<string, { key: string; name: string; items: RunResultItem[] }>();
@@ -97,6 +109,11 @@ function groupItemsBySection(items: RunResultItem[]) {
     }
     g.items.push(it);
   }
+  // forEach (bukan for..of) karena target TS di project ini belum mendukung
+  // iterasi MapIterator langsung.
+  Array.from(groups.values()).forEach((g) => {
+    g.items.sort((a, b) => compareTcId(a.testCase?.tcId ?? "", b.testCase?.tcId ?? ""));
+  });
   return Array.from(groups.values());
 }
 
@@ -347,11 +364,12 @@ export function RunExecutor({
     return { ...p, passed: pPassed, failed: pFailed, untested: pUntested, pct: pPct };
   });
 
-  // Mark all passed dalam satu project
-  const markProjectPassed = async (projectId: string) => {
-    const stats = projectStats.find((p) => p.projectId === projectId);
-    if (!stats) return;
-    for (const item of stats.items) {
+  /**
+   * Tandai PASS untuk sekumpulan TC (bulk). Dipakai tombol di tiap bar section;
+   * `label` cuma untuk pesan toast. TC yang sudah PASS dilewati.
+   */
+  const markItemsPassed = async (targets: RunResultItem[], label: string) => {
+    for (const item of targets) {
       if (item.status === "PASS") continue;
       await updateRunResult(item.id, { status: "PASS" });
       setItems((prev) => prev.map((r) => (r.id === item.id ? { ...r, status: "PASS" } : r)));
@@ -363,7 +381,7 @@ export function RunExecutor({
         )
       );
     }
-    showToast(`Semua test case di "${stats.projectName}" ditandai Pass.`, "success");
+    showToast(`Semua test case di "${label}" ditandai Pass.`, "success");
   };
 
   // --- Complete Run flow ---
@@ -526,19 +544,19 @@ export function RunExecutor({
                 padding: "0 16px",
                 borderRadius: 8,
                 border: "none",
-                background: "#2563EB",
-                color: "#fff",
-                fontWeight: 600,
+                background: "#FFC348",
+                color: "#0F172A",
+                fontWeight: 700,
                 fontSize: 14,
                 cursor: completing ? "wait" : "pointer",
                 boxShadow: "0 1px 2px rgba(15, 23, 42, 0.08)",
                 transition: "background-color 0.15s ease",
               }}
               onMouseEnter={(e) => {
-                if (!completing) e.currentTarget.style.background = "#1D4ED8";
+                if (!completing) e.currentTarget.style.background = "#F0B53D";
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.background = "#2563EB";
+                e.currentTarget.style.background = "#FFC348";
               }}
             >
               {completing ? "Menyelesaikan..." : "Complete Run"}
@@ -821,27 +839,8 @@ export function RunExecutor({
                 {p.projectName}
               </span>
               <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                {canEdit && !isCompleted && (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      void markProjectPassed(p.projectId);
-                    }}
-                    style={{
-                      padding: "0.3rem 0.7rem",
-                      borderRadius: 6,
-                      border: "1px solid #A7F3D0",
-                      background: "#ECFDF5",
-                      color: "#047857",
-                      fontSize: "0.75rem",
-                      fontWeight: 600,
-                      cursor: "pointer",
-                    }}
-                  >
-                    Mark All as Passed
-                  </button>
-                )}
+                {/* Area kanan header project sengaja hanya berisi chevron accordion.
+                    Aksi massal "Mark All as Passed" pindah ke bar tiap section. */}
                 <span style={{ fontSize: 14, color: "#6B7280", display: "inline-flex", transition: "transform 0.2s ease", transform: open ? "rotate(180deg)" : "none" }}>
                   ▼
                 </span>
@@ -902,6 +901,37 @@ export function RunExecutor({
                         >
                           {sec.name}
                         </span>
+                        {/* Aksi massal per section — ghost/outline hijau soft supaya
+                            tidak mendominasi baris, tapi tetap jelas bisa diklik. */}
+                        {canEdit && !isCompleted && (
+                          <button
+                            type="button"
+                            title={`Tandai semua TC di section "${sec.name}" sebagai Pass`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void markItemsPassed(sec.items, sec.name);
+                            }}
+                            style={{
+                              marginLeft: "auto",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              padding: "0.2rem 0.6rem",
+                              borderRadius: 6,
+                              border: "1px solid #A7F3D0",
+                              background: "transparent",
+                              color: "#047857",
+                              fontSize: "0.7rem",
+                              fontWeight: 600,
+                              whiteSpace: "nowrap",
+                              cursor: "pointer",
+                              transition: "background-color 0.15s ease",
+                            }}
+                            onMouseEnter={(e) => (e.currentTarget.style.background = "#ECFDF5")}
+                            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                          >
+                            Mark All as Passed
+                          </button>
+                        )}
                       </div>
                       {secOpen && (
                         <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
@@ -1289,6 +1319,8 @@ function RunItemCard({
 }) {
   const attachedBugs = item.bugs ?? [];
   const badge = STATUS_BADGE[item.status];
+  /** Actual result hanya ditampilkan saat eksekusi gagal atau terblokir. */
+  const showActualResult = item.status === "FAIL" || item.status === "BLOCKED";
   return (
     <div
       onClick={onOpenDetail}
@@ -1310,31 +1342,21 @@ function RunItemCard({
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "1rem" }}>
         <div style={{ minWidth: 0 }}>
           <div style={{ fontWeight: 600, fontSize: "0.875rem", color: "#1E293B", lineHeight: 1.375 }}>
+            {item.testCase?.tcId && (
+              <>
+                <span style={{ fontFamily: "var(--font-mono, monospace)", color: "#64748B", fontWeight: 500 }}>
+                  {item.testCase.tcId}
+                </span>
+                {" - "}
+              </>
+            )}
             {item.titleSnapshot}
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap", marginTop: "0.3rem" }}>
-            {/* Trigger: Actual result & notes -> modal */}
-            <button
-              type="button"
-              onClick={onOpenDetail}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "0.25rem",
-                border: "none",
-                background: "none",
-                color: "#2563EB",
-                fontSize: "0.75rem",
-                fontWeight: 500,
-                cursor: "pointer",
-                padding: 0,
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.textDecoration = "underline")}
-              onMouseLeave={(e) => (e.currentTarget.style.textDecoration = "none")}
-            >
-              Detail Test Case &amp; Notes
-            </button>
-            {(item.attachments?.length ?? 0) > 0 && (
+          {/* Link "Detail Test Case & Notes" dihapus: seluruh kartu sudah
+              menjadi target klik untuk membuka modal detail (lihat onClick di
+              pembungkus kartu). Baris ini hanya sisa chip evidence. */}
+          {(item.attachments?.length ?? 0) > 0 && (
+            <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap", marginTop: "0.3rem" }}>
               <button
                 type="button"
                 onClick={onOpenDetail}
@@ -1355,8 +1377,8 @@ function RunItemCard({
               >
                 <Paperclip size={12} /> {item.attachments!.length} evidence
               </button>
-            )}
-          </div>
+            </div>
+          )}
         </div>
         {/* Indikator status pasif: perubahan status hanya lewat modal detail */}
         <span
@@ -1378,8 +1400,9 @@ function RunItemCard({
         </span>
       </div>
 
-      {/* Blok 2 — hasil eksekusi */}
-      {item.actualResult && (
+      {/* Blok 2 — hasil eksekusi. Hanya relevan saat eksekusi gagal/terblokir;
+          untuk PASS / SKIPPED / belum dieksekusi blok ini disembunyikan. */}
+      {showActualResult && item.actualResult && (
         <div
           style={{
             fontSize: "0.75rem",

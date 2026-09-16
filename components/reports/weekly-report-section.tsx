@@ -43,7 +43,8 @@ export function WeeklyReportSection() {
         <PanelHeader title="Weekly Testing Report" />
         <div
           style={{
-            padding: "1rem 1.25rem 1.25rem",
+            // Body kartu standar: p-6.
+            padding: "1.5rem",
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",

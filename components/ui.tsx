@@ -14,10 +14,15 @@ export function Card({
     <div
       className={className}
       style={{
-        background: "var(--surface)",
-        border: "1px solid var(--border)",
-        borderRadius: "var(--radius-md)",
-        boxShadow: "var(--shadow-sm)",
+        // Anatomi kartu standar: putih, border slate-200, rounded-2xl,
+        // shadow-xs, dan overflow-hidden agar isi tidak menyembul di sudut.
+        // Border sengaja slate-200 SOLID: pada latar halaman #f6f7f9, versi
+        // 80% transparan (kontras ~1.12:1) membuat batas kartu nyaris tak ada.
+        background: "#fff",
+        border: "1px solid #E2E8F0",
+        borderRadius: 16,
+        boxShadow: "0 1px 2px rgba(15, 23, 42, 0.05)",
+        overflow: "hidden",
         ...style,
       }}
     >
@@ -201,11 +206,25 @@ export function PanelHeader({
         display: "flex",
         alignItems: "center",
         justifyContent: "space-between",
-        padding: "1rem 1.25rem",
-        borderBottom: "1px solid var(--border)",
+        gap: "0.75rem",
+        // Header kartu standar: px-6 py-4 + garis pemisah slate-200.
+        // slate-100 (kontras 1.10:1) terlalu pudar untuk terbaca di atas putih.
+        padding: "1rem 1.5rem",
+        borderBottom: "1px solid #E2E8F0",
       }}
     >
-      <h3 style={{ fontSize: "0.95rem", fontWeight: 700, margin: 0 }}>{title}</h3>
+      <h3
+        style={{
+          // text-sm font-bold text-slate-800
+          fontSize: "0.875rem",
+          fontWeight: 700,
+          color: "#1E293B",
+          margin: 0,
+          minWidth: 0,
+        }}
+      >
+        {title}
+      </h3>
       {action}
     </div>
   );

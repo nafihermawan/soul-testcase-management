@@ -31,7 +31,7 @@ export function CoverageGapTable({
             display: "flex",
             alignItems: "flex-start",
             gap: "0.6rem",
-            margin: "0.9rem 1.25rem 0",
+            margin: "1rem 1.5rem 0",
             padding: "0.65rem 0.85rem",
             background: "var(--warning-bg)",
             border: "1px solid #FDE68A",
@@ -74,7 +74,7 @@ export function CoverageGapTable({
                   borderBottom: "1px solid var(--border)",
                 }}
               >
-                <th style={{ padding: "0.55rem 1.25rem", fontWeight: 600 }}>Suite</th>
+                <th style={{ padding: "0.55rem 1.5rem", fontWeight: 600 }}>Suite</th>
                 <th style={{ padding: "0.55rem 0.5rem", fontWeight: 600, width: 64, textAlign: "right" }}>
                   TC
                 </th>
@@ -84,7 +84,7 @@ export function CoverageGapTable({
                 <th style={{ padding: "0.55rem 0.5rem", fontWeight: 600, width: 76, textAlign: "right" }}>
                   Belum
                 </th>
-                <th style={{ padding: "0.55rem 1.25rem", fontWeight: 600, width: 260 }}>Gap</th>
+                <th style={{ padding: "0.55rem 1.5rem", fontWeight: 600, width: 260 }}>Gap</th>
               </tr>
             </thead>
             <tbody>
@@ -99,7 +99,7 @@ export function CoverageGapTable({
                   >
                     <td
                       style={{
-                        padding: "0.55rem 1.25rem",
+                        padding: "0.55rem 1.5rem",
                         overflow: "hidden",
                         textOverflow: "ellipsis",
                         whiteSpace: "nowrap",
@@ -138,7 +138,7 @@ export function CoverageGapTable({
                     >
                       {s.untested}
                     </td>
-                    <td style={{ padding: "0.55rem 1.25rem" }}>
+                    <td style={{ padding: "0.55rem 1.5rem" }}>
                       {gapPct === null ? (
                         <span style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>
                           Belum ada TC

@@ -29,7 +29,8 @@ export function CompositionCard({
       />
       <div
         style={{
-          padding: "1rem 1.25rem",
+          // Body kartu standar: p-6.
+          padding: "1.5rem",
           display: "flex",
           flexDirection: "column",
           gap: "0.7rem",

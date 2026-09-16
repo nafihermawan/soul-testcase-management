@@ -1,15 +1,25 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { apiSession, apiRoleAtLeast, json401 } from "@/lib/api-auth";
 import { toAttachmentItems } from "@/lib/attachments";
 import { presignGetUrls } from "@/lib/storage/r2";
 import type { BugsPayload, BugRow } from "@/types/api";
 
-export async function GET() {
+/**
+ * GET /api/bugs
+ * - tanpa query   -> seluruh bug (halaman Bugs Tracker).
+ * - ?testCaseId=  -> hanya bug milik TestCase tsb, dipakai section
+ *   "Linked Bugs & History" di modal detail eksekusi. Bug yang sudah
+ *   RESOLVED/CLOSED tetap ikut supaya riwayatnya tidak hilang.
+ */
+export async function GET(req: NextRequest) {
   const user = await apiSession();
   if (!user) return json401();
 
+  const testCaseId = (req.nextUrl.searchParams.get("testCaseId") ?? "").trim();
+
   const bugs = await prisma.bug.findMany({
+    where: testCaseId ? { testCaseId } : undefined,
     orderBy: { createdAt: "desc" },
     include: {
       testCase: { select: { id: true, tcId: true, title: true } },
@@ -40,6 +50,7 @@ export async function GET() {
       severity: b.severity,
       externalLink: b.externalLink,
       createdAt: b.createdAt.toISOString(),
+      resolvedAt: b.resolvedAt?.toISOString() ?? null,
       testCase: b.testCase,
       suite: b.suite,
       project: b.project,

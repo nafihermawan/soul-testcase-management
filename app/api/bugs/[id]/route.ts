@@ -35,6 +35,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     severity: bug.severity,
     externalLink: bug.externalLink,
     createdAt: bug.createdAt.toISOString(),
+    resolvedAt: bug.resolvedAt?.toISOString() ?? null,
     testCase: bug.testCase,
     suite: bug.suite,
     project: bug.project,

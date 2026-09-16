@@ -14,7 +14,7 @@ import { AttachmentsPanel } from "@/components/attachments/attachments-panel";
 import { BugDetailModal } from "@/components/bugs/bug-detail-modal";
 import { EditRunModal } from "@/components/test-runs/edit-run-modal";
 import type { ExpressRunInitial } from "@/components/test-runs/express-run";
-import type { AttachmentItem, BugStatus } from "@/types/api";
+import type { AttachmentItem, BugRow, BugStatus, BugsPayload } from "@/types/api";
 
 export type RunResultItem = {
   id: string;
@@ -70,6 +70,26 @@ const STATUS_BADGE: Record<
   FAIL: { label: "Failed", bg: "#FFF1F2", color: "#BE123C", border: "#FECDD3", bold: true },
   BLOCKED: { label: "Blocked", bg: "#FFFBEB", color: "#B45309", border: "#FDE68A", bold: true },
   SKIPPED: { label: "Skipped", bg: "#F1F5F9", color: "#334155", border: "#CBD5E1", bold: true },
+};
+
+/**
+ * Badge status bug untuk section riwayat bug di modal eksekusi.
+ * Kontras sengaja tinggi (teks gelap di atas latar soft + border tipis) supaya
+ * langsung terbaca; RESOLVED & CLOSED sama-sama hijau sesuai artinya "selesai".
+ */
+const BUG_STATUS_BADGE: Record<BugStatus, { label: string; bg: string; color: string; border: string }> = {
+  OPEN: { label: "Open", bg: "#FEF2F2", color: "#B91C1C", border: "#FECACA" },
+  IN_PROGRESS: { label: "In Progress", bg: "#FFFBEB", color: "#B45309", border: "#FDE68A" },
+  RESOLVED: { label: "Resolved", bg: "#ECFDF5", color: "#047857", border: "#A7F3D0" },
+  CLOSED: { label: "Closed", bg: "#DCFCE7", color: "#166534", border: "#86EFAC" },
+};
+
+/** Badge severity bug: amber tegas untuk MEDIUM, makin merah makin berat. */
+const BUG_SEVERITY_BADGE: Record<string, { bg: string; color: string; border: string }> = {
+  CRITICAL: { bg: "#FEF2F2", color: "#B91C1C", border: "#FECACA" },
+  HIGH: { bg: "#FFF7ED", color: "#C2410C", border: "#FED7AA" },
+  MEDIUM: { bg: "#FFFBEB", color: "#B45309", border: "#FDE68A" },
+  LOW: { bg: "#F1F5F9", color: "#475569", border: "#CBD5E1" },
 };
 
 /** Severity bug pada Bug Reporting Form (nilai disimpan uppercase, sama dgn data Bug). */
@@ -363,26 +383,6 @@ export function RunExecutor({
     const pPct = p.items.length > 0 ? Math.round((pPassed / p.items.length) * 100) : 0;
     return { ...p, passed: pPassed, failed: pFailed, untested: pUntested, pct: pPct };
   });
-
-  /**
-   * Tandai PASS untuk sekumpulan TC (bulk). Dipakai tombol di tiap bar section;
-   * `label` cuma untuk pesan toast. TC yang sudah PASS dilewati.
-   */
-  const markItemsPassed = async (targets: RunResultItem[], label: string) => {
-    for (const item of targets) {
-      if (item.status === "PASS") continue;
-      await updateRunResult(item.id, { status: "PASS" });
-      setItems((prev) => prev.map((r) => (r.id === item.id ? { ...r, status: "PASS" } : r)));
-      setGroups((prev) =>
-        prev.map((g) =>
-          g.items.some((x) => x.id === item.id)
-            ? { ...g, items: g.items.map((x) => (x.id === item.id ? { ...x, status: "PASS" } : x)) }
-            : g
-        )
-      );
-    }
-    showToast(`Semua test case di "${label}" ditandai Pass.`, "success");
-  };
 
   // --- Complete Run flow ---
   // Complete selalu lewat Completion Summary Modal dulu: QA me-review catatan
@@ -839,8 +839,7 @@ export function RunExecutor({
                 {p.projectName}
               </span>
               <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                {/* Area kanan header project sengaja hanya berisi chevron accordion.
-                    Aksi massal "Mark All as Passed" pindah ke bar tiap section. */}
+                {/* Area kanan header project hanya berisi chevron accordion. */}
                 <span style={{ fontSize: 14, color: "#6B7280", display: "inline-flex", transition: "transform 0.2s ease", transform: open ? "rotate(180deg)" : "none" }}>
                   ▼
                 </span>
@@ -901,37 +900,6 @@ export function RunExecutor({
                         >
                           {sec.name}
                         </span>
-                        {/* Aksi massal per section — ghost/outline hijau soft supaya
-                            tidak mendominasi baris, tapi tetap jelas bisa diklik. */}
-                        {canEdit && !isCompleted && (
-                          <button
-                            type="button"
-                            title={`Tandai semua TC di section "${sec.name}" sebagai Pass`}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              void markItemsPassed(sec.items, sec.name);
-                            }}
-                            style={{
-                              marginLeft: "auto",
-                              display: "inline-flex",
-                              alignItems: "center",
-                              padding: "0.2rem 0.6rem",
-                              borderRadius: 6,
-                              border: "1px solid #A7F3D0",
-                              background: "transparent",
-                              color: "#047857",
-                              fontSize: "0.7rem",
-                              fontWeight: 600,
-                              whiteSpace: "nowrap",
-                              cursor: "pointer",
-                              transition: "background-color 0.15s ease",
-                            }}
-                            onMouseEnter={(e) => (e.currentTarget.style.background = "#ECFDF5")}
-                            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-                          >
-                            Mark All as Passed
-                          </button>
-                        )}
                       </div>
                       {secOpen && (
                         <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
@@ -974,6 +942,7 @@ export function RunExecutor({
           canEdit={canEdit}
           onClose={() => setModalItem(null)}
           onAttachmentsChange={(list) => patchResult(modalItem.id, { attachments: list })}
+          onOpenBugDetail={setBugDetailId}
           onSave={async (data) => {
             const res = await updateRunResult(modalItem.id, {
               status: data.status,
@@ -2281,6 +2250,7 @@ function ExecutionModal({
   canEdit,
   onClose,
   onAttachmentsChange,
+  onOpenBugDetail,
   onSave,
 }: {
   item: RunResultItem;
@@ -2288,6 +2258,8 @@ function ExecutionModal({
   onClose: () => void;
   /** Teruskan daftar attachment terbaru ke parent (update in-place). */
   onAttachmentsChange?: (list: AttachmentItem[]) => void;
+  /** Buka Bug Detail Modal dari daftar riwayat bug TC ini. */
+  onOpenBugDetail?: (bugId: string) => void;
   onSave: (data: {
     status: RunResultItem["status"];
     actualResult?: string;
@@ -2326,6 +2298,34 @@ function ExecutionModal({
     .split("\n")
     .map((s) => s.trim())
     .filter(Boolean);
+
+  /**
+   * Riwayat bug milik TEST CASE ini (bukan hanya hasil eksekusi run ini).
+   * Sengaja diambil per testCaseId supaya bug yang sudah RESOLVED/CLOSED —
+   * termasuk yang sudah melepas tautan run-nya — tetap tampil riwayatnya.
+   */
+  const [linkedBugs, setLinkedBugs] = useState<BugRow[]>([]);
+  const [bugsLoading, setBugsLoading] = useState(true);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/bugs?testCaseId=${encodeURIComponent(item.testCaseId)}`, {
+          cache: "no-store",
+        });
+        if (!res.ok) throw new Error();
+        const data = (await res.json()) as BugsPayload;
+        if (!cancelled) setLinkedBugs(data.bugs);
+      } catch {
+        if (!cancelled) setLinkedBugs([]);
+      } finally {
+        if (!cancelled) setBugsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [item.testCaseId]);
 
   const sectionLabel: React.CSSProperties = {
     fontSize: "0.72rem",
@@ -2434,6 +2434,7 @@ function ExecutionModal({
         {/* Header */}
         <div
           style={{
+            flexShrink: 0,
             display: "flex",
             alignItems: "flex-start",
             justifyContent: "space-between",
@@ -2474,8 +2475,17 @@ function ExecutionModal({
           </button>
         </div>
 
-        {/* Body */}
-        <div style={{ padding: "1.25rem 1.5rem", overflowY: "auto", display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+        {/* Bagian STATIS: metadata, skenario, expected result, dan test steps.
+            Sengaja tidak ikut scroll supaya konteks TC selalu terlihat. */}
+        <div
+          style={{
+            flexShrink: 0,
+            padding: "1.25rem 1.5rem 0",
+            display: "flex",
+            flexDirection: "column",
+            gap: "1.25rem",
+          }}
+        >
           {/* Metadata */}
           <div
             style={{
@@ -2554,8 +2564,22 @@ function ExecutionModal({
               </div>
             </div>
           )}
+        </div>
 
-          {/* Execution form */}
+        {/* Frame EKSEKUSI — flex child yang boleh menyusut (flex:1 + minHeight:0)
+            supaya kartu di dalamnya tidak meluap melebihi tinggi modal.
+            Scroll-nya ada DI DALAM kartu (lihat isi form eksekusi). */}
+        <div
+          style={{
+            flex: 1,
+            minHeight: 0,
+            display: "flex",
+            flexDirection: "column",
+            padding: "1.25rem 1.5rem",
+          }}
+        >
+          {/* Execution form — satu-satunya area yang scroll (flex:1 +
+              minHeight:0) supaya bagian statis di atas & footer tetap di tempat. */}
           <div
             style={{
               background: "rgba(248, 250, 252, 0.8)",
@@ -2564,12 +2588,17 @@ function ExecutionModal({
               padding: "1rem",
               display: "flex",
               flexDirection: "column",
-              gap: "0.9rem",
+              // Tanpa `gap`: jarak antar bagian diatur margin masing-masing,
+              // supaya judul "Eksekusi" tidak berjarak terlalu jauh dari tombol.
+              // Ikut menyusut agar isi yang scroll punya batas tinggi nyata.
+              flex: 1,
+              minHeight: 0,
+              overflow: "hidden",
             }}
           >
-            <h4 style={sectionLabel}>Eksekusi</h4>
+            <h4 style={{ ...sectionLabel, flexShrink: 0 }}>Eksekusi</h4>
 
-            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", flexShrink: 0 }}>
               {STATUSES.map((s) => {
                 const Icon = s.icon;
                 const isActive = status === s.value;
@@ -2603,6 +2632,26 @@ function ExecutionModal({
               })}
             </div>
 
+            {/* Garis pemisah inset (bukan full-width) antara tombol status dan
+                input Actual Result. Ditaruh DI LUAR area scroll supaya tetap
+                diam menemani tombol status. */}
+            <div
+              aria-hidden="true"
+              style={{ flexShrink: 0, height: 1, background: "#E2E8F0", margin: "0.6rem 0 0.9rem" }}
+            />
+
+            {/* Isi eksekusi — HANYA bagian ini yang scroll. Header kartu &
+                tombol status di atasnya tetap di tempat (flexShrink: 0). */}
+            <div
+              style={{
+                flex: 1,
+                minHeight: 0,
+                overflowY: "auto",
+                display: "flex",
+                flexDirection: "column",
+                gap: "0.9rem",
+              }}
+            >
             {isFail ? (
               <>
                 {/* Bug Reporting Form: tampil otomatis ketika status Fail */}
@@ -2740,40 +2789,188 @@ function ExecutionModal({
               />
             </div>
 
-            {msg && (
-              <div style={{ fontSize: "0.75rem", color: "#B91C1C" }}>{msg}</div>
-            )}
-
-            {canEdit && (
-              <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                <button
-                  type="button"
-                  onClick={() => void save()}
-                  disabled={saving}
-                  style={{
-                    padding: "0.45rem 1.1rem",
-                    border: "none",
-                    borderRadius: 3,
-                    background: isFail ? "#E11D48" : "#FFC107",
-                    color: isFail ? "#fff" : "#0F172A",
-                    fontSize: "0.78rem",
-                    fontWeight: 700,
-                    cursor: saving ? "wait" : "pointer",
-                    transition: "background-color 0.15s ease",
-                  }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = isFail ? "#BE123C" : "#E0A800")}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = isFail ? "#E11D48" : "#FFC107")}
-                >
-                  {saving
-                    ? "Menyimpan..."
-                    : isFail && !hasLinkedBug
-                      ? "Laporkan Bug & Simpan"
-                      : "Simpan Detail"}
-                </button>
+            {/* Riwayat bug Test Case ini — termasuk yang sudah resolved/closed,
+                supaya jejak bug tidak hilang setelah TC-nya jadi Pass. */}
+            <div style={{ marginTop: "0.9rem" }}>
+              <div style={{ fontSize: "0.72rem", fontWeight: 700, color: "#64748B", marginBottom: "0.4rem" }}>
+                LINKED BUGS &amp; HISTORY
               </div>
-            )}
+
+              {bugsLoading ? (
+                <div style={{ fontSize: "0.75rem", color: "#94A3B8" }}>Memuat riwayat bug…</div>
+              ) : linkedBugs.length === 0 ? (
+                <div style={{ fontSize: "0.75rem", color: "#94A3B8", fontStyle: "italic" }}>
+                  Belum ada bug yang pernah dilaporkan untuk test case ini.
+                </div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+                  {linkedBugs.map((b) => {
+                    const st = BUG_STATUS_BADGE[b.status];
+                    return (
+                      <div
+                        key={b.id}
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "0.2rem",
+                          padding: "0.5rem 0.65rem",
+                          border: "1px solid #E2E8F0",
+                          borderRadius: 8,
+                          background: "#fff",
+                        }}
+                      >
+                        {/* Baris 1 — ID bug (kiri) + severity & status (kanan) */}
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            gap: "0.5rem",
+                          }}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => onOpenBugDetail?.(b.id)}
+                            title="Buka detail bug"
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "0.3rem",
+                              border: "none",
+                              background: "none",
+                              padding: 0,
+                              color: "#BE123C",
+                              fontFamily: "var(--font-mono, monospace)",
+                              fontSize: "0.7rem",
+                              fontWeight: 700,
+                              whiteSpace: "nowrap",
+                              cursor: onOpenBugDetail ? "pointer" : "default",
+                            }}
+                            onMouseEnter={(e) => {
+                              if (onOpenBugDetail) e.currentTarget.style.textDecoration = "underline";
+                            }}
+                            onMouseLeave={(e) => (e.currentTarget.style.textDecoration = "none")}
+                          >
+                            <Bug size={12} /> {entityCode("BUG", b.id)}
+                          </button>
+
+                          <div style={{ display: "flex", alignItems: "center", gap: "0.3rem", flexShrink: 0 }}>
+                            {b.severity &&
+                              (() => {
+                                const sv = BUG_SEVERITY_BADGE[b.severity] ?? BUG_SEVERITY_BADGE.LOW;
+                                return (
+                                  <span
+                                    style={{
+                                      padding: "0.1rem 0.45rem",
+                                      borderRadius: 999,
+                                      fontSize: "0.6875rem",
+                                      fontWeight: 700,
+                                      letterSpacing: "0.02em",
+                                      background: sv.bg,
+                                      color: sv.color,
+                                      border: `1px solid ${sv.border}`,
+                                    }}
+                                  >
+                                    {b.severity}
+                                  </span>
+                                );
+                              })()}
+                            <span
+                              style={{
+                                padding: "0.1rem 0.45rem",
+                                borderRadius: 999,
+                                fontSize: "0.6875rem",
+                                fontWeight: 700,
+                                letterSpacing: "0.02em",
+                                background: st.bg,
+                                color: st.color,
+                                border: `1px solid ${st.border}`,
+                              }}
+                            >
+                              {st.label}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Baris 2 — judul bug */}
+                        <div
+                          style={{
+                            fontSize: "0.75rem",
+                            fontWeight: 600,
+                            color: "#334155",
+                            lineHeight: 1.4,
+                          }}
+                        >
+                          {b.title}
+                        </div>
+
+                        {/* Baris 3 — metadata ringkas */}
+                        <div style={{ fontSize: "0.66rem", color: "#94A3B8" }}>
+                          {new Date(b.createdAt).toLocaleDateString("id-ID", {
+                            day: "2-digit",
+                            month: "short",
+                            year: "numeric",
+                          })}
+                          {b.resolvedAt
+                            ? ` · Selesai ${new Date(b.resolvedAt).toLocaleDateString("id-ID", {
+                                day: "2-digit",
+                                month: "short",
+                                year: "numeric",
+                              })}`
+                            : ""}
+                          {b.run ? ` · ${b.run.name}` : ""}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+            </div>
           </div>
         </div>
+
+        {/* Footer: ikut fixed di bawah modal, terpisah dari area scroll. */}
+        {canEdit && (
+          <div
+            style={{
+              flexShrink: 0,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "flex-end",
+              gap: "0.75rem",
+              padding: "0.9rem 1.5rem",
+              borderTop: "1px solid var(--border)",
+              background: "#fff",
+            }}
+          >
+            {msg && <div style={{ flex: 1, fontSize: "0.75rem", color: "#B91C1C" }}>{msg}</div>}
+            <button
+              type="button"
+              onClick={() => void save()}
+              disabled={saving}
+              style={{
+                padding: "0.5rem 1.25rem",
+                border: "none",
+                borderRadius: 6,
+                background: isFail ? "#E11D48" : "#FFC107",
+                color: isFail ? "#fff" : "#0F172A",
+                fontSize: "0.78rem",
+                fontWeight: 700,
+                cursor: saving ? "wait" : "pointer",
+                transition: "background-color 0.15s ease",
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = isFail ? "#BE123C" : "#E0A800")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = isFail ? "#E11D48" : "#FFC107")}
+            >
+              {saving
+                ? "Menyimpan..."
+                : isFail && !hasLinkedBug
+                  ? "Laporkan Bug & Simpan"
+                  : "Simpan Detail"}
+            </button>
+          </div>
+        )}
       </div>
     </div>,
     document.body

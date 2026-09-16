@@ -110,6 +110,8 @@ export type BugRow = {
   severity: string | null;
   externalLink: string | null;
   createdAt: string;
+  /** Diisi saat bug RESOLVED/CLOSED — dipakai sebagai data riwayat. */
+  resolvedAt: string | null;
   testCase: { id: string; tcId: string; title: string } | null;
   /** Suite/modul tempat bug ditemukan (diisi untuk temuan ad-hoc). */
   suite: { id: string; name: string } | null;

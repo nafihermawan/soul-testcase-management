@@ -2440,7 +2440,6 @@ function ExecutionModal({
             justifyContent: "space-between",
             gap: "0.75rem",
             padding: "1.25rem 1.5rem",
-            borderBottom: "1px solid var(--border)",
           }}
         >
           <div style={{ minWidth: 0 }}>
@@ -2474,6 +2473,13 @@ function ExecutionModal({
             <X size={18} />
           </button>
         </div>
+
+        {/* Garis pemisah di bawah judul modal — sengaja TIDAK full-width:
+            diberi margin kiri-kanan 1.5rem (px-6) agar selaras batas kontainer. */}
+        <div
+          aria-hidden="true"
+          style={{ flexShrink: 0, height: 1, background: "var(--border)", margin: "0 1.5rem" }}
+        />
 
         {/* Bagian STATIS: metadata, skenario, expected result, dan test steps.
             Sengaja tidak ikut scroll supaya konteks TC selalu terlihat. */}
@@ -2930,7 +2936,8 @@ function ExecutionModal({
           </div>
         </div>
 
-        {/* Footer: ikut fixed di bawah modal, terpisah dari area scroll. */}
+        {/* Footer: ikut fixed di bawah modal, terpisah dari area scroll.
+            Tanpa border atas sesuai permintaan — pemisahnya cukup latar putih. */}
         {canEdit && (
           <div
             style={{
@@ -2940,7 +2947,6 @@ function ExecutionModal({
               justifyContent: "flex-end",
               gap: "0.75rem",
               padding: "0.9rem 1.5rem",
-              borderTop: "1px solid var(--border)",
               background: "#fff",
             }}
           >

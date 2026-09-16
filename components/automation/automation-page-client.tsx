@@ -29,6 +29,7 @@ import {
 import { getJSON, useApi } from "@/lib/client/use-api";
 import { HistoryPagination } from "@/components/test-runs/history-pagination";
 import { useToast, Toast, ConfirmDialog } from "@/components/ui/feedback";
+import { Select } from "@/components/ui/select";
 import { ErrorBlock, StatsCardsSkeleton, TableCardSkeleton } from "@/components/ui/data-states";
 import type {
   AutomationPayload,
@@ -589,13 +590,14 @@ export function AutomationPageClient({
           />
         </div>
 
-        <select
+        <Select
           value={statusFilter}
+          ariaLabel="Filter status automation"
+          style={{ width: 180 }}
           onChange={(e) => {
             setStatusFilter(e.target.value);
             setFlatPage(1);
           }}
-          style={{ ...inputBase }}
         >
           <option value="ALL">Semua Status</option>
           <option value="FAILING">Failing</option>
@@ -603,7 +605,7 @@ export function AutomationPageClient({
           <option value="UNSTABLE">Unstable</option>
           <option value="NOT_AUTOMATED">Belum Automated</option>
           <option value="AUTOMATED">Automated</option>
-        </select>
+        </Select>
 
         <MultiChipFilter
           label={
@@ -1150,18 +1152,20 @@ function RowTr({
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           {actions.badge(r.status)}
           {canUpdateStatus && r.linkId && (
-            <select
+            <Select
+              size="sm"
               value={r.status === "STALE" ? "AUTOMATED" : r.status}
-              onChange={(e) => actions.onQuickStatus(r, e.target.value as AutomationRowStatus)}
               disabled={pending}
+              ariaLabel="Ubah status automation"
               title="Ubah status"
-              style={{ border: "1px solid #E2E8F0", borderRadius: 6, background: "#fff", fontSize: "0.72rem", color: "#64748B", padding: "2px 4px", cursor: "pointer" }}
+              style={{ width: 130, color: "#64748B" }}
+              onChange={(e) => actions.onQuickStatus(r, e.target.value as AutomationRowStatus)}
             >
               <option value="AUTOMATED">Automated</option>
               <option value="FAILING">Failing</option>
               <option value="UNSTABLE">Unstable</option>
               <option value="NOT_AUTOMATED">Belum Automated</option>
-            </select>
+            </Select>
           )}
         </div>
       </td>

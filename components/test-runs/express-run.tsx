@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { FolderOpen, Play, RotateCcw, Search, X } from "lucide-react";
 import { createTestRun, updateTestRun } from "@/lib/actions/test-runs";
 import { getJSON, invalidateApiCache } from "@/lib/client/use-api";
+import { Select } from "@/components/ui/select";
 import type { PlatformCode, RunOptionsPayload } from "@/types/api";
 
 type SuiteOption = {
@@ -553,10 +554,10 @@ export function ExpressRunForm({
             <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)" }}>
               Tipe Activity <span style={{ color: "#EF4444" }}>*</span>
             </label>
-            <select
+            <Select
               value={activityType}
+              ariaLabel="Tipe activity"
               onChange={(e) => setActivityType(e.target.value)}
-              style={{ ...inputStyle, cursor: "pointer" }}
             >
               <option value="">Pilih Tipe Activity</option>
               {ACTIVITY_OPTIONS.map((opt) => (
@@ -564,16 +565,16 @@ export function ExpressRunForm({
                   {opt}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
             <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)" }}>
               Environment <span style={{ color: "#EF4444" }}>*</span>
             </label>
-            <select
+            <Select
               value={environment}
+              ariaLabel="Environment"
               onChange={(e) => setEnvironment(e.target.value)}
-              style={{ ...inputStyle, cursor: "pointer" }}
             >
               <option value="">Pilih Environment</option>
               {ENVIRONMENT_OPTIONS.map((opt) => (
@@ -581,7 +582,7 @@ export function ExpressRunForm({
                   {opt}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
             <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)" }}>
@@ -714,20 +715,17 @@ export function ExpressRunForm({
                   </button>
                 </span>
               ))}
-              <select
+              <Select
                 value=""
-                onChange={(e) => {
-                  if (e.target.value) toggleProject(e.target.value);
-                }}
+                ariaLabel="Tambah project"
                 style={{
                   flex: 1,
                   minWidth: 90,
                   border: "none",
-                  outline: "none",
                   background: "transparent",
-                  fontSize: "0.8rem",
-                  color: "var(--text-secondary)",
-                  cursor: "pointer",
+                }}
+                onChange={(e) => {
+                  if (e.target.value) toggleProject(e.target.value);
                 }}
               >
                 <option value="">+ Tambah project</option>
@@ -738,7 +736,7 @@ export function ExpressRunForm({
                       {p.name}
                     </option>
                   ))}
-              </select>
+              </Select>
             </div>
           </div>
         </div>

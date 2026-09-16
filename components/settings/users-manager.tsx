@@ -7,6 +7,7 @@ import { addUserByEmail, removeUser, updateUser } from "@/lib/actions/users";
 import { useRefresh } from "@/lib/client/refresh-context";
 import { RowActionsMenu } from "@/components/settings/row-actions-menu";
 import { ConfirmDialog, Spinner, Toast, useToast } from "@/components/ui/feedback";
+import { Select } from "@/components/ui/select";
 
 export type UserItem = {
   id: string;
@@ -199,13 +200,18 @@ function UserModal({
             <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)" }}>
               Role
             </label>
-            <select value={role} onChange={(e) => setRole(e.target.value as UserItem["role"])} style={{ ...fieldStyle, background: "#fff" }}>
+            <Select
+              value={role}
+              ariaLabel="Role user"
+              style={{ marginTop: "0.25rem", width: "100%" }}
+              onChange={(e) => setRole(e.target.value as UserItem["role"])}
+            >
               {roleOptions.map((r) => (
                 <option key={r.value} value={r.value}>
                   {r.label}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
           <div>
             <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)" }}>

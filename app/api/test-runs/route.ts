@@ -59,7 +59,7 @@ export async function GET(req: NextRequest) {
   // Full list: seluruh run aktif dikirim sekaligus (halaman Active Runs tidak
   // memakai pagination — semua run tampil di dalam grup statusnya).
   // Ketiganya tidak saling bergantung -> satu Promise.all (1 fase round-trip).
-  const [allProjects, runs] = await Promise.all([
+  const [allProjects, runs, assigneeOptions] = await Promise.all([
     prisma.project.findMany({
       orderBy: [{ order: "asc" }, { createdAt: "asc" }],
       select: { id: true, name: true, platform: true },
@@ -70,10 +70,12 @@ export async function GET(req: NextRequest) {
       include: {
         project: { select: { id: true, name: true } },
         createdBy: { select: { name: true } },
+        assignee: { select: { id: true, name: true } },
         _count: { select: { results: true } },
         results: {
           select: {
             status: true,
+            updatedBy: { select: { name: true } },
             testCase: {
               select: {
                 suite: {
@@ -89,6 +91,12 @@ export async function GET(req: NextRequest) {
           },
         },
       },
+    }),
+    // Kandidat assignee untuk dropdown inline di kolom Assignee.
+    prisma.user.findMany({
+      where: { role: "QA" },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
     }),
   ]);
 
@@ -129,6 +137,12 @@ export async function GET(req: NextRequest) {
       status: run.status,
       pct,
       createdByName: run.createdBy?.name ?? null,
+      /** Assignee tersimpan (penugasan manual) — null berarti belum ditugaskan. */
+      assignee: run.assignee,
+      // Eksekutor = QA yang meng-update hasil TC di run ini (unik, urut stabil).
+      executorNames: Array.from(
+        new Set(run.results.map((r) => r.updatedBy?.name).filter((n): n is string => !!n))
+      ).sort((a, b) => a.localeCompare(b)),
       createdAt: run.createdAt.toISOString(),
     };
   });
@@ -137,6 +151,8 @@ export async function GET(req: NextRequest) {
     runs: rows,
     canEdit: apiRoleAtLeast(user.role, "QA"),
     allProjects,
+    /** Kandidat assignee: hanya role QA (yang memang mengeksekusi TC). */
+    assigneeOptions,
   };
 
   return NextResponse.json(payload);

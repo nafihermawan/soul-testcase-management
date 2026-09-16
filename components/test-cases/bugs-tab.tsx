@@ -5,6 +5,7 @@ import { Bug, ExternalLink, Trash2 } from "lucide-react";
 import { createBug, deleteBug, updateBugStatus } from "@/lib/actions/automation-bugs";
 import { useRefresh } from "@/lib/client/refresh-context";
 import { ConfirmDialog, Spinner, Toast, useToast } from "@/components/ui/feedback";
+import { Select } from "@/components/ui/select";
 
 export type BugItem = {
   id: string;
@@ -101,13 +102,13 @@ export function BugsTab({ testCaseId, bugs }: { testCaseId: string; bugs: BugIte
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.7rem" }}>
             <div>
               <label style={{ fontSize: "0.78rem", fontWeight: 600, color: "var(--text-secondary)" }}>Severity</label>
-              <select value={severity} onChange={(e) => setSeverity(e.target.value)} style={{ width: "100%", marginTop: "0.25rem", padding: "0.5rem 0.75rem", border: "1px solid var(--border-strong)", borderRadius: 8, fontSize: "0.85rem", background: "#fff" }}>
+              <Select value={severity} ariaLabel="Severity bug" style={{ marginTop: "0.25rem", width: "100%" }} onChange={(e) => setSeverity(e.target.value)}>
                 <option value="">—</option>
                 <option value="LOW">Low</option>
                 <option value="MEDIUM">Medium</option>
                 <option value="HIGH">High</option>
                 <option value="CRITICAL">Critical</option>
-              </select>
+              </Select>
             </div>
             <div>
               <label style={{ fontSize: "0.78rem", fontWeight: 600, color: "var(--text-secondary)" }}>External Link</label>
@@ -167,16 +168,18 @@ export function BugsTab({ testCaseId, bugs }: { testCaseId: string; bugs: BugIte
                     </td>
                     <td style={{ padding: "0.6rem 0.5rem", color: "var(--text-secondary)" }}>{bug.severity ?? "—"}</td>
                     <td style={{ padding: "0.6rem 0.5rem" }}>
-                      <select
+                      <Select
+                        size="sm"
                         value={bug.status}
+                        ariaLabel="Ubah status bug"
+                        style={{ background: st.bg, color: st.color }}
                         onChange={(e) => changeStatus(bug.id, e.target.value as BugItem["status"])}
-                        style={{ padding: "0.25rem 0.5rem", borderRadius: 6, border: "1px solid var(--border-strong)", fontSize: "0.78rem", fontWeight: 600, background: st.bg, color: st.color, cursor: "pointer" }}
                       >
                         <option value="OPEN">Open</option>
                         <option value="IN_PROGRESS">In Progress</option>
                         <option value="RESOLVED">Resolved</option>
                         <option value="CLOSED">Closed</option>
-                      </select>
+                      </Select>
                     </td>
                     <td style={{ padding: "0.6rem 0.5rem" }}>
                       {bug.externalLink ? (

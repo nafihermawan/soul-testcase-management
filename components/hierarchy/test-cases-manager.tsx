@@ -35,6 +35,7 @@ import {
 } from "@/lib/actions/sections";
 import { RowActionsMenu } from "@/components/settings/row-actions-menu";
 import { ConfirmDialog } from "@/components/ui/feedback";
+import { Select } from "@/components/ui/select";
 
 export type TestCase = {
   id: string;
@@ -151,6 +152,11 @@ function TestCaseForm({
   const [isPending, setIsPending] = useState(false);
   const [titleValue, setTitleValue] = useState(initial?.title ?? "");
   const [scenarioValue, setScenarioValue] = useState(initial?.scenario ?? "");
+  // Priority & status ikut ditahan sebagai state: dropdown sistem bukan elemen
+  // form natif, jadi nilainya tidak muncul di FormData dan harus di-set manual
+  // (pola yang sama dengan title/scenario di bawah).
+  const [priorityValue, setPriorityValue] = useState(initial?.priority ?? "MEDIUM");
+  const [statusValue, setStatusValue] = useState(initial?.status ?? "DRAFT");
   const titleRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -194,6 +200,8 @@ function TestCaseForm({
       formData.set("title", title);
       formData.set("scenario", scenario);
       formData.set("suiteId", suiteId);
+      formData.set("priority", priorityValue);
+      formData.set("status", statusValue);
       const res = await onSubmit(formData);
       if (res?.error) setError(res.error);
       else if (res?.success) onCancel();
@@ -316,16 +324,16 @@ function TestCaseForm({
                 >
                   Priority
                 </label>
-                <select
-                  name="priority"
-                  defaultValue={initial?.priority ?? "MEDIUM"}
-                  style={inputStyle}
+                <Select
+                  value={priorityValue}
+                  ariaLabel="Priority"
+                  onChange={(e) => setPriorityValue(e.target.value as TestCase["priority"])}
                 >
                   <option value="LOW">Low</option>
                   <option value="MEDIUM">Medium</option>
                   <option value="HIGH">High</option>
                   <option value="CRITICAL">Critical</option>
-                </select>
+                </Select>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
                 <label
@@ -333,11 +341,15 @@ function TestCaseForm({
                 >
                   Status
                 </label>
-                <select name="status" defaultValue={initial?.status ?? "DRAFT"} style={inputStyle}>
+                <Select
+                  value={statusValue}
+                  ariaLabel="Status"
+                  onChange={(e) => setStatusValue(e.target.value as TestCase["status"])}
+                >
                   <option value="DRAFT">Draft</option>
                   <option value="ACTIVE">Active</option>
                   <option value="DEPRECATED">Deprecated</option>
-                </select>
+                </Select>
               </div>
             </div>
           </div>
@@ -943,47 +955,39 @@ function TestCaseTable({
                 {t.title}
               </td>
               <td style={{ padding: "0.5rem 0.5rem", width: 140 }}>
-                <select
+                <Select
+                  size="sm"
                   value={t.priority}
                   disabled={!canEdit}
-                  onChange={async (e) => {
+                  ariaLabel="Ubah priority TC"
+                  style={{ ...badgeStyle(priorityTone(t.priority)), border: "none", maxWidth: "100%" }}
+                  onChange={(e) => {
                     const val = e.target.value as TestCase["priority"];
                     onQuickUpdate(t, { priority: val });
-                  }}
-                  style={{
-                    ...badgeStyle(priorityTone(t.priority)),
-                    border: "none",
-                    cursor: canEdit ? "pointer" : "default",
-                    outline: "none",
-                    maxWidth: "100%",
                   }}
                 >
                   <option value="CRITICAL">CRITICAL</option>
                   <option value="HIGH">HIGH</option>
                   <option value="MEDIUM">MEDIUM</option>
                   <option value="LOW">LOW</option>
-                </select>
+                </Select>
               </td>
               <td style={{ padding: "0.5rem 0.5rem", width: 140 }}>
-                <select
+                <Select
+                  size="sm"
                   value={t.status}
                   disabled={!canEdit}
-                  onChange={async (e) => {
+                  ariaLabel="Ubah status TC"
+                  style={{ ...badgeStyle(statusTone(t.status)), border: "none", maxWidth: "100%" }}
+                  onChange={(e) => {
                     const val = e.target.value as TestCase["status"];
                     onQuickUpdate(t, { status: val });
-                  }}
-                  style={{
-                    ...badgeStyle(statusTone(t.status)),
-                    border: "none",
-                    cursor: canEdit ? "pointer" : "default",
-                    outline: "none",
-                    maxWidth: "100%",
                   }}
                 >
                   <option value="ACTIVE">ACTIVE</option>
                   <option value="DRAFT">DRAFT</option>
                   <option value="DEPRECATED">DEPRECATED</option>
-                </select>
+                </Select>
               </td>
               {canEdit && (
                 <td style={{ padding: "0.5rem 0.5rem", textAlign: "center", width: 60 }}>
@@ -2088,19 +2092,11 @@ function MoveSectionModal({
           Pilih section tujuan untuk <b>{tc.tcId}</b>
         </p>
 
-        <select
+        <Select
           value={selected}
+          ariaLabel="Pilih section"
+          style={{ width: "100%", marginBottom: "1rem" }}
           onChange={(e) => setSelected(e.target.value)}
-          style={{
-            width: "100%",
-            border: "1px solid #D1D5DB",
-            borderRadius: 6,
-            padding: "0.5rem 0.6rem",
-            fontSize: "0.82rem",
-            marginBottom: "1rem",
-            outline: "none",
-            background: "#fff",
-          }}
         >
           <option value="" disabled>
             -- Pilih Section --
@@ -2111,7 +2107,7 @@ function MoveSectionModal({
               {sec.name}
             </option>
           ))}
-        </select>
+        </Select>
 
         <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.5rem" }}>
           <button
@@ -3483,19 +3479,11 @@ function ImportWizardModal({
                         {h}
                       </span>
                       <span style={{ color: "var(--text-muted)", fontSize: "0.75rem" }}>→</span>
-                      <select
+                      <Select
                         value={mappedField(h)}
+                        ariaLabel={`Field tujuan untuk ${h}`}
+                        style={{ flex: 1, minWidth: 180 }}
                         onChange={(e) => setField(h, e.target.value)}
-                        style={{
-                          flex: 1,
-                          minWidth: 180,
-                          padding: "0.35rem 0.5rem",
-                          border: "1px solid var(--border-strong)",
-                          borderRadius: 6,
-                          fontSize: "0.78rem",
-                          background: "#fff",
-                          cursor: "pointer",
-                        }}
                       >
                         <option value="">— Jangan diimpor —</option>
                         {IMPORT_FIELDS.map((f) => (
@@ -3503,7 +3491,7 @@ function ImportWizardModal({
                             {f.label}
                           </option>
                         ))}
-                      </select>
+                      </Select>
                       {mappedField(h) === "title" && (
                         <span style={{ fontSize: "0.68rem", fontWeight: 700, color: "#059669" }}>
                           wajib
@@ -4167,19 +4155,11 @@ function BulkMoveModal({
           Pilih section tujuan untuk semua test case terpilih
         </p>
 
-        <select
+        <Select
           value={selected}
+          ariaLabel="Pilih section"
+          style={{ width: "100%", marginBottom: "1rem" }}
           onChange={(e) => setSelected(e.target.value)}
-          style={{
-            width: "100%",
-            border: "1px solid #D1D5DB",
-            borderRadius: 6,
-            padding: "0.5rem 0.6rem",
-            fontSize: "0.82rem",
-            marginBottom: "1rem",
-            outline: "none",
-            background: "#fff",
-          }}
         >
           <option value="" disabled>
             -- Pilih Section --
@@ -4190,7 +4170,7 @@ function BulkMoveModal({
               {sec.name}
             </option>
           ))}
-        </select>
+        </Select>
 
         <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.5rem" }}>
           <button

@@ -289,7 +289,45 @@ export async function setRunStatus(
   }
 }
 
-/** Tandai run selesai. */
+/**
+ * Tetapkan / lepas assignee (QA tester) sebuah run. `assigneeId` null = lepas
+ * penugasan. Dipakai dropdown inline di tabel Active Runs.
+ */
+export async function setRunAssignee(
+  runId: string,
+  assigneeId: string | null
+): Promise<TestRunActionState> {
+  await requireRole("QA");
+  try {
+    const run = await prisma.testRun.findUnique({
+      where: { id: runId },
+      select: { id: true },
+    });
+    if (!run) return { error: "Test run tidak ditemukan." };
+
+    if (assigneeId) {
+      const user = await prisma.user.findUnique({
+        where: { id: assigneeId },
+        select: { id: true },
+      });
+      if (!user) return { error: "User tidak ditemukan." };
+    }
+
+    await prisma.testRun.update({
+      where: { id: runId },
+      data: { assigneeId },
+    });
+
+    revalidatePath("/test-runs");
+    revalidatePath(`/test-runs/${runId}`);
+    return { success: true };
+  } catch (error) {
+    return handleError(error);
+  }
+}
+
+/**
+ * Tandai run selesai. */
 export async function completeRun(
   runId: string,
   overallNotes?: string

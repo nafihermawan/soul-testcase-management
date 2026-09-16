@@ -380,6 +380,14 @@ export type ActiveRunRow = {
   status: string;
   pct: number;
   createdByName: string | null;
+  /** Assignee tersimpan (penugasan manual); null = belum ditugaskan. */
+  assignee: { id: string; name: string | null } | null;
+  /**
+   * QA yang benar-benar mengeksekusi run ini, diturunkan dari
+   * TestRunResult.updatedById (bisa lebih dari satu orang). Dipakai sebagai
+   * fallback tampilan saat run belum punya assignee. Kosong = belum dieksekusi.
+   */
+  executorNames: string[];
   createdAt: string;
 };
 
@@ -395,6 +403,8 @@ export type ActiveRunsPayload = {
   runs: ActiveRunRow[];
   canEdit: boolean;
   allProjects: ProjectFilterOption[];
+  /** Kandidat assignee (user role QA) untuk dropdown di tabel. */
+  assigneeOptions: { id: string; name: string | null }[];
 };
 
 /* ---------- /api/test-runs/history ---------- */

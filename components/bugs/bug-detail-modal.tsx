@@ -6,6 +6,7 @@ import Link from "next/link";
 import { ExternalLink, Trash2, X } from "lucide-react";
 import { deleteBug, updateBugStatus } from "@/lib/actions/automation-bugs";
 import { AttachmentsPanel } from "@/components/attachments/attachments-panel";
+import { Select } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/feedback";
 import { entityCode } from "@/lib/format";
 import type { BugDetailPayload, BugRow, BugStatus } from "@/types/api";
@@ -350,29 +351,19 @@ export function BugDetailModal({
                   <label htmlFor="bug-detail-status" style={fieldLabelStyle}>
                     Status
                   </label>
-                  <select
+                  <Select
                     id="bug-detail-status"
+                    size="sm"
                     value={bug.status}
                     disabled={busy || !canUpdateStatus}
                     onChange={(e) => void changeStatus(e.target.value as BugStatus)}
-                    style={{
-                      width: "100%",
-                      padding: "0.2rem 0.4rem",
-                      border: "1px solid #E2E8F0",
-                      borderRadius: 6,
-                      background: "#fff",
-                      fontSize: "0.72rem",
-                      fontWeight: 600,
-                      color: "#334155",
-                      cursor: busy || !canUpdateStatus ? "not-allowed" : "pointer",
-                    }}
                   >
                     {STATUS_OPTIONS.map((s) => (
                       <option key={s.value} value={s.value}>
                         {s.label}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </div>
                 <div>
                   <span style={fieldLabelStyle}>Created By</span>

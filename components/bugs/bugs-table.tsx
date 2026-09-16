@@ -7,6 +7,7 @@ import { deleteBug, updateBugStatus } from "@/lib/actions/automation-bugs";
 import { ConfirmDialog, Toast, useToast } from "@/components/ui/feedback";
 import { FilterModal } from "@/components/ui/filter-modal";
 import { CustomSelect, filterLabelStyle } from "@/components/ui/custom-select";
+import { Select } from "@/components/ui/select";
 import { BugDetailModal } from "@/components/bugs/bug-detail-modal";
 import { ReportGeneralBugModal } from "@/components/bugs/report-general-bug-modal";
 import { HistoryPagination } from "@/components/test-runs/history-pagination";
@@ -533,17 +534,20 @@ export function BugsPageClient({
                         )}
                       </td>
                       <td style={{ padding: "0.6rem 0.5rem" }}>
-                        <select
-                          value={b.status}
-                          onClick={(e) => e.stopPropagation()}
-                          onChange={(e) => changeStatus(b.id, e.target.value as BugRow["status"])}
-                          style={{ padding: "0.25rem 0.5rem", borderRadius: 6, border: "1px solid var(--border-strong)", fontSize: "0.78rem", fontWeight: 600, background: st.bg, color: st.color, cursor: "pointer" }}
-                        >
-                          <option value="OPEN">Open</option>
-                          <option value="IN_PROGRESS">In Progress</option>
-                          <option value="RESOLVED">Resolved</option>
-                          <option value="CLOSED">Closed</option>
-                        </select>
+                        <span onClick={(e) => e.stopPropagation()} style={{ display: "inline-flex", maxWidth: 130 }}>
+                          <Select
+                            size="sm"
+                            value={b.status}
+                            ariaLabel="Ubah status bug"
+                            style={{ background: st.bg, color: st.color }}
+                            onChange={(e) => changeStatus(b.id, e.target.value as BugRow["status"])}
+                          >
+                            <option value="OPEN">Open</option>
+                            <option value="IN_PROGRESS">In Progress</option>
+                            <option value="RESOLVED">Resolved</option>
+                            <option value="CLOSED">Closed</option>
+                          </Select>
+                        </span>
                       </td>
                       <td style={{ padding: "0.6rem 0.5rem", color: "var(--text-secondary)" }}>
                         {b.createdBy?.name ?? "—"}

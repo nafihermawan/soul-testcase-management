@@ -8,6 +8,7 @@ import { createProject, deleteProject, updateProject } from "@/lib/actions/hiera
 import { useRefresh } from "@/lib/client/refresh-context";
 import { RowActionsMenu } from "@/components/settings/row-actions-menu";
 import { ConfirmDialog, Spinner, Toast, useToast } from "@/components/ui/feedback";
+import { Select } from "@/components/ui/select";
 
 type Project = {
   id: string;
@@ -218,10 +219,11 @@ function ProjectModal({
             <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)" }}>
               Platform
             </label>
-            <select
+            <Select
               value={platform}
+              ariaLabel="Platform project"
+              style={{ marginTop: "0.25rem", width: "100%" }}
               onChange={(e) => setPlatform(e.target.value as "MOBILE" | "WEB" | "HARDWARE" | "API" | "")}
-              style={{ ...fieldStyle, background: "#fff" }}
             >
               <option value="">—</option>
               {platformOptions.map((opt) => (
@@ -229,7 +231,7 @@ function ProjectModal({
                   {opt.label}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
           <div>
             <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)" }}>

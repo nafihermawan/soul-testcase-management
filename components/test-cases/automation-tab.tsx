@@ -5,6 +5,7 @@ import { Code2, Link2, Trash2 } from "lucide-react";
 import { removeAutomationLink, upsertAutomationLink } from "@/lib/actions/automation-bugs";
 import { useRefresh } from "@/lib/client/refresh-context";
 import { ConfirmDialog, Spinner, Toast, useToast } from "@/components/ui/feedback";
+import { Select } from "@/components/ui/select";
 
 export type AutomationInfo = {
   id: string;
@@ -308,24 +309,17 @@ export function AutomationTab({
             <label style={{ fontSize: "0.78rem", fontWeight: 600, color: "var(--text-secondary)" }}>
               Status
             </label>
-            <select
+            <Select
               value={status}
+              ariaLabel="Status automation"
+              style={{ marginTop: "0.25rem", width: "100%" }}
               onChange={(e) => setStatus(e.target.value as AutomationInfo["status"])}
-              style={{
-                width: "100%",
-                marginTop: "0.25rem",
-                padding: "0.5rem 0.75rem",
-                border: "1px solid var(--border-strong)",
-                borderRadius: 8,
-                fontSize: "0.85rem",
-                background: "#fff",
-              }}
             >
               <option value="NOT_AUTOMATED">Belum Automated</option>
               <option value="AUTOMATED">Automated</option>
               <option value="FAILING">Failing</option>
               <option value="UNSTABLE">Unstable</option>
-            </select>
+            </Select>
           </div>
 
           {error && <div style={{ fontSize: "0.82rem", color: "var(--danger)" }}>{error}</div>}

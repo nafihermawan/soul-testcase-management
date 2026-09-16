@@ -2,6 +2,7 @@
 
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { buildHistoryHref } from "@/components/test-runs/history-controls";
+import { Select } from "@/components/ui/select";
 import { useRouter } from "next/navigation";
 
 export function HistoryPagination({
@@ -88,21 +89,15 @@ export function HistoryPagination({
       <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
         {!lockPerPage && (
           <>
-            <select
-              value={perPage}
+            <Select
+              size="sm"
+              value={String(perPage)}
+              ariaLabel="Rows per page"
+              style={{ width: 72 }}
               onChange={(e) => {
                 const next = Number(e.target.value);
                 if (onPerPageChange) onPerPageChange(next);
                 else router.push(buildHistoryHref(baseUrl, { page: 1, perPage: next }));
-              }}
-              style={{
-                padding: "0.3rem 0.5rem",
-                borderRadius: 6,
-                border: "1px solid #D1D5DB",
-                background: "#fff",
-                fontSize: "0.82rem",
-                color: "#0F172A",
-                outline: "none",
               }}
             >
               {[10, 25, 50, 100].map((n) => (
@@ -110,7 +105,7 @@ export function HistoryPagination({
                   {n}
                 </option>
               ))}
-            </select>
+            </Select>
             <span style={{ color: "#94A3B8" }}>Rows per page</span>
           </>
         )}

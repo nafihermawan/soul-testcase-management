@@ -11,6 +11,7 @@ import { createBug, unlinkBugFromRunResult } from "@/lib/actions/automation-bugs
 import { ConfirmDialog, Spinner, Toast, useToast } from "@/components/ui/feedback";
 import { entityCode, runCodeOf } from "@/lib/format";
 import { AttachmentsPanel } from "@/components/attachments/attachments-panel";
+import { Select } from "@/components/ui/select";
 import { BugDetailModal } from "@/components/bugs/bug-detail-modal";
 import { EditRunModal } from "@/components/test-runs/edit-run-modal";
 import type { ExpressRunInitial } from "@/components/test-runs/express-run";
@@ -2700,18 +2701,18 @@ function ExecutionModal({
 
                     <div>
                       <label style={bugLabelStyle}>Severity</label>
-                      <select
+                      <Select
                         value={bugSeverity}
                         onChange={(e) => setBugSeverity(e.target.value)}
                         disabled={!canEdit}
-                        style={{ ...bugFieldStyle, height: 36, cursor: canEdit ? "pointer" : "not-allowed" }}
+                        ariaLabel="Severity bug"
                       >
                         {SEVERITIES.map((s) => (
                           <option key={s.value} value={s.value}>
                             {s.label}
                           </option>
                         ))}
-                      </select>
+                      </Select>
                     </div>
                   </>
                 )}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Check, ChevronDown } from "lucide-react";
 
 export type CustomSelectOption = { value: string; label: string; /** Tag kecil di samping label (mis. platform). */ badge?: string };
@@ -52,9 +53,35 @@ export function CustomSelect({
   placeholder?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
   const [query, setQuery] = useState("");
+  const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const ref = useRef<HTMLDivElement>(null);
   const selected = options.find((o) => o.value === value);
+
+  const MENU_MAX_HEIGHT = 240;
+  const ITEM_HEIGHT = 32;
+
+  /** Letakkan menu di bawah trigger; dibalik ke atas kalau ruang bawah kurang. */
+  const place = () => {
+    const el = triggerRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const est = Math.min(MENU_MAX_HEIGHT, (searchable ? 42 : 0) + options.length * ITEM_HEIGHT + 8);
+    const up = r.bottom + est > window.innerHeight - 8 && r.top > est;
+    setPos({
+      top: up ? r.top - est - 4 : r.bottom + 4,
+      left: r.left,
+      width: r.width,
+    });
+  };
+
+  useEffect(() => {
+    if (open) place();
+  }, [open]);
 
   useEffect(() => {
     if (!open) {
@@ -62,16 +89,24 @@ export function CustomSelect({
       return;
     }
     const onDocMouseDown = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      // Menu kini di portal (di luar `ref`), jadi harus dicek terpisah —
+      // tanpa ini, mousedown di dalam menu menutupnya sebelum klik terpilih.
+      if (!ref.current?.contains(t) && !menuRef.current?.contains(t)) setOpen(false);
     };
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") setOpen(false);
     };
+    const dismiss = () => setOpen(false);
     document.addEventListener("mousedown", onDocMouseDown);
     document.addEventListener("keydown", onKeyDown);
+    window.addEventListener("scroll", dismiss, true);
+    window.addEventListener("resize", dismiss);
     return () => {
       document.removeEventListener("mousedown", onDocMouseDown);
       document.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("scroll", dismiss, true);
+      window.removeEventListener("resize", dismiss);
     };
   }, [open]);
 
@@ -83,8 +118,13 @@ export function CustomSelect({
   return (
     <div ref={ref} style={{ position: "relative" }}>
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen((v) => !v)}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={ariaLabel}
@@ -92,15 +132,21 @@ export function CustomSelect({
           width: "100%",
           height: 36,
           padding: "0 12px",
-          border: "1px solid #E2E8F0",
+          // Token visual disamakan dengan komponen Select (satu bahasa desain).
+          border: `1px solid ${focused ? "#FFC348" : hovered ? "#CBD5E1" : "#E2E8F0"}`,
+          borderRadius: 8,
+          boxShadow: focused ? "0 0 0 3px rgba(255, 195, 72, 0.25)" : "none",
           background: "#fff",
           color: "#1E293B",
           fontSize: 12,
+          fontWeight: 600,
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
           gap: 8,
           cursor: "pointer",
+          outline: "none",
+          transition: "border-color 0.15s ease, box-shadow 0.15s ease",
         }}
       >
         <span
@@ -128,26 +174,34 @@ export function CustomSelect({
         />
       </button>
 
-      {open && (
-        <div
-          role="listbox"
-          aria-label={ariaLabel}
-          style={{
-            position: "absolute",
-            top: "calc(100% + 4px)",
-            left: 0,
-            width: "100%",
-            zIndex: 30,
-            background: "#fff",
-            borderRadius: 8,
-            border: "1px solid #E2E8F0",
-            boxShadow: "0 10px 15px -3px rgba(15, 23, 42, 0.12)",
-            padding: "4px 0",
-            maxHeight: 240,
-            overflowY: "auto",
-          }}
-        >
-          {searchable && (
+      {open &&
+        pos &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            ref={menuRef}
+            role="listbox"
+            aria-label={ariaLabel}
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              // Portal + posisi fixed: menu di dalam dialog modal (yang punya
+              // overflow: hidden) akan terpotong kalau dirender inline.
+              position: "fixed",
+              top: pos.top,
+              left: pos.left,
+              width: pos.width,
+              zIndex: 400,
+              background: "#fff",
+              borderRadius: 10,
+              border: "1px solid #E2E8F0",
+              boxShadow: "0 12px 24px -6px rgba(15, 23, 42, 0.18)",
+              padding: 4,
+              animation: "dropdownIn 0.12s ease-out",
+              maxHeight: 240,
+              overflowY: "auto",
+            }}
+          >
+            {searchable && (
             <div style={{ padding: "4px 8px 6px", position: "sticky", top: 0, background: "#fff" }}>
               <input
                 autoFocus
@@ -227,8 +281,9 @@ export function CustomSelect({
               </button>
             );
           })}
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
     </div>
   );
 }

@@ -10,7 +10,7 @@ import { ErrorBlock, TableCardSkeleton } from "@/components/ui/data-states";
 import { Toast, useToast } from "@/components/ui/feedback";
 import { useApi } from "@/lib/client/use-api";
 import { RUN_STATUS_LABEL, type RunStatusValue } from "@/lib/run-status";
-import { setRunStatus } from "@/lib/actions/test-runs";
+import { setRunAssignee, setRunStatus } from "@/lib/actions/test-runs";
 import type { ActiveRunsPayload } from "@/types/api";
 
 /**
@@ -53,16 +53,21 @@ const TABLE_COLUMNS: {
   align?: "left" | "right";
   nowrap?: boolean;
 }[] = [
-  { label: "ID", width: "13%", pad: "0.65rem 1rem", nowrap: true },
-  { label: "Run Name", width: "14%", pad: "0.65rem 1rem" },
-  { label: "Projects Covered", width: "11%", pad: "0.65rem 0.5rem" },
-  { label: "Suites Included", width: "11%", pad: "0.65rem 0.5rem" },
-  { label: "Sprint", width: "6%", pad: "0.65rem 0.5rem" },
-  { label: "Status", width: "12%", pad: "0.65rem 0.5rem" },
+  { label: "ID", width: "11%", pad: "0.65rem 1rem", nowrap: true },
+  { label: "Run Name", width: "12%", pad: "0.65rem 1rem" },
+  { label: "Projects Covered", width: "10%", pad: "0.65rem 0.5rem" },
+  { label: "Suites Included", width: "10%", pad: "0.65rem 0.5rem" },
+  { label: "Sprint", width: "5%", pad: "0.65rem 0.5rem" },
+  { label: "Status", width: "11%", pad: "0.65rem 0.5rem" },
   { label: "Pass Rate", width: "6%", pad: "0.65rem 0.5rem" },
-  { label: "Assignee", width: "9%", pad: "0.65rem 0.5rem" },
-  { label: "Created Date", width: "10%", pad: "0.65rem 1rem" },
-  { label: "Actions", width: "8%", pad: "0.65rem 1rem", align: "right" },
+  // Creator & executor dipisah: dulu kolom ini berlabel "Assignee" padahal
+  // datanya createdByName, sehingga metrik "dibuat vs dieksekusi" jadi rancu.
+  { label: "Created By", width: "8%", pad: "0.65rem 0.5rem" },
+  // 11% (≈136px pada lebar minimum tabel) supaya dropdown assignee muat
+  // tanpa menabrak kolom Created Date.
+  { label: "Assignee", width: "11%", pad: "0.65rem 0.5rem" },
+  { label: "Created Date", width: "9%", pad: "0.65rem 1rem" },
+  { label: "Actions", width: "7%", pad: "0.65rem 1rem", align: "right" },
 ];
 
 export type ActiveRunsSearchParams = {
@@ -90,6 +95,7 @@ export function RunListView({ searchParams }: { searchParams: ActiveRunsSearchPa
 
   const { data, error, loading, reload } = useApi<ActiveRunsPayload>(apiPath);
   const [pendingStatusId, setPendingStatusId] = useState<string | null>(null);
+  const [pendingAssigneeId, setPendingAssigneeId] = useState<string | null>(null);
   // Accordion per status: default terbuka. Yang disimpan hanya yang ditutup.
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const { toast, showToast, dismissToast } = useToast();
@@ -136,6 +142,33 @@ export function RunListView({ searchParams }: { searchParams: ActiveRunsSearchPa
       return;
     }
     showToast("Status run diperbarui.", "success");
+  };
+
+  /**
+   * Ubah assignee langsung dari dropdown di baris. Sama seperti changeStatus:
+   * barisnya dipatch di tempat (tanpa reload) lalu dikembalikan bila gagal.
+   */
+  const changeAssignee = async (runId: string, assigneeId: string | null) => {
+    const snapshot = list;
+    const nextAssignee =
+      assigneeId === null
+        ? null
+        : data?.assigneeOptions.find((o) => o.id === assigneeId) ?? null;
+
+    setPendingAssigneeId(runId);
+    setList({
+      ...list,
+      runs: list.runs.map((r) => (r.id === runId ? { ...r, assignee: nextAssignee } : r)),
+    });
+
+    const res = await setRunAssignee(runId, assigneeId);
+    setPendingAssigneeId(null);
+    if (res.error) {
+      setList(snapshot);
+      showToast(res.error, "error");
+      return;
+    }
+    showToast(assigneeId ? "Assignee diperbarui." : "Assignee dilepas.", "success");
   };
 
   /**
@@ -395,6 +428,10 @@ export function RunListView({ searchParams }: { searchParams: ActiveRunsSearchPa
                           <table
                             style={{
                               width: "100%",
+                              // Lebar minimum: dengan table-layout: fixed, kolom yang
+                              // sempit akan memotong isinya. Tabel discroll mendatar
+                              // (wrapper overflowX: auto) alih-alih meremas kolom.
+                              minWidth: 1240,
                               borderCollapse: "collapse",
                               fontSize: "0.85rem",
                               tableLayout: "fixed",
@@ -431,6 +468,13 @@ export function RunListView({ searchParams }: { searchParams: ActiveRunsSearchPa
                                 <TestRunRow
                                   key={run.id}
                                   {...run}
+                                  assigneeOptions={data.assigneeOptions}
+                                  onAssigneeChange={
+                                    data.canEdit
+                                      ? (next) => void changeAssignee(run.id, next)
+                                      : undefined
+                                  }
+                                  assigneePending={pendingAssigneeId === run.id}
                                   onStatusChange={
                                     data.canEdit ? (next) => void changeStatus(run.id, next) : undefined
                                   }

@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { FileVideo, Image as ImageIcon, X } from "lucide-react";
 import { createBug } from "@/lib/actions/automation-bugs";
 import { CustomSelect } from "@/components/ui/custom-select";
+import { Select } from "@/components/ui/select";
 import { uploadAttachmentFile } from "@/lib/client/attachments";
 import { MAX_ATTACHMENT_BYTES } from "@/lib/storage/limits";
 import type { BugDetailPayload, BugRow, SuiteOption, SuitesPayload } from "@/types/api";
@@ -342,19 +343,18 @@ export function ReportGeneralBugModal({
               <label htmlFor="general-bug-severity" style={labelStyle}>
                 Severity
               </label>
-              <select
+              <Select
                 id="general-bug-severity"
                 value={severity}
                 onChange={(e) => setSeverity(e.target.value)}
                 disabled={saving}
-                style={{ ...fieldStyle, cursor: saving ? "not-allowed" : "pointer" }}
               >
                 {SEVERITIES.map((s) => (
                   <option key={s.value} value={s.value}>
                     {s.label}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
 
             <div>

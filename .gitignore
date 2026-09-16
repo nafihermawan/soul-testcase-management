@@ -47,3 +47,8 @@ skills-lock.json
 
 # util sementara
 .tmp-test-db.ts
+
+# dokumen lokal (PRD/audit/catatan) — tidak ikut di-commit.
+# File yang sudah ter-track sebelumnya tetap ter-track (gitignore hanya
+# berlaku untuk file yang belum dilacak).
+docs/

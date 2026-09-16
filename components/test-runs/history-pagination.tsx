@@ -28,8 +28,6 @@ export function HistoryPagination({
 }) {
   const router = useRouter();
   const totalPages = Math.max(1, Math.ceil(total / perPage));
-  const from = total === 0 ? 0 : (page - 1) * perPage + 1;
-  const to = Math.min(total, page * perPage);
 
   const goto = (p: number) => {
     if (p < 1 || p > totalPages || p === page) return;
@@ -71,11 +69,13 @@ export function HistoryPagination({
   };
 
   return (
-    <div
+    <nav
+      aria-label={`Navigasi halaman ${label}`}
       style={{
         display: "flex",
         alignItems: "center",
-        justifyContent: "space-between",
+        // Hanya navigasi halaman — teks "Showing X-Y of Z" dihapus.
+        justifyContent: "flex-end",
         gap: "0.75rem",
         flexWrap: "wrap",
         padding: "0.75rem 1.25rem",
@@ -85,9 +85,6 @@ export function HistoryPagination({
         color: "#475569",
       }}
     >
-      <div>
-        Showing {from}-{to} of {total} {label}
-      </div>
       <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
         {!lockPerPage && (
           <>
@@ -146,6 +143,6 @@ export function HistoryPagination({
           <ChevronRight size={15} />
         </button>
       </div>
-    </div>
+    </nav>
   );
 }

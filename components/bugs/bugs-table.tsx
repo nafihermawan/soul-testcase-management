@@ -5,6 +5,8 @@ import Link from "next/link";
 import { ExternalLink, Plus, Search, Trash2 } from "lucide-react";
 import { deleteBug, updateBugStatus } from "@/lib/actions/automation-bugs";
 import { ConfirmDialog, Toast, useToast } from "@/components/ui/feedback";
+import { FilterModal } from "@/components/ui/filter-modal";
+import { CustomSelect, filterLabelStyle } from "@/components/ui/custom-select";
 import { BugDetailModal } from "@/components/bugs/bug-detail-modal";
 import { ReportGeneralBugModal } from "@/components/bugs/report-general-bug-modal";
 import { HistoryPagination } from "@/components/test-runs/history-pagination";
@@ -91,14 +93,39 @@ export function BugsPageClient({
 
   // Filter pencarian header banner
   const [query, setQuery] = useState("");
+  // Filter yang sudah DITERAPKAN (committed).
   const [sevFilter, setSevFilter] = useState<string>("");
   const [statusFilter, setStatusFilter] = useState<string>("");
+  const [fromDate, setFromDate] = useState<string>("");
+  const [toDate, setToDate] = useState<string>("");
+  // Draft filter: baru berlaku setelah tombol Terapkan di modal filter diklik.
+  const [draftSev, setDraftSev] = useState("");
+  const [draftStatus, setDraftStatus] = useState("");
+  const [draftFrom, setDraftFrom] = useState("");
+  const [draftTo, setDraftTo] = useState("");
+
+  // Sinkronkan draft bila filter yang berlaku berubah dari luar (mis. reset).
+  useEffect(() => {
+    setDraftSev(sevFilter);
+    setDraftStatus(statusFilter);
+    setDraftFrom(fromDate);
+    setDraftTo(toDate);
+  }, [sevFilter, statusFilter, fromDate, toDate]);
+
+  /** Rentang tanggal memakai hari lokal: mulai 00:00 s/d selesai 23:59:59.999. */
+  const fromMs = fromDate ? new Date(`${fromDate}T00:00:00`).getTime() : null;
+  const toMs = toDate ? new Date(`${toDate}T23:59:59.999`).getTime() : null;
 
   const q = query.trim().toLowerCase();
   const visibleBugs = localBugs.filter((b) => {
     if (tab !== "ALL" && sourceTypeOf(b) !== tab) return false;
     if (sevFilter && b.severity !== sevFilter) return false;
     if (statusFilter && b.status !== statusFilter) return false;
+    if (fromMs !== null || toMs !== null) {
+      const created = new Date(b.createdAt).getTime();
+      if (fromMs !== null && created < fromMs) return false;
+      if (toMs !== null && created > toMs) return false;
+    }
     if (!q) return true;
     const hay = `${b.title} ${b.description ?? ""} ${b.testCase?.tcId ?? ""} ${b.testCase?.title ?? ""} ${b.createdBy?.name ?? ""}`.toLowerCase();
     return hay.includes(q);
@@ -115,7 +142,7 @@ export function BugsPageClient({
   // mendarat di halaman yang sudah kosong.
   useEffect(() => {
     setPage(1);
-  }, [tab, query, sevFilter, statusFilter]);
+  }, [tab, query, sevFilter, statusFilter, fromDate, toDate]);
 
   // `page` bisa tertinggal di halaman yang sudah tidak ada (mis. bug terakhir di
   // halaman terakhir dihapus) -> pakai halaman efektif yang di-clamp.
@@ -152,14 +179,18 @@ export function BugsPageClient({
     showToast("Bug dihapus.", "success");
   };
 
-  const selectStyle: CSSProperties = {
-    padding: "0.4rem 0.7rem",
-    borderRadius: 8,
-    border: "1px solid #D1D5DB",
+  const dateFieldStyle: CSSProperties = {
+    flex: 1,
+    minWidth: 0,
+    height: 36,
+    padding: "0 0.5rem",
+    border: "1px solid #E2E8F0",
+    borderRadius: 6,
     background: "#fff",
-    fontSize: "0.8rem",
-    color: "#374151",
-    cursor: "pointer",
+    fontSize: "0.78rem",
+    color: "#1E293B",
+    outline: "none",
+    boxSizing: "border-box",
   };
 
   return (
@@ -275,20 +306,79 @@ export function BugsPageClient({
               style={{ border: "none", outline: "none", fontSize: "0.8rem", width: 180, background: "transparent" }}
             />
           </div>
-          <select value={sevFilter} onChange={(e) => setSevFilter(e.target.value)} style={selectStyle}>
-            <option value="">All Severity</option>
-            <option value="CRITICAL">Critical</option>
-            <option value="HIGH">High</option>
-            <option value="MEDIUM">Medium</option>
-            <option value="LOW">Low</option>
-          </select>
-          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={selectStyle}>
-            <option value="">All Status</option>
-            <option value="OPEN">Open</option>
-            <option value="IN_PROGRESS">In Progress</option>
-            <option value="RESOLVED">Resolved</option>
-            <option value="CLOSED">Closed</option>
-          </select>
+          <FilterModal
+            title="Filter Bugs"
+            activeCount={
+              (sevFilter ? 1 : 0) + (statusFilter ? 1 : 0) + (fromDate ? 1 : 0) + (toDate ? 1 : 0)
+            }
+            onReset={() => {
+              setDraftSev("");
+              setDraftStatus("");
+              setDraftFrom("");
+              setDraftTo("");
+            }}
+            onApply={() => {
+              setSevFilter(draftSev);
+              setStatusFilter(draftStatus);
+              setFromDate(draftFrom);
+              setToDate(draftTo);
+            }}
+          >
+            <div>
+              <span style={filterLabelStyle}>Severity</span>
+              <CustomSelect
+                ariaLabel="Filter severity"
+                value={draftSev}
+                onChange={setDraftSev}
+                options={[
+                  { value: "", label: "Semua Severity" },
+                  { value: "CRITICAL", label: "Critical" },
+                  { value: "HIGH", label: "High" },
+                  { value: "MEDIUM", label: "Medium" },
+                  { value: "LOW", label: "Low" },
+                ]}
+              />
+            </div>
+
+            <div>
+              <span style={filterLabelStyle}>Status</span>
+              <CustomSelect
+                ariaLabel="Filter status"
+                value={draftStatus}
+                onChange={setDraftStatus}
+                options={[
+                  { value: "", label: "Semua Status" },
+                  { value: "OPEN", label: "Open" },
+                  { value: "IN_PROGRESS", label: "In Progress" },
+                  { value: "RESOLVED", label: "Resolved" },
+                  { value: "CLOSED", label: "Closed" },
+                ]}
+              />
+            </div>
+
+            <div>
+              <span style={filterLabelStyle}>Date Range</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <input
+                  type="date"
+                  aria-label="Tanggal mulai"
+                  value={draftFrom}
+                  max={draftTo || undefined}
+                  onChange={(e) => setDraftFrom(e.target.value)}
+                  style={dateFieldStyle}
+                />
+                <span style={{ color: "#94A3B8", fontSize: 12 }}>–</span>
+                <input
+                  type="date"
+                  aria-label="Tanggal selesai"
+                  value={draftTo}
+                  min={draftFrom || undefined}
+                  onChange={(e) => setDraftTo(e.target.value)}
+                  style={dateFieldStyle}
+                />
+              </div>
+            </div>
+          </FilterModal>
           {/* Tombol lapor bug hanya relevan di tab General Findings */}
           {tab === "GENERAL_FINDING" && (
             <button

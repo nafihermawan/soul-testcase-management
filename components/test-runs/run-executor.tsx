@@ -1760,8 +1760,8 @@ function CompleteRunModal({
             onClick={onCancel}
             disabled={completing}
             style={{
-              height: 40,
-              padding: "0 1rem",
+              height: 34,
+              padding: "0 0.75rem",
               fontSize: "0.75rem",
               fontWeight: 600,
               color: "#475569",
@@ -1780,22 +1780,22 @@ function CompleteRunModal({
             onClick={onConfirm}
             disabled={completing}
             style={{
-              height: 40,
-              padding: "0 1.25rem",
+              height: 34,
+              padding: "0 1rem",
               fontSize: "0.75rem",
-              fontWeight: 700,
-              color: "#fff",
-              background: "#2563EB",
+              fontWeight: 600,
+              color: "#0F172A",
+              background: "#FFC348",
               border: "none",
               borderRadius: 8,
-              boxShadow: "0 1px 2px rgba(15, 23, 42, 0.1)",
+              boxShadow: "0 1px 2px rgba(15, 23, 42, 0.08)",
               cursor: completing ? "wait" : "pointer",
               transition: "background-color 0.15s ease",
             }}
             onMouseEnter={(e) => {
-              if (!completing) e.currentTarget.style.background = "#1D4ED8";
+              if (!completing) e.currentTarget.style.background = "#F0B53D";
             }}
-            onMouseLeave={(e) => (e.currentTarget.style.background = "#2563EB")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "#FFC348")}
           >
             {completing ? "Menyelesaikan..." : "Complete Run"}
           </button>

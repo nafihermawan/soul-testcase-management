@@ -22,7 +22,19 @@ export default async function RunReportPage({
 
   const run = await prisma.testRun.findUnique({
     where: { id: params.id },
-    include: {
+    select: {
+      id: true,
+      name: true,
+      status: true,
+      sprint: true,
+      activityType: true,
+      platforms: true,
+      environment: true,
+      taskLink: true,
+      createdAt: true,
+      completedAt: true,
+      /** Catatan makro run yang diisi QA di Completion Summary Modal. */
+      overallNotes: true,
       project: { select: { name: true } },
       createdBy: { select: { name: true } },
       results: {
@@ -253,6 +265,43 @@ export default async function RunReportPage({
         </tbody>
       </table>
 
+      {/* Overall Testing Notes — catatan makro run (Completion Summary Modal).
+          Kontainer khusus di atas breakdown agar tidak tenggelam di bawah daftar TC. */}
+      {run.overallNotes?.trim() ? (
+        <div
+          style={{
+            border: "1px solid #E2E8F0",
+            borderRadius: 8,
+            padding: "0.9rem 1rem",
+            marginBottom: "1.5rem",
+            background: "#F8FAFC",
+          }}
+        >
+          <div
+            style={{
+              fontSize: 11,
+              fontWeight: 700,
+              letterSpacing: "0.08em",
+              color: "#475569",
+              marginBottom: "0.4rem",
+            }}
+          >
+            OVERALL TESTING NOTES
+          </div>
+          <div
+            style={{
+              fontSize: 12,
+              color: "#334155",
+              lineHeight: 1.6,
+              whiteSpace: "pre-wrap",
+              wordBreak: "break-word",
+            }}
+          >
+            {run.overallNotes.trim()}
+          </div>
+        </div>
+      ) : null}
+
       {/* Detailed breakdown per project & suite */}
       {Array.from(projectMap.entries()).map(([pname, suiteMap]) => (
         <div key={pname} style={{ marginBottom: "1.5rem" }}>
@@ -287,7 +336,7 @@ export default async function RunReportPage({
                     </div>
                     <div style={{ color: "#334155" }}>
                       <span style={{ color: "#64748B" }}>• Notes : </span>
-                      {r.notes ?? "—"}
+                      {r.notes?.trim() || "—"}
                     </div>
                   </div>
                 );

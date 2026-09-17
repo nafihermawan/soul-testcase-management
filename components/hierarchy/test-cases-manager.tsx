@@ -1488,7 +1488,7 @@ export function TestCasesManager({
                 title="Tambah Test Case Baru"
                 suiteName={suiteName}
                 suiteId={suiteId}
-                submitLabel="Simpan Test Case"
+                submitLabel="Simpan"
                 onCancel={() => {
                   setAddingTc(false);
                   setAddingTcFor(null);

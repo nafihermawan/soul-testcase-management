@@ -35,6 +35,7 @@ import {
 } from "@/lib/actions/sections";
 import { RowActionsMenu } from "@/components/settings/row-actions-menu";
 import { ConfirmDialog } from "@/components/ui/feedback";
+import { ListTextarea } from "@/components/ui/list-textarea";
 import { Select } from "@/components/ui/select";
 
 export type TestCase = {
@@ -100,20 +101,6 @@ const btnYellow: React.CSSProperties = {
   cursor: "pointer",
 };
 
-const btnGhost: React.CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  gap: "0.3rem",
-  padding: "0.5rem 0.9rem",
-  borderRadius: 8,
-  border: "1px solid var(--border-strong)",
-  background: "#fff",
-  color: "var(--text-secondary)",
-  fontWeight: 600,
-  fontSize: "0.82rem",
-  cursor: "pointer",
-};
-
 /** Button sekunder standar untuk toolbar header (height 38px, radius 8px, border #E5E7EB). */
 const btnHeader: React.CSSProperties = {
   display: "inline-flex",
@@ -157,6 +144,13 @@ function TestCaseForm({
   // (pola yang sama dengan title/scenario di bawah).
   const [priorityValue, setPriorityValue] = useState(initial?.priority ?? "MEDIUM");
   const [statusValue, setStatusValue] = useState(initial?.status ?? "DRAFT");
+  // Field auto-list (- / * / 1.) ditahan sebagai state supaya penulisan ulang
+  // marker bisa langsung terlihat; FormData tetap membaca nilai terbaru karena
+  // textarea-nya controlled dan tetap punya atribut name.
+  const [preconditionValue, setPreconditionValue] = useState(initial?.precondition ?? "");
+  const [stepsValue, setStepsValue] = useState(initial?.steps ?? "");
+  const [testDataValue, setTestDataValue] = useState(initial?.testData ?? "");
+  const [expectedResultValue, setExpectedResultValue] = useState(initial?.expectedResult ?? "");
   const titleRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -247,212 +241,238 @@ function TestCaseForm({
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            padding: "1rem 1.25rem",
-            borderBottom: "1px solid var(--border)",
-            flexShrink: 0,
-          }}
-        >
-          <div>
-            <h3 style={{ fontSize: "1.05rem", fontWeight: 700, margin: 0 }}>{title}</h3>
-            {suiteName && (
-              <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", margin: "0.15rem 0 0" }}>
-                Suite: <strong style={{ fontWeight: 600 }}>{suiteName}</strong>
-              </p>
-            )}
-          </div>
-          <button
-            type="button"
-            aria-label="Tutup"
-            onClick={onCancel}
+        {/* Divider header sengaja di-inset selebar padding modal (tidak menyentuh
+            tepi modal), mengikuti pola header modal standar. */}
+        <div style={{ padding: "1rem 1.25rem 0", flexShrink: 0 }}>
+          <div
             style={{
-              width: 30,
-              height: 30,
-              borderRadius: 8,
-              border: "none",
-              background: "transparent",
-              color: "var(--text-secondary)",
               display: "flex",
               alignItems: "center",
-              justifyContent: "center",
-              cursor: "pointer",
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = "var(--surface-muted)";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = "transparent";
+              justifyContent: "space-between",
+              paddingBottom: "1rem",
+              borderBottom: "1px solid var(--border)",
             }}
           >
-            <X size={17} />
-          </button>
+            <div>
+              <h3 style={{ fontSize: "1.05rem", fontWeight: 700, margin: 0 }}>{title}</h3>
+              {suiteName && (
+                <p
+                  style={{ fontSize: "0.78rem", color: "var(--text-muted)", margin: "0.15rem 0 0" }}
+                >
+                  Suite: <strong style={{ fontWeight: 600 }}>{suiteName}</strong>
+                </p>
+              )}
+            </div>
+            <button
+              type="button"
+              aria-label="Tutup"
+              onClick={onCancel}
+              style={{
+                width: 30,
+                height: 30,
+                borderRadius: 8,
+                border: "none",
+                background: "transparent",
+                color: "var(--text-secondary)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                cursor: "pointer",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = "var(--surface-muted)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = "transparent";
+              }}
+            >
+              <X size={17} />
+            </button>
+          </div>
         </div>
 
         <form
           onSubmit={handleSubmit}
           style={{
+            flex: "1 1 auto",
+            minHeight: 0,
+            overflow: "hidden",
             display: "flex",
             flexDirection: "column",
-            gap: "0.75rem",
-            padding: "1.25rem",
-            overflowY: "auto",
           }}
         >
-          {/* Row 1: TC ID | Status | Priority (2-col grid) */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+          {/* Satu-satunya area scroll modal; footer di bawahnya tetap sticky. */}
+          <div
+            style={{
+              flex: "1 1 auto",
+              minHeight: 0,
+              overflowY: "auto",
+              padding: "1.25rem",
+              display: "flex",
+              flexDirection: "column",
+              gap: "0.75rem",
+            }}
+          >
+            {/* Row 1: TC ID | Status | Priority (2-col grid) */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
+                <label
+                  style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)" }}
+                >
+                  TC ID (otomatis, bisa diubah)
+                </label>
+                <input
+                  name="tcId"
+                  placeholder="Auto-generate"
+                  defaultValue={initial?.tcId ?? ""}
+                  style={inputStyle}
+                />
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
+                  <label
+                    style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)" }}
+                  >
+                    Priority
+                  </label>
+                  <Select
+                    value={priorityValue}
+                    ariaLabel="Priority"
+                    onChange={(e) => setPriorityValue(e.target.value as TestCase["priority"])}
+                  >
+                    <option value="LOW">Low</option>
+                    <option value="MEDIUM">Medium</option>
+                    <option value="HIGH">High</option>
+                    <option value="CRITICAL">Critical</option>
+                  </Select>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
+                  <label
+                    style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)" }}
+                  >
+                    Status
+                  </label>
+                  <Select
+                    value={statusValue}
+                    ariaLabel="Status"
+                    onChange={(e) => setStatusValue(e.target.value as TestCase["status"])}
+                  >
+                    <option value="DRAFT">Draft</option>
+                    <option value="ACTIVE">Active</option>
+                    <option value="DEPRECATED">Deprecated</option>
+                  </Select>
+                </div>
+              </div>
+            </div>
+
+            {/* Row 2: Title (full width) */}
             <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
               <label
                 style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)" }}
               >
-                TC ID (otomatis, bisa diubah)
+                Title <span style={{ color: "#EF4444" }}>*</span>
               </label>
               <input
-                name="tcId"
-                placeholder="Auto-generate"
-                defaultValue={initial?.tcId ?? ""}
-                style={inputStyle}
+                ref={titleRef}
+                name="title"
+                placeholder="Judul test case"
+                value={titleValue}
+                required
+                style={fieldErrors.title ? { ...inputStyle, ...errorBorder } : inputStyle}
+                onChange={(e) => {
+                  setTitleValue(e.target.value);
+                  if (fieldErrors.title) setFieldErrors((prev) => ({ ...prev, title: undefined }));
+                }}
               />
+              {fieldErrors.title && (
+                <p style={{ color: "#EF4444", fontSize: "0.8rem", margin: 0 }}>
+                  {fieldErrors.title}
+                </p>
+              )}
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
-                <label
-                  style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)" }}
-                >
-                  Priority
-                </label>
-                <Select
-                  value={priorityValue}
-                  ariaLabel="Priority"
-                  onChange={(e) => setPriorityValue(e.target.value as TestCase["priority"])}
-                >
-                  <option value="LOW">Low</option>
-                  <option value="MEDIUM">Medium</option>
-                  <option value="HIGH">High</option>
-                  <option value="CRITICAL">Critical</option>
-                </Select>
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
-                <label
-                  style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)" }}
-                >
-                  Status
-                </label>
-                <Select
-                  value={statusValue}
-                  ariaLabel="Status"
-                  onChange={(e) => setStatusValue(e.target.value as TestCase["status"])}
-                >
-                  <option value="DRAFT">Draft</option>
-                  <option value="ACTIVE">Active</option>
-                  <option value="DEPRECATED">Deprecated</option>
-                </Select>
-              </div>
-            </div>
-          </div>
 
-          {/* Row 2: Title (full width) */}
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
-            <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)" }}>
-              Title <span style={{ color: "#EF4444" }}>*</span>
-            </label>
-            <input
-              ref={titleRef}
-              name="title"
-              placeholder="Judul test case"
-              value={titleValue}
-              required
-              style={fieldErrors.title ? { ...inputStyle, ...errorBorder } : inputStyle}
-              onChange={(e) => {
-                setTitleValue(e.target.value);
-                if (fieldErrors.title) setFieldErrors((prev) => ({ ...prev, title: undefined }));
-              }}
-            />
-            {fieldErrors.title && (
-              <p style={{ color: "#EF4444", fontSize: "0.8rem", margin: 0 }}>{fieldErrors.title}</p>
-            )}
-          </div>
-
-          {/* Row 3: Detail Skenario (full width) */}
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
-            <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)" }}>
-              Detail Skenario <span style={{ color: "#EF4444" }}>*</span>
-            </label>
-            <textarea
-              name="scenario"
-              rows={2}
-              value={scenarioValue}
-              required
-              style={fieldErrors.scenario ? { ...inputStyle, ...errorBorder } : inputStyle}
-              onChange={(e) => {
-                setScenarioValue(e.target.value);
-                if (fieldErrors.scenario)
-                  setFieldErrors((prev) => ({ ...prev, scenario: undefined }));
-              }}
-            />
-            {fieldErrors.scenario && (
-              <p style={{ color: "#EF4444", fontSize: "0.8rem", margin: 0 }}>
-                {fieldErrors.scenario}
-              </p>
-            )}
-          </div>
-
-          {/* Execution Details: grouped shaded block */}
-          <div
-            style={{
-              background: "var(--surface-muted)",
-              border: "1px solid var(--border)",
-              borderRadius: 10,
-              padding: "0.85rem 0.9rem",
-              display: "flex",
-              flexDirection: "column",
-              gap: "0.7rem",
-            }}
-          >
-            <div style={{ fontSize: "0.82rem", fontWeight: 700, color: "var(--text-secondary)" }}>
-              Execution Details
-            </div>
+            {/* Row 3: Detail Skenario (full width) */}
             <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
               <label
-                style={{ fontSize: "0.78rem", fontWeight: 600, color: "var(--text-secondary)" }}
+                style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)" }}
               >
-                Precondition
+                Detail Skenario <span style={{ color: "#EF4444" }}>*</span>
               </label>
-              <textarea
-                name="precondition"
+              <ListTextarea
+                name="scenario"
                 rows={2}
-                defaultValue={initial?.precondition ?? ""}
-                style={inputStyle}
+                required
+                ariaLabel="Detail Skenario"
+                hasError={Boolean(fieldErrors.scenario)}
+                value={scenarioValue}
+                onChange={(v) => {
+                  setScenarioValue(v);
+                  if (fieldErrors.scenario)
+                    setFieldErrors((prev) => ({ ...prev, scenario: undefined }));
+                }}
               />
+              {fieldErrors.scenario && (
+                <p style={{ color: "#EF4444", fontSize: "0.8rem", margin: 0 }}>
+                  {fieldErrors.scenario}
+                </p>
+              )}
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
-              <label
-                style={{ fontSize: "0.78rem", fontWeight: 600, color: "var(--text-secondary)" }}
-              >
-                Steps
-              </label>
-              <textarea
-                name="steps"
-                rows={4}
-                defaultValue={initial?.steps ?? ""}
-                style={inputStyle}
-              />
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+
+            {/* Execution Details: grouped shaded block */}
+            <div
+              style={{
+                background: "var(--surface-muted)",
+                border: "1px solid var(--border)",
+                borderRadius: 10,
+                padding: "0.85rem 0.9rem",
+                display: "flex",
+                flexDirection: "column",
+                gap: "0.7rem",
+              }}
+            >
+              <div style={{ fontSize: "0.82rem", fontWeight: 700, color: "var(--text-secondary)" }}>
+                Execution Details
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
+                <label
+                  style={{ fontSize: "0.78rem", fontWeight: 600, color: "var(--text-secondary)" }}
+                >
+                  Precondition
+                </label>
+                <ListTextarea
+                  name="precondition"
+                  rows={2}
+                  ariaLabel="Precondition"
+                  value={preconditionValue}
+                  onChange={setPreconditionValue}
+                />
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
+                <label
+                  style={{ fontSize: "0.78rem", fontWeight: 600, color: "var(--text-secondary)" }}
+                >
+                  Steps
+                </label>
+                <ListTextarea
+                  name="steps"
+                  rows={4}
+                  ariaLabel="Steps"
+                  value={stepsValue}
+                  onChange={setStepsValue}
+                />
+              </div>
               <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
                 <label
                   style={{ fontSize: "0.78rem", fontWeight: 600, color: "var(--text-secondary)" }}
                 >
                   Test Data
                 </label>
-                <textarea
+                <ListTextarea
                   name="testData"
                   rows={2}
-                  defaultValue={initial?.testData ?? ""}
-                  style={inputStyle}
+                  ariaLabel="Test Data"
+                  value={testDataValue}
+                  onChange={setTestDataValue}
                 />
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
@@ -461,34 +481,35 @@ function TestCaseForm({
                 >
                   Expected Result
                 </label>
-                <textarea
+                <ListTextarea
                   name="expectedResult"
                   rows={3}
-                  defaultValue={initial?.expectedResult ?? ""}
-                  style={inputStyle}
+                  ariaLabel="Expected Result"
+                  value={expectedResultValue}
+                  onChange={setExpectedResultValue}
                 />
               </div>
             </div>
+
+            {error && <p style={{ color: "#b91c1c", fontSize: "0.85rem", margin: 0 }}>{error}</p>}
           </div>
 
-          {error && <p style={{ color: "#b91c1c", fontSize: "0.85rem", margin: 0 }}>{error}</p>}
-
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "flex-end",
-              gap: "0.5rem",
-              marginTop: "0.25rem",
-              paddingTop: "1rem",
-              borderTop: "1px solid var(--border)",
-            }}
-          >
-            <button type="button" onClick={onCancel} disabled={isPending} style={btnGhost}>
-              Batal
-            </button>
-            <button type="submit" disabled={isPending} style={{ ...btnYellow, fontWeight: 600 }}>
-              {isPending ? "Menyimpan..." : submitLabel}
-            </button>
+          {/* Footer sticky: di luar area scroll supaya garis & tombol tidak
+              ikut tergeser saat form di-scroll. Garisnya di-inset selebar
+              padding form (sejajar konten di atasnya), tidak menembus tepi modal. */}
+          <div style={{ flexShrink: 0, padding: "0 1.25rem 1rem", background: "#fff" }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                paddingTop: "1rem",
+                borderTop: "1px solid var(--border)",
+              }}
+            >
+              <button type="submit" disabled={isPending} style={{ ...btnYellow, fontWeight: 600 }}>
+                {isPending ? "Menyimpan..." : submitLabel}
+              </button>
+            </div>
           </div>
         </form>
       </div>
@@ -889,11 +910,18 @@ function TestCaseTable({
                 onDragTcStart?.(t.id);
               }}
               onDragEnd={() => onDragTcEnd?.()}
+              // Seluruh baris (kecuali kontrol interaktif di dalamnya) membuka
+              // Detail Modal; seleksi teks dibiarkan tidak memicu modal.
+              onClick={() => {
+                if (window.getSelection()?.toString()) return;
+                onOpenDetail?.(t);
+              }}
               style={{
                 borderBottom: "1px solid var(--border)",
+                cursor: "pointer",
                 transition: "background 0.15s ease",
               }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-muted)")}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(248, 250, 252, 0.8)")}
               onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
             >
               {canEdit && onToggleTc && (
@@ -902,6 +930,8 @@ function TestCaseTable({
                     type="checkbox"
                     checked={selectedTcIds?.has(t.id) ?? false}
                     onChange={() => onToggleTc?.(t.id)}
+                    // Checkbox bukan bagian dari aksi "buka detail".
+                    onClick={(e) => e.stopPropagation()}
                     title="Pilih test case"
                     style={{ cursor: "pointer" }}
                   />
@@ -924,16 +954,13 @@ function TestCaseTable({
                     fontFamily: "var(--font-mono)",
                     fontSize: "0.78rem",
                     fontWeight: 500,
-                    color: "#1D4ED8",
+                    color: "#1E293B",
                     background: "none",
                     border: "none",
                     padding: 0,
                     cursor: "pointer",
                     textDecoration: "none",
-                    transition: "color 0.15s ease, text-decoration 0.15s ease",
                   }}
-                  onMouseEnter={(e) => (e.currentTarget.style.textDecoration = "underline")}
-                  onMouseLeave={(e) => (e.currentTarget.style.textDecoration = "none")}
                 >
                   {t.tcId}
                 </button>
@@ -991,7 +1018,11 @@ function TestCaseTable({
               </td>
               {canEdit && (
                 <td style={{ padding: "0.5rem 0.5rem", textAlign: "center", width: 60 }}>
-                  <div style={{ display: "flex", justifyContent: "center", alignItems: "center" }}>
+                  <div
+                    // Kebab/action menu bukan bagian dari aksi "buka detail".
+                    onClick={(e) => e.stopPropagation()}
+                    style={{ display: "flex", justifyContent: "center", alignItems: "center" }}
+                  >
                     <RowActionsMenu
                       actions={[
                         ...(onMoveTc
@@ -2469,8 +2500,7 @@ function TestCaseDetailModal({
     fontSize: "0.72rem",
     fontWeight: 600,
     color: "#6B7280",
-    textTransform: "uppercase",
-    letterSpacing: "0.06em",
+    letterSpacing: "0.01em",
     margin: "0 0 0.4rem",
   };
 
@@ -2508,67 +2538,69 @@ function TestCaseDetailModal({
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "flex-start",
-            justifyContent: "space-between",
-            gap: "0.75rem",
-            padding: "1.25rem 1.5rem",
-            borderBottom: "1px solid var(--border)",
-          }}
-        >
-          <div style={{ minWidth: 0 }}>
-            <span
-              style={{
-                fontFamily: "var(--font-mono, monospace)",
-                fontSize: "0.72rem",
-                color: "#9CA3AF",
-                fontWeight: 500,
-                letterSpacing: "0.02em",
-              }}
-            >
-              {tc.tcId}
-            </span>
-            <h2
-              style={{
-                fontSize: "1.05rem",
-                fontWeight: 700,
-                margin: "0.3rem 0 0",
-                color: "#111827",
-                lineHeight: 1.35,
-              }}
-            >
-              {tc.title}
-            </h2>
-          </div>
-          <button
-            type="button"
-            aria-label="Tutup"
-            onClick={onClose}
+        {/* Header — divider di-inset selebar padding modal (sejajar konten). */}
+        <div style={{ padding: "1.25rem 1.5rem 0" }}>
+          <div
             style={{
-              width: 30,
-              height: 30,
               display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              border: "none",
-              background: "transparent",
-              color: "var(--text-muted)",
-              borderRadius: 6,
-              cursor: "pointer",
-              flexShrink: 0,
+              alignItems: "flex-start",
+              justifyContent: "space-between",
+              gap: "0.75rem",
+              paddingBottom: "0.85rem",
+              borderBottom: "1px solid var(--border)",
             }}
           >
-            <X size={18} />
-          </button>
+            <div style={{ minWidth: 0 }}>
+              <span
+                style={{
+                  fontFamily: "var(--font-mono, monospace)",
+                  fontSize: "0.72rem",
+                  color: "#9CA3AF",
+                  fontWeight: 500,
+                  letterSpacing: "0.02em",
+                }}
+              >
+                {tc.tcId}
+              </span>
+              <h2
+                style={{
+                  fontSize: "1.05rem",
+                  fontWeight: 700,
+                  margin: "0.3rem 0 0",
+                  color: "#111827",
+                  lineHeight: 1.35,
+                }}
+              >
+                {tc.title}
+              </h2>
+            </div>
+            <button
+              type="button"
+              aria-label="Tutup"
+              onClick={onClose}
+              style={{
+                width: 30,
+                height: 30,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                border: "none",
+                background: "transparent",
+                color: "var(--text-muted)",
+                borderRadius: 6,
+                cursor: "pointer",
+                flexShrink: 0,
+              }}
+            >
+              <X size={18} />
+            </button>
+          </div>
         </div>
 
         {/* Body */}
         <div
           style={{
-            padding: "1.25rem 1.5rem",
+            padding: "1rem 1.5rem 1.25rem",
             overflowY: "auto",
             display: "flex",
             flexDirection: "column",
@@ -2675,7 +2707,7 @@ function TestCaseDetailModal({
 
           {/* Pre-conditions */}
           <div>
-            <h4 style={sectionLabel}>Pre-Conditions</h4>
+            <h4 style={sectionLabel}>Precondition</h4>
             {tc.precondition ? (
               <ul
                 style={{
@@ -2692,7 +2724,18 @@ function TestCaseDetailModal({
               >
                 {tc.precondition
                   .split("\n")
-                  .map((line, i) => (line.trim() ? <li key={i}>{line.trim()}</li> : null))}
+                  // Buang bullet manual ("•", "-", "*") supaya tidak dobel
+                  // dengan marker <li> bawaan browser.
+                  .map((line) =>
+                    line
+                      .trim()
+                      .replace(/^[•\-*]\s*/, "")
+                      .trim()
+                  )
+                  .filter(Boolean)
+                  .map((line, i) => (
+                    <li key={i}>{line}</li>
+                  ))}
               </ul>
             ) : (
               <p style={{ margin: 0, fontSize: "0.85rem", color: "#9CA3AF", fontStyle: "italic" }}>
@@ -2794,7 +2837,7 @@ function TestCaseDetailModal({
                           textAlign: "center",
                         }}
                       >
-                        Tidak ada langkah.
+                        Step action tidak tersedia.
                       </td>
                     </tr>
                   ) : (
@@ -2840,53 +2883,54 @@ function TestCaseDetailModal({
           </div>
         </div>
 
-        {/* Footer */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: "0.75rem",
-            padding: "0.9rem 1.5rem",
-            borderTop: "1px solid var(--border)",
-            background: "rgba(249, 250, 251, 0.5)",
-          }}
-        >
-          <Link
-            href={`/test-cases/${tc.id}?tab=runs`}
+        {/* Footer — divider di-inset selebar padding modal, senada dengan header. */}
+        <div style={{ padding: "0 1.5rem 0.9rem", background: "rgba(249, 250, 251, 0.5)" }}>
+          <div
             style={{
-              display: "inline-flex",
+              display: "flex",
               alignItems: "center",
-              gap: "0.35rem",
-              color: "#1D4ED8",
-              fontSize: "0.8rem",
-              fontWeight: 500,
-              textDecoration: "none",
+              justifyContent: "space-between",
+              gap: "0.75rem",
+              paddingTop: "0.9rem",
+              borderTop: "1px solid var(--border)",
             }}
           >
-            <History size={14} /> Lihat Run History
-          </Link>
-          {canEdit && (
-            <button
-              type="button"
-              onClick={onEdit}
+            <Link
+              href={`/test-cases/${tc.id}?tab=runs`}
               style={{
                 display: "inline-flex",
                 alignItems: "center",
-                gap: "0.4rem",
-                padding: "0.45rem 1.1rem",
-                border: "none",
-                borderRadius: 3,
-                background: "#F59E0B",
-                color: "#000000",
-                fontSize: "0.78rem",
-                fontWeight: 400,
-                cursor: "pointer",
+                gap: "0.35rem",
+                color: "#1D4ED8",
+                fontSize: "0.8rem",
+                fontWeight: 500,
+                textDecoration: "none",
               }}
             >
-              <Pencil size={14} /> Edit Test Case
-            </button>
-          )}
+              <History size={14} /> Lihat Run History
+            </Link>
+            {canEdit && (
+              <button
+                type="button"
+                onClick={onEdit}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "0.4rem",
+                  padding: "0.45rem 1.1rem",
+                  border: "none",
+                  borderRadius: 3,
+                  background: "#F59E0B",
+                  color: "#000000",
+                  fontSize: "0.78rem",
+                  fontWeight: 400,
+                  cursor: "pointer",
+                }}
+              >
+                <Pencil size={14} /> Edit Test Case
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>,

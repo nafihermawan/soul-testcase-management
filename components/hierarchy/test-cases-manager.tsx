@@ -570,11 +570,6 @@ function SectionCard({
   const [titleDraft, setTitleDraft] = useState(section.name);
   const [dragOver, setDragOver] = useState(false);
 
-  // Status checkbox Select All section: checked / indeterminate / unchecked.
-  const selectedInSection = tcs.filter((t) => selectedTcIds.has(t.id)).length;
-  const allSelected = tcs.length > 0 && selectedInSection === tcs.length;
-  const someSelected = selectedInSection > 0;
-
   const commitTitle = () => {
     const t = titleDraft.trim();
     if (t && t !== section.name) onRename(t);
@@ -617,21 +612,7 @@ function SectionCard({
           userSelect: "none",
         }}
       >
-        {/* Select All per section (checked / indeterminate / unchecked) */}
-        {canEdit && (
-          <input
-            type="checkbox"
-            checked={allSelected}
-            ref={(el) => {
-              if (el) el.indeterminate = someSelected && !allSelected;
-            }}
-            onChange={() => onToggleAll(tcs)}
-            onClick={(e) => e.stopPropagation()}
-            title="Pilih semua test case di section ini"
-            aria-label={`Pilih semua test case di section ${section.name}`}
-            style={{ cursor: "pointer", flexShrink: 0 }}
-          />
-        )}
+        {/* Select All dipindah ke sub-header tabel (kolom kiri `TC ID`) */}
 
         {/* Editable section title */}
         {editingTitle ? (
@@ -829,6 +810,7 @@ function SectionCard({
               onOpenDetail={onOpenDetail}
               selectedTcIds={selectedTcIds}
               onToggleTc={onToggleTc}
+              onToggleAll={onToggleAll}
               onQuickUpdate={onQuickUpdate}
             />
           )}
@@ -849,6 +831,7 @@ function TestCaseTable({
   onOpenDetail,
   selectedTcIds,
   onToggleTc,
+  onToggleAll,
   onQuickUpdate,
 }: {
   testCases: TestCase[];
@@ -861,6 +844,8 @@ function TestCaseTable({
   onOpenDetail?: (t: TestCase) => void;
   selectedTcIds?: Set<string>;
   onToggleTc?: (tcId: string) => void;
+  /** Select All untuk daftar TC yang sedang ditampilkan (per section). */
+  onToggleAll?: (tcList: TestCase[]) => void;
   onQuickUpdate: (
     t: TestCase,
     data: { priority?: TestCase["priority"]; status?: TestCase["status"] }
@@ -893,7 +878,26 @@ function TestCaseTable({
             }}
           >
             {canEdit && onToggleTc && (
-              <th style={{ padding: "0.5rem 0.4rem", width: 40, textAlign: "center" }} />
+              <th style={{ padding: "0.5rem 0.4rem", width: 40, textAlign: "center" }}>
+                {onToggleAll && (
+                  <input
+                    type="checkbox"
+                    checked={
+                      testCases.length > 0 && testCases.every((t) => selectedTcIds?.has(t.id))
+                    }
+                    ref={(el) => {
+                      if (el) {
+                        const some = testCases.some((t) => selectedTcIds?.has(t.id));
+                        el.indeterminate =
+                          some && !testCases.every((t) => selectedTcIds?.has(t.id));
+                      }
+                    }}
+                    onChange={() => onToggleAll(testCases)}
+                    title="Pilih semua test case di section ini"
+                    style={{ cursor: "pointer" }}
+                  />
+                )}
+              </th>
             )}
             <th style={{ padding: "0.5rem 1rem", fontWeight: 600, width: 220 }}>TC ID</th>
             <th style={{ padding: "0.5rem 0.5rem", fontWeight: 600, width: "auto" }}>Title</th>
@@ -1658,26 +1662,6 @@ export function TestCasesManager({
                   borderBottom: "1px solid var(--border)",
                 }}
               >
-                {/* Select All untuk kelompok Tanpa Section */}
-                {canEdit && (
-                  <input
-                    type="checkbox"
-                    checked={
-                      unassigned.length > 0 && unassigned.every((t) => selectedTcIds.has(t.id))
-                    }
-                    ref={(el) => {
-                      if (el) {
-                        const some = unassigned.some((t) => selectedTcIds.has(t.id));
-                        el.indeterminate =
-                          some && !unassigned.every((t) => selectedTcIds.has(t.id));
-                      }
-                    }}
-                    onChange={() => toggleAllInList(unassigned)}
-                    title="Pilih semua test case tanpa section"
-                    aria-label="Pilih semua test case tanpa section"
-                    style={{ cursor: "pointer", flexShrink: 0 }}
-                  />
-                )}
                 <span style={{ fontWeight: 600, fontSize: "0.9rem" }}>Unassigned Test Cases</span>
                 {/* Counter plain text */}
                 <span
@@ -1737,6 +1721,7 @@ export function TestCasesManager({
                   onOpenDetail={(t) => setDetailTc(t)}
                   selectedTcIds={selectedTcIds}
                   onToggleTc={toggleTcSelection}
+                  onToggleAll={toggleAllInList}
                   onQuickUpdate={handleQuickUpdate}
                 />
               </div>

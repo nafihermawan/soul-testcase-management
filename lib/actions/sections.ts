@@ -7,6 +7,8 @@ import { requireRole } from "@/lib/permissions";
 export type SectionActionState = {
   error?: string;
   success?: boolean;
+  /** Section yang baru dibuat — dipakai klien untuk update in-place tanpa reload. */
+  section?: { id: string; name: string; description: string | null };
 };
 
 function handleError(error: unknown): SectionActionState {
@@ -25,16 +27,17 @@ export async function createSection(
 
   try {
     const count = await prisma.section.count({ where: { suiteId } });
-    await prisma.section.create({
+    const created = await prisma.section.create({
       data: {
         suiteId,
         name,
         description: data.description?.trim() || null,
         order: count,
       },
+      select: { id: true, name: true, description: true },
     });
     revalidatePath(`/suites/${suiteId}`);
-    return { success: true };
+    return { success: true, section: created };
   } catch (error) {
     return handleError(error);
   }

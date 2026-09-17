@@ -1253,7 +1253,10 @@ export function TestCasesManager({
       setSectionTitle("");
       setSectionDesc("");
       setShowAddSection(false);
-      refresh();
+      // Section baru langsung ditempel ke state lokal — TANPA refresh halaman
+      // (aksi server mengembalikan section-nya, jadi tidak perlu refetch).
+      const created = res.section;
+      if (created) setLocalSections((prev) => [...prev, created]);
     }
   };
 
@@ -1263,7 +1266,14 @@ export function TestCasesManager({
 
   const deleteSection = async (id: string) => {
     const res = await deleteSectionAction(id);
-    if (res.success) refresh();
+    if (res.success) {
+      // Server melepas semua TC section ini ke "Tanpa Section" — samakan di
+      // state lokal supaya tidak perlu refresh satu halaman.
+      setLocalTestCases((prev) =>
+        prev.map((tc) => (tc.sectionId === id ? { ...tc, sectionId: null } : tc))
+      );
+      setLocalSections((prev) => prev.filter((s) => s.id !== id));
+    }
   };
 
   const renameSection = async (id: string, title: string) => {

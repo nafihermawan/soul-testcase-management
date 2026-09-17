@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRefresh } from "@/lib/client/refresh-context";
-import { Bug, CheckCircle2, ChevronRight, CircleSlash, ExternalLink, FolderOpen, MinusCircle, Paperclip, Pencil, X, XCircle } from "lucide-react";
+import { Bug, CheckCircle2, ChevronDown, ChevronRight, CircleSlash, ExternalLink, FolderOpen, MinusCircle, Paperclip, Pencil, X, XCircle } from "lucide-react";
 import { completeRun, completeRunWithSkip, deleteRun, updateRunResult } from "@/lib/actions/test-runs";
 import { createBug, unlinkBugFromRunResult } from "@/lib/actions/automation-bugs";
 import { ConfirmDialog, Spinner, Toast, useToast } from "@/components/ui/feedback";
@@ -595,7 +595,7 @@ export function RunExecutor({
                   cursor: "pointer",
                 }}
               >
-                Export Report ▼
+                Export Report <ChevronDown size={14} aria-hidden="true" />
               </button>
             </div>
           )}
@@ -642,17 +642,15 @@ export function RunExecutor({
               }}
             >
               <span>Detail</span>
-              <span
+              {/* ChevronDown sbg dasar: 180° = menunjuk ke atas saat terbuka. */}
+              <ChevronDown
+                size={14}
+                aria-hidden="true"
                 style={{
-                  display: "inline-block",
-                  fontSize: 10,
-                  lineHeight: 1,
-                  transform: metaOpen ? "rotate(0deg)" : "rotate(180deg)",
+                  transform: metaOpen ? "rotate(180deg)" : "rotate(0deg)",
                   transition: "transform 0.3s ease-in-out",
                 }}
-              >
-                ▲
-              </span>
+              />
             </button>
           </div>
         </div>
@@ -842,8 +840,8 @@ export function RunExecutor({
               </span>
               <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "0.5rem" }}>
                 {/* Area kanan header project hanya berisi chevron accordion. */}
-                <span style={{ fontSize: 14, color: "#6B7280", display: "inline-flex", transition: "transform 0.2s ease", transform: open ? "rotate(180deg)" : "none" }}>
-                  ▼
+                <span style={{ color: "#6B7280", display: "inline-flex", transition: "transform 0.2s ease", transform: open ? "rotate(180deg)" : "none" }}>
+                  <ChevronDown size={16} aria-hidden="true" />
                 </span>
               </div>
             </div>
@@ -1290,6 +1288,7 @@ function RunItemCard({
 }) {
   const attachedBugs = item.bugs ?? [];
   const badge = STATUS_BADGE[item.status];
+  const evidenceCount = item.attachments?.length ?? 0;
   /** Actual result hanya ditampilkan saat eksekusi gagal atau terblokir. */
   const showActualResult = item.status === "FAIL" || item.status === "BLOCKED";
   return (
@@ -1309,7 +1308,7 @@ function RunItemCard({
         transition: "border-color 0.15s ease",
       }}
     >
-      {/* Blok 1 — judul + aksi sekunder (kiri), badge status pasif (kanan) */}
+      {/* Blok 1 — judul (kiri) | indikator evidence + badge status pasif (kanan) */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "1rem" }}>
         <div style={{ minWidth: 0 }}>
           <div style={{ fontWeight: 600, fontSize: "0.875rem", color: "#1E293B", lineHeight: 1.375 }}>
@@ -1323,52 +1322,59 @@ function RunItemCard({
             )}
             {item.titleSnapshot}
           </div>
-          {/* Link "Detail Test Case & Notes" dihapus: seluruh kartu sudah
-              menjadi target klik untuk membuka modal detail (lihat onClick di
-              pembungkus kartu). Baris ini hanya sisa chip evidence. */}
-          {(item.attachments?.length ?? 0) > 0 && (
-            <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap", marginTop: "0.3rem" }}>
-              <button
-                type="button"
-                onClick={onOpenDetail}
-                title="Lihat evidence"
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "0.3rem",
-                  padding: "0.15rem 0.5rem",
-                  borderRadius: 999,
-                  border: "1px solid var(--border-strong)",
-                  background: "var(--surface-muted)",
-                  color: "var(--text-secondary)",
-                  fontSize: "0.72rem",
-                  fontWeight: 600,
-                  cursor: "pointer",
-                }}
-              >
-                <Paperclip size={12} /> {item.attachments!.length} evidence
-              </button>
-            </div>
-          )}
         </div>
-        {/* Indikator status pasif: perubahan status hanya lewat modal detail */}
-        <span
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            flexShrink: 0,
-            padding: "0.25rem 0.75rem",
-            borderRadius: 999,
-            background: badge.bg,
-            color: badge.color,
-            border: `1px solid ${badge.border}`,
-            fontSize: "0.75rem",
-            fontWeight: badge.bold ? 700 : 600,
-            whiteSpace: "nowrap",
-          }}
-        >
-          {badge.label}
-        </span>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexShrink: 0 }}>
+          {/* Indikator evidence: ikon paperclip polos, sejajar dengan badge status.
+              Angka hanya muncul kalau file lebih dari satu. */}
+          {evidenceCount > 0 && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenDetail();
+              }}
+              title={`${evidenceCount} Evidence Attached`}
+              aria-label={`${evidenceCount} Evidence Attached`}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 3,
+                padding: 2,
+                border: "none",
+                background: "transparent",
+                color: "#94A3B8",
+                fontSize: "0.72rem",
+                fontWeight: 600,
+                lineHeight: 1,
+                cursor: "pointer",
+                transition: "color 0.15s ease",
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = "#475569")}
+              onMouseLeave={(e) => (e.currentTarget.style.color = "#94A3B8")}
+            >
+              <Paperclip size={13} />
+              {evidenceCount > 1 && evidenceCount}
+            </button>
+          )}
+          {/* Indikator status pasif: perubahan status hanya lewat modal detail */}
+          <span
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              flexShrink: 0,
+              padding: "0.25rem 0.75rem",
+              borderRadius: 999,
+              background: badge.bg,
+              color: badge.color,
+              border: `1px solid ${badge.border}`,
+              fontSize: "0.75rem",
+              fontWeight: badge.bold ? 700 : 600,
+              whiteSpace: "nowrap",
+            }}
+          >
+            {badge.label}
+          </span>
+        </div>
       </div>
 
       {/* Blok 2 — hasil eksekusi. Hanya relevan saat eksekusi gagal/terblokir;

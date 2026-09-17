@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { ChevronDown } from "lucide-react";
 import { TestCasesManager } from "@/components/hierarchy/test-cases-manager";
 import { ErrorBlock, NotFoundBlock, SuiteSkeleton } from "@/components/ui/data-states";
 import { RefreshContext } from "@/lib/client/refresh-context";
@@ -172,17 +173,14 @@ export function SuiteDetailView({
             }}
           >
             <span>Detail</span>
-            <span
+            <ChevronDown
+              size={14}
+              aria-hidden="true"
               style={{
-                fontSize: 10,
-                lineHeight: 1,
                 transform: isExpanded ? "rotate(180deg)" : "rotate(0deg)",
                 transition: "transform 0.3s ease-in-out",
-                display: "inline-block",
               }}
-            >
-              ▼
-            </span>
+            />
           </button>
         </div>
 

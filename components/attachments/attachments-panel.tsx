@@ -266,7 +266,7 @@ export function AttachmentsPanel({
             <>
               <Paperclip size={18} style={{ color: "#94A3B8" }} />
               <span style={{ fontSize: "0.78rem", fontWeight: 600, color: "#334155" }}>
-                Klik, tarik file, atau tekan Ctrl+V di sini
+                Klik, Drag, atau Paste file di sini
               </span>
               <span style={{ fontSize: "0.7rem", color: "#94A3B8" }}>
                 Gambar atau video · maks {MAX_MB} MB per file

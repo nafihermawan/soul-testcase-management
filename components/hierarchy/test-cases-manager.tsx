@@ -8,7 +8,6 @@ import {
   AlertCircle,
   ChevronDown,
   CheckCircle2,
-  ChevronRight,
   Download,
   FolderInput,
   History,
@@ -571,6 +570,11 @@ function SectionCard({
   const [titleDraft, setTitleDraft] = useState(section.name);
   const [dragOver, setDragOver] = useState(false);
 
+  // Status checkbox Select All section: checked / indeterminate / unchecked.
+  const selectedInSection = tcs.filter((t) => selectedTcIds.has(t.id)).length;
+  const allSelected = tcs.length > 0 && selectedInSection === tcs.length;
+  const someSelected = selectedInSection > 0;
+
   const commitTitle = () => {
     const t = titleDraft.trim();
     if (t && t !== section.name) onRename(t);
@@ -599,8 +603,9 @@ function SectionCard({
         boxShadow: dragOver ? "0 0 0 2px rgba(251, 191, 36, 0.25)" : "none",
       }}
     >
-      {/* Section header */}
+      {/* Section header — klik di area mana pun = expand/collapse */}
       <div
+        onClick={onToggle}
         style={{
           display: "flex",
           alignItems: "center",
@@ -608,26 +613,25 @@ function SectionCard({
           padding: "0.6rem 0.9rem",
           background: "var(--surface-muted)",
           borderBottom: section.open ? "1px solid var(--border)" : "none",
+          cursor: "pointer",
+          userSelect: "none",
         }}
       >
-        <button
-          type="button"
-          onClick={onToggle}
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: "0.35rem",
-            border: "none",
-            background: "transparent",
-            color: "var(--text)",
-            fontWeight: 600,
-            fontSize: "0.9rem",
-            cursor: "pointer",
-            padding: 0,
-          }}
-        >
-          {section.open ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
-        </button>
+        {/* Select All per section (checked / indeterminate / unchecked) */}
+        {canEdit && (
+          <input
+            type="checkbox"
+            checked={allSelected}
+            ref={(el) => {
+              if (el) el.indeterminate = someSelected && !allSelected;
+            }}
+            onChange={() => onToggleAll(tcs)}
+            onClick={(e) => e.stopPropagation()}
+            title="Pilih semua test case di section ini"
+            aria-label={`Pilih semua test case di section ${section.name}`}
+            style={{ cursor: "pointer", flexShrink: 0 }}
+          />
+        )}
 
         {/* Editable section title */}
         {editingTitle ? (
@@ -640,6 +644,7 @@ function SectionCard({
               if (e.key === "Escape") setEditingTitle(false);
             }}
             autoFocus
+            onClick={(e) => e.stopPropagation()}
             style={{
               border: "1px solid #F59E0B",
               padding: "0.2rem 0.4rem",
@@ -652,7 +657,9 @@ function SectionCard({
           />
         ) : (
           <span
-            onClick={() => {
+            onClick={(e) => {
+              // Klik nama = ubah nama, bukan expand/collapse.
+              e.stopPropagation();
               setTitleDraft(section.name);
               setEditingTitle(true);
             }}
@@ -683,11 +690,33 @@ function SectionCard({
           ({tcs.length} Test Case{tcs.length === 1 ? "" : "s"})
         </span>
 
+        {/* Jumlah item terpilih di section ini */}
+        {selectedInSection > 0 && (
+          <span
+            style={{
+              fontSize: 11,
+              fontWeight: 700,
+              color: "#B45309",
+              background: "rgba(255, 195, 72, 0.2)",
+              border: "1px solid #FFC348",
+              borderRadius: 999,
+              padding: "0.1rem 0.45rem",
+              whiteSpace: "nowrap",
+              flexShrink: 0,
+            }}
+          >
+            {selectedInSection}/{tcs.length} Selected
+          </span>
+        )}
+
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "0.5rem" }}>
           {canEdit && !addingTc && editingTcId === null && (
             <button
               type="button"
-              onClick={onAddCase}
+              onClick={(e) => {
+                e.stopPropagation();
+                onAddCase();
+              }}
               style={{
                 display: "inline-flex",
                 alignItems: "center",
@@ -709,6 +738,7 @@ function SectionCard({
             </button>
           )}
           <div
+            onClick={(e) => e.stopPropagation()}
             style={{
               width: 64,
               display: "flex",
@@ -736,6 +766,39 @@ function SectionCard({
               ]}
             />
           </div>
+          {/* Chevron di pojok kanan header, rotasi halus saat open/close */}
+          <button
+            type="button"
+            aria-expanded={section.open}
+            aria-label={
+              section.open ? `Tutup section ${section.name}` : `Buka section ${section.name}`
+            }
+            title={section.open ? "Tutup section" : "Buka section"}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggle();
+            }}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: 2,
+              border: "none",
+              background: "transparent",
+              color: "#6B7280",
+              cursor: "pointer",
+              flexShrink: 0,
+            }}
+          >
+            <ChevronDown
+              size={16}
+              aria-hidden="true"
+              style={{
+                transform: section.open ? "rotate(180deg)" : "rotate(0deg)",
+                transition: "transform 0.2s ease",
+              }}
+            />
+          </button>
         </div>
       </div>
 
@@ -785,7 +848,6 @@ function SectionCard({
               onOpenDetail={onOpenDetail}
               selectedTcIds={selectedTcIds}
               onToggleTc={onToggleTc}
-              onToggleAll={onToggleAll}
               onQuickUpdate={onQuickUpdate}
             />
           )}
@@ -806,7 +868,6 @@ function TestCaseTable({
   onOpenDetail,
   selectedTcIds,
   onToggleTc,
-  onToggleAll,
   onQuickUpdate,
 }: {
   testCases: TestCase[];
@@ -819,7 +880,6 @@ function TestCaseTable({
   onOpenDetail?: (t: TestCase) => void;
   selectedTcIds?: Set<string>;
   onToggleTc?: (tcId: string) => void;
-  onToggleAll?: (tcList: TestCase[]) => void;
   onQuickUpdate: (
     t: TestCase,
     data: { priority?: TestCase["priority"]; status?: TestCase["status"] }
@@ -852,26 +912,7 @@ function TestCaseTable({
             }}
           >
             {canEdit && onToggleTc && (
-              <th style={{ padding: "0.5rem 0.4rem", width: 40, textAlign: "center" }}>
-                {onToggleAll && (
-                  <input
-                    type="checkbox"
-                    checked={
-                      testCases.length > 0 && testCases.every((t) => selectedTcIds?.has(t.id))
-                    }
-                    ref={(el) => {
-                      if (el) {
-                        const some = testCases.some((t) => selectedTcIds?.has(t.id));
-                        el.indeterminate =
-                          some && !testCases.every((t) => selectedTcIds?.has(t.id));
-                      }
-                    }}
-                    onChange={() => onToggleAll(testCases)}
-                    title="Pilih semua test case di section ini"
-                    style={{ cursor: "pointer" }}
-                  />
-                )}
-              </th>
+              <th style={{ padding: "0.5rem 0.4rem", width: 40, textAlign: "center" }} />
             )}
             <th style={{ padding: "0.5rem 1rem", fontWeight: 600, width: 220 }}>TC ID</th>
             <th style={{ padding: "0.5rem 0.5rem", fontWeight: 600, width: "auto" }}>Title</th>
@@ -1636,6 +1677,26 @@ export function TestCasesManager({
                   borderBottom: "1px solid var(--border)",
                 }}
               >
+                {/* Select All untuk kelompok Tanpa Section */}
+                {canEdit && (
+                  <input
+                    type="checkbox"
+                    checked={
+                      unassigned.length > 0 && unassigned.every((t) => selectedTcIds.has(t.id))
+                    }
+                    ref={(el) => {
+                      if (el) {
+                        const some = unassigned.some((t) => selectedTcIds.has(t.id));
+                        el.indeterminate =
+                          some && !unassigned.every((t) => selectedTcIds.has(t.id));
+                      }
+                    }}
+                    onChange={() => toggleAllInList(unassigned)}
+                    title="Pilih semua test case tanpa section"
+                    aria-label="Pilih semua test case tanpa section"
+                    style={{ cursor: "pointer", flexShrink: 0 }}
+                  />
+                )}
                 <span style={{ fontWeight: 600, fontSize: "0.9rem" }}>Unassigned Test Cases</span>
                 {/* Counter plain text */}
                 <span
@@ -1695,7 +1756,6 @@ export function TestCasesManager({
                   onOpenDetail={(t) => setDetailTc(t)}
                   selectedTcIds={selectedTcIds}
                   onToggleTc={toggleTcSelection}
-                  onToggleAll={toggleAllInList}
                   onQuickUpdate={handleQuickUpdate}
                 />
               </div>

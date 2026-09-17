@@ -2,7 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ClipboardList, FolderOpen, Inbox, Play, RotateCcw, Search, X } from "lucide-react";
+import { ChevronDown, ClipboardList, FolderOpen, Inbox, Play, RotateCcw, Search, X } from "lucide-react";
 import { createTestRun, updateTestRun } from "@/lib/actions/test-runs";
 import { getJSON, invalidateApiCache } from "@/lib/client/use-api";
 import { Select } from "@/components/ui/select";
@@ -380,9 +380,16 @@ export function ExpressRunForm({
     return Array.from(groups.values());
   }, [filteredTCs, sections]);
 
-  // Jumlah suite dipilih = suite yang punya >=1 TC terpilih? Tidak; pakai active project.
-  const allTCsSelected =
-    filteredTCs.length > 0 && filteredTCs.every((t) => selectedTCs.has(t.id));
+  // Section mana yang sedang di-collapse (default: semua terbuka).
+  const [collapsedSectionKeys, setCollapsedSectionKeys] = useState<Set<string>>(new Set());
+
+  const toggleSectionGroup = (key: string) =>
+    setCollapsedSectionKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
 
   // Validasi form wajib
   const isUrlValid = (v: string) => {
@@ -418,14 +425,13 @@ export function ExpressRunForm({
     });
   };
 
-  const toggleAllTCs = () => {
+  /** Select All per section: pilih/lepas semua TC di dalam satu section. */
+  const toggleSectionTCs = (items: TCOption[]) => {
     setSelectedTCs((prev) => {
       const next = new Set(prev);
-      if (allTCsSelected) {
-        filteredTCs.forEach((t) => next.delete(t.id));
-      } else {
-        filteredTCs.forEach((t) => next.add(t.id));
-      }
+      const allOn = items.length > 0 && items.every((t) => next.has(t.id));
+      if (allOn) items.forEach((t) => next.delete(t.id));
+      else items.forEach((t) => next.add(t.id));
       return next;
     });
   };
@@ -903,23 +909,6 @@ export function ExpressRunForm({
               <div style={{ fontWeight: 700, fontSize: "0.88rem", flexShrink: 0 }}>
                 Test Cases
               </div>
-              <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "0.6rem", flexShrink: 0 }}>
-                {activeSuiteId && (
-                  <label style={{ display: "inline-flex", alignItems: "center", gap: "0.3rem", fontSize: "0.78rem", fontWeight: 600, color: "var(--text-secondary)", cursor: "pointer" }}>
-                    <input type="checkbox" checked={allTCsSelected} onChange={toggleAllTCs} />
-                    Select All
-                  </label>
-                )}
-                <button
-                  type="button"
-                  onClick={() => setSelectedTCs(new Set())}
-                  style={{ border: "none", background: "none", color: "#EF4444", fontSize: "0.78rem", fontWeight: 600, cursor: "pointer", padding: 0, transition: "color 0.12s ease" }}
-                  onMouseEnter={(e) => (e.currentTarget.style.color = "#DC2626")}
-                  onMouseLeave={(e) => (e.currentTarget.style.color = "#EF4444")}
-                >
-                  Clear
-                </button>
-              </div>
             </div>
             <div style={{ padding: "0.5rem 0.75rem" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", border: "1px solid var(--border-strong)", borderRadius: 7, padding: "0.3rem 0.55rem" }}>
@@ -946,51 +935,123 @@ export function ExpressRunForm({
                   text="Tidak ada test case di suite ini."
                 />
               ) : (
-                tcSectionGroups.map((g) => (
-                  <div key={g.key}>
-                    {/* Header Section: folder + teks, pengelompok daftar TC */}
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 6,
-                        padding: "4px 8px",
-                        marginTop: 8,
-                        marginBottom: 4,
-                        background: "rgba(241, 245, 249, 0.7)",
-                        borderRadius: 4,
-                        fontSize: 11,
-                        fontWeight: 700,
-                        color: "#475569",
-                        textTransform: "uppercase",
-                        letterSpacing: "0.05em",
-                      }}
-                    >
-                      <FolderOpen size={12} style={{ flexShrink: 0 }} />
-                      {g.name}
-                    </div>
-                    {g.items.map((t) => {
-                  const checked = selectedTCs.has(t.id);
+                tcSectionGroups.map((g) => {
+                  const selectedInSection = g.items.filter((t) => selectedTCs.has(t.id)).length;
+                  const allOn = g.items.length > 0 && selectedInSection === g.items.length;
+                  const open = !collapsedSectionKeys.has(g.key);
                   return (
-                    <label
-                      key={t.id}
-                      style={{ ...itemStyle(checked), paddingLeft: 12 }}
-                      onMouseEnter={(e) => {
-                        if (!checked) e.currentTarget.style.background = "var(--surface-muted)";
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.background = checked ? "rgba(255, 195, 72, 0.08)" : "transparent";
-                      }}
-                    >
-                      <input type="checkbox" checked={checked} onChange={() => toggleTC(t.id)} />
-                      <span style={{ fontWeight: 500, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {t.title}
-                      </span>
-                    </label>
-                    );
-                    })}
-                  </div>
-                ))
+                    <div key={g.key}>
+                      {/* Header Section: Select All + folder + nama, klik = expand/collapse */}
+                      <div
+                        onClick={() => toggleSectionGroup(g.key)}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 6,
+                          padding: "4px 8px",
+                          marginTop: 8,
+                          marginBottom: 4,
+                          background: "rgba(241, 245, 249, 0.7)",
+                          borderRadius: 4,
+                          fontSize: 11,
+                          fontWeight: 700,
+                          color: "#475569",
+                          textTransform: "uppercase",
+                          letterSpacing: "0.05em",
+                          cursor: "pointer",
+                          userSelect: "none",
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={allOn}
+                          ref={(el) => {
+                            if (el) el.indeterminate = selectedInSection > 0 && !allOn;
+                          }}
+                          onChange={() => toggleSectionTCs(g.items)}
+                          onClick={(e) => e.stopPropagation()}
+                          title={`Pilih semua test case di section ${g.name}`}
+                          aria-label={`Pilih semua test case di section ${g.name}`}
+                          style={{ cursor: "pointer", flexShrink: 0, margin: 0 }}
+                        />
+                        <FolderOpen size={12} style={{ flexShrink: 0 }} />
+                        <span>{g.name}</span>
+                        {selectedInSection > 0 && (
+                          <span
+                            style={{
+                              fontSize: 10,
+                              fontWeight: 700,
+                              color: "#B45309",
+                              background: "rgba(255, 195, 72, 0.35)",
+                              border: "1px solid #FFC348",
+                              borderRadius: 999,
+                              padding: "0.05rem 0.4rem",
+                              whiteSpace: "nowrap",
+                              flexShrink: 0,
+                              textTransform: "none",
+                              letterSpacing: 0,
+                            }}
+                          >
+                            {selectedInSection}/{g.items.length} Selected
+                          </span>
+                        )}
+                        {/* Chevron di pojok kanan: rotasi halus saat open/close */}
+                        <button
+                          type="button"
+                          aria-expanded={open}
+                          aria-label={`${open ? "Tutup" : "Buka"} section ${g.name}`}
+                          title={open ? "Tutup section" : "Buka section"}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleSectionGroup(g.key);
+                          }}
+                          style={{
+                            marginLeft: "auto",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            padding: 0,
+                            border: "none",
+                            background: "transparent",
+                            color: "#64748B",
+                            cursor: "pointer",
+                            flexShrink: 0,
+                          }}
+                        >
+                          <ChevronDown
+                            size={14}
+                            aria-hidden="true"
+                            style={{
+                              transform: open ? "rotate(180deg)" : "rotate(0deg)",
+                              transition: "transform 0.2s ease",
+                            }}
+                          />
+                        </button>
+                      </div>
+                      {open &&
+                        g.items.map((t) => {
+                          const checked = selectedTCs.has(t.id);
+                          return (
+                            <label
+                              key={t.id}
+                              style={{ ...itemStyle(checked), paddingLeft: 12 }}
+                              onMouseEnter={(e) => {
+                                if (!checked) e.currentTarget.style.background = "var(--surface-muted)";
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.background = checked ? "rgba(255, 195, 72, 0.08)" : "transparent";
+                              }}
+                            >
+                              <input type="checkbox" checked={checked} onChange={() => toggleTC(t.id)} />
+                              <span style={{ fontWeight: 500, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                {t.title}
+                              </span>
+                            </label>
+                          );
+                        })}
+                    </div>
+                  );
+                })
               )}
             </div>
           </div>

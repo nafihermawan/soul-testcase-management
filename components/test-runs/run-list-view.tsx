@@ -228,8 +228,6 @@ export function RunListView({ searchParams }: { searchParams: ActiveRunsSearchPa
   }
 
   const { allProjects } = data;
-  // `runs` diambil dari salinan lokal (lihat komentar state `list`).
-  const { runs } = list;
   // Kolom "Aksi" hanya disertakan bila user boleh mengedit.
   const columns = data.canEdit ? TABLE_COLUMNS : TABLE_COLUMNS.slice(0, -1);
 

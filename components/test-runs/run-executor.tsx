@@ -2984,8 +2984,8 @@ function ExecutionModal({
                 : isFail && !hasLinkedBug
                   ? "Laporkan Bug & Simpan"
                   : hasSavedExecution
-                    ? "Edit Detail"
-                    : "Simpan Detail"}
+                    ? "Edit Eksekusi"
+                    : "Simpan Eksekusi"}
             </button>
           </div>
         )}

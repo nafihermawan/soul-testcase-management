@@ -8,13 +8,13 @@ import {
   AlertCircle,
   ChevronDown,
   CheckCircle2,
+  CirclePlus,
   Download,
   FolderInput,
   History,
   Layers,
   Loader2,
   Pencil,
-  Plus,
   Trash2,
   Upload,
   X,
@@ -101,19 +101,18 @@ const btnYellow: React.CSSProperties = {
   cursor: "pointer",
 };
 
-/** Button sekunder standar untuk toolbar header (height 38px, radius 8px, border #E5E7EB). */
+/** Button sekunder standar untuk toolbar header (compact: px-3 py-1.5, text-xs). */
 const btnHeader: React.CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
   gap: "0.35rem",
-  height: 38,
-  padding: "8px 14px",
+  padding: "6px 12px",
   borderRadius: 8,
   border: "1px solid #E5E7EB",
   background: "#fff",
   color: "#111827",
   fontWeight: 600,
-  fontSize: "0.82rem",
+  fontSize: "0.75rem",
   cursor: "pointer",
 };
 
@@ -614,6 +613,40 @@ function SectionCard({
       >
         {/* Select All dipindah ke sub-header tabel (kolom kiri `TC ID`) */}
 
+        {/* Chevron di sebelah kiri nama section: rotasi halus saat open/close */}
+        <button
+          type="button"
+          aria-expanded={section.open}
+          aria-label={
+            section.open ? `Tutup section ${section.name}` : `Buka section ${section.name}`
+          }
+          title={section.open ? "Tutup section" : "Buka section"}
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggle();
+          }}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 0,
+            border: "none",
+            background: "transparent",
+            color: "#6B7280",
+            cursor: "pointer",
+            flexShrink: 0,
+          }}
+        >
+          <ChevronDown
+            size={16}
+            aria-hidden="true"
+            style={{
+              transform: section.open ? "rotate(180deg)" : "rotate(0deg)",
+              transition: "transform 0.2s ease",
+            }}
+          />
+        </button>
+
         {/* Editable section title */}
         {editingTitle ? (
           <input
@@ -682,12 +715,12 @@ function SectionCard({
               style={{
                 display: "inline-flex",
                 alignItems: "center",
-                gap: "0.25rem",
-                fontSize: "0.78rem",
-                fontWeight: 400,
+                gap: "0.3rem",
+                padding: "6px 12px",
+                fontSize: "0.75rem",
+                fontWeight: 600,
                 color: "#000000",
                 background: "#F59E0B",
-                padding: "0.35rem 0.65rem",
                 borderRadius: 3,
                 border: "none",
                 cursor: "pointer",
@@ -696,7 +729,7 @@ function SectionCard({
               onMouseEnter={(e) => (e.currentTarget.style.background = "#D97706")}
               onMouseLeave={(e) => (e.currentTarget.style.background = "#F59E0B")}
             >
-              <Plus size={13} /> Tambah Case
+              <CirclePlus size={14} /> Tambah Case
             </button>
           )}
           <div
@@ -728,39 +761,7 @@ function SectionCard({
               ]}
             />
           </div>
-          {/* Chevron di pojok kanan header, rotasi halus saat open/close */}
-          <button
-            type="button"
-            aria-expanded={section.open}
-            aria-label={
-              section.open ? `Tutup section ${section.name}` : `Buka section ${section.name}`
-            }
-            title={section.open ? "Tutup section" : "Buka section"}
-            onClick={(e) => {
-              e.stopPropagation();
-              onToggle();
-            }}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              justifyContent: "center",
-              padding: 2,
-              border: "none",
-              background: "transparent",
-              color: "#6B7280",
-              cursor: "pointer",
-              flexShrink: 0,
-            }}
-          >
-            <ChevronDown
-              size={16}
-              aria-hidden="true"
-              style={{
-                transform: section.open ? "rotate(180deg)" : "rotate(0deg)",
-                transition: "transform 0.2s ease",
-              }}
-            />
-          </button>
+          {/* Chevron sudah dipindah ke sebelah kiri nama section */}
         </div>
       </div>
 
@@ -784,17 +785,20 @@ function SectionCard({
                   type="button"
                   onClick={onAddCase}
                   style={{
-                    fontSize: "0.8rem",
-                    fontWeight: 400,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "0.3rem",
+                    fontSize: "0.75rem",
+                    fontWeight: 600,
                     color: "#000000",
                     background: "#F59E0B",
                     border: "none",
-                    padding: "0.35rem 0.7rem",
+                    padding: "6px 12px",
                     borderRadius: 3,
                     cursor: "pointer",
                   }}
                 >
-                  + Tambah Test Case Pertama
+                  <CirclePlus size={14} /> Tambah Test Case Pertama
                 </button>
               )}
             </div>
@@ -1201,7 +1205,8 @@ export function TestCasesManager({
 
   const editingTc = localTestCases.find((t) => t.id === editingTcId) ?? null;
 
-  const isOpen = (id: string) => openSections[id] ?? true;
+  /** Buka/tutup section: default COLLAPSED saat halaman pertama kali dimuat. */
+  const isOpen = (id: string) => openSections[id] ?? false;
 
   /**
    * Patch `sectionId` TC di state lokal — pengganti refresh() supaya tabel
@@ -1255,13 +1260,18 @@ export function TestCasesManager({
       setShowAddSection(false);
       // Section baru langsung ditempel ke state lokal — TANPA refresh halaman
       // (aksi server mengembalikan section-nya, jadi tidak perlu refetch).
+      // Section baru dibuka supaya langsung terlihat setelah dibuat.
       const created = res.section;
-      if (created) setLocalSections((prev) => [...prev, created]);
+      if (created) {
+        setLocalSections((prev) => [...prev, created]);
+        setOpenSections((prev) => ({ ...prev, [created.id]: true }));
+      }
     }
   };
 
   const toggleSection = (id: string) => {
-    setOpenSections((prev) => ({ ...prev, [id]: !(prev[id] ?? true) }));
+    // Default COLLAPSED (sama dengan isOpen) supaya klik pertama membuka.
+    setOpenSections((prev) => ({ ...prev, [id]: !(prev[id] ?? false) }));
   };
 
   const deleteSection = async (id: string) => {
@@ -1517,22 +1527,21 @@ export function TestCasesManager({
                 style={{
                   display: "inline-flex",
                   alignItems: "center",
-                  gap: "0.35rem",
-                  height: 38,
-                  padding: "8px 14px",
+                  gap: "0.3rem",
+                  padding: "6px 12px",
                   borderRadius: 8,
                   border: "none",
                   background: "#F59E0B",
                   color: "#111827",
                   fontWeight: 600,
-                  fontSize: "0.82rem",
+                  fontSize: "0.75rem",
                   cursor: "pointer",
                   transition: "background-color 0.15s ease",
                 }}
                 onMouseEnter={(e) => (e.currentTarget.style.background = "#D97706")}
                 onMouseLeave={(e) => (e.currentTarget.style.background = "#F59E0B")}
               >
-                <Plus size={16} /> Tambah Section
+                <CirclePlus size={14} /> Tambah Section
               </button>
             )}
           </div>,
@@ -1703,18 +1712,18 @@ export function TestCasesManager({
                       style={{
                         display: "inline-flex",
                         alignItems: "center",
-                        gap: "0.25rem",
-                        fontSize: "0.78rem",
-                        fontWeight: 400,
+                        gap: "0.3rem",
+                        padding: "6px 12px",
+                        fontSize: "0.75rem",
+                        fontWeight: 600,
                         color: "#000000",
                         background: "#F59E0B",
-                        padding: "0.35rem 0.65rem",
                         borderRadius: 3,
                         border: "none",
                         cursor: "pointer",
                       }}
                     >
-                      <Plus size={13} /> Tambah Case
+                      <CirclePlus size={14} /> Tambah Case
                     </button>
                   )}
                 </div>

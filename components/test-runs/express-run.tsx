@@ -986,8 +986,7 @@ export function ExpressRunForm({
                           style={{ cursor: "pointer", flexShrink: 0, margin: 0 }}
                         />
                         <FolderOpen size={12} style={{ flexShrink: 0 }} />
-                        <span>{g.name}</span>
-                        {/* Chevron di pojok kanan: rotasi halus saat open/close */}
+                        {/* Chevron di sebelah kiri nama section: rotasi halus saat open/close */}
                         <button
                           type="button"
                           aria-expanded={open}
@@ -998,7 +997,6 @@ export function ExpressRunForm({
                             toggleSectionGroup(g.key);
                           }}
                           style={{
-                            marginLeft: "auto",
                             display: "inline-flex",
                             alignItems: "center",
                             justifyContent: "center",
@@ -1019,6 +1017,7 @@ export function ExpressRunForm({
                             }}
                           />
                         </button>
+                        <span>{g.name}</span>
                       </div>
                       {open &&
                         g.items.map((t) => {

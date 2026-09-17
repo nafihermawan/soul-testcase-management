@@ -23,6 +23,7 @@ import {
 import {
   createTestCase,
   deleteTestCase,
+  importTestCases,
   quickUpdateTestCase,
   updateTestCase,
 } from "@/lib/actions/test-cases";
@@ -1366,27 +1367,26 @@ export function TestCasesManager({
   };
 
   const handleDownloadTemplate = () => {
+    // Urutan kolom template: Section (opsional) di kolom A, sisanya mengikuti.
     const header = [
-      "title",
-      "tcId",
-      "scenario",
-      "precondition",
-      "steps",
-      "testData",
-      "expectedResult",
-      "priority",
-      "status",
+      "Section",
+      "TC ID",
+      "Title",
+      "Priority",
+      "Description",
+      "Precondition",
+      "Expected Result",
+      "Test Steps",
     ];
     const example = [
-      "Login berhasil dengan kredensial valid",
+      "Appeal",
       "",
+      "Login berhasil dengan kredensial valid",
+      "HIGH",
       "User membuka halaman login dan memasukkan email + password yang benar",
       "User memiliki akun aktif dan koneksi internet",
-      "Buka halaman login\nMasukkan email valid\nKlik tombol Masuk",
-      "email: user@example.com",
       "User masuk ke dashboard utama",
-      "HIGH",
-      "ACTIVE",
+      "Buka halaman login\nMasukkan email valid\nKlik tombol Masuk",
     ];
     // Escape nilai yang mengandung koma/quote/baris baru
     const escapeCsv = (v: string) => {
@@ -1798,30 +1798,39 @@ export function TestCasesManager({
 
             let created = 0;
             const failedRows: number[] = [];
-            for (let i = 0; i < validRows.length; i++) {
-              const r = validRows[i];
+            // Impor per batch: satu round-trip untuk beberapa baris sekaligus,
+            // progres tetap terlihat setiap batch selesai.
+            for (let start = 0; start < validRows.length; start += IMPORT_BATCH_SIZE) {
+              const batch = validRows.slice(start, start + IMPORT_BATCH_SIZE);
               try {
-                const fd = new FormData();
-                fd.set("suiteId", suiteId);
-                fd.set("title", r.title ?? "");
-                fd.set("tcId", r.tcId ?? "");
-                fd.set("scenario", r.scenario ?? "");
-                fd.set("precondition", r.precondition ?? "");
-                fd.set("steps", r.steps ?? "");
-                fd.set("testData", r.testData ?? "");
-                fd.set("expectedResult", r.expectedResult ?? "");
-                fd.set("priority", (r.priority ?? "MEDIUM").toUpperCase());
-                fd.set("status", (r.status ?? "DRAFT").toUpperCase());
-                const res = await createTestCase(fd);
-                if (res.success) {
-                  created++;
+                const res = await importTestCases(
+                  suiteId,
+                  batch.map((r) => ({
+                    section: r.section ?? "",
+                    tcId: r.tcId ?? "",
+                    title: r.title ?? "",
+                    priority: r.priority ?? "MEDIUM",
+                    scenario: r.scenario ?? "",
+                    precondition: r.precondition ?? "",
+                    expectedResult: r.expectedResult ?? "",
+                    steps: r.steps ?? "",
+                    testData: r.testData ?? "",
+                    status: r.status ?? "DRAFT",
+                  }))
+                );
+                if (res.error) {
+                  for (let k = 0; k < batch.length; k++) failedRows.push(start + k + 1);
                 } else {
-                  failedRows.push(i + 1);
+                  created += res.created ?? 0;
+                  for (const idx of res.failedIndexes ?? []) failedRows.push(start + idx + 1);
                 }
               } catch {
-                failedRows.push(i + 1);
+                for (let k = 0; k < batch.length; k++) failedRows.push(start + k + 1);
               }
-              setUpload((prev) => ({ ...prev, processed: i + 1 }));
+              setUpload((prev) => ({
+                ...prev,
+                processed: Math.min(start + batch.length, validRows.length),
+              }));
             }
 
             refresh();
@@ -3187,7 +3196,11 @@ function DeleteTestCaseModal({
 
 /* ---------- Import Wizard (Step 2: Preview & Mapping) ---------- */
 
+/** Jumlah baris per pemanggilan impor (server action) — progres tampil per batch. */
+const IMPORT_BATCH_SIZE = 25;
+
 const IMPORT_FIELDS = [
+  { value: "section", label: "Section" },
   { value: "title", label: "Title (Judul)" },
   { value: "tcId", label: "TC ID" },
   { value: "scenario", label: "Scenario" },
@@ -3206,6 +3219,9 @@ const autoMatchField = (header: string): string => {
     .toLowerCase()
     .replace(/[\s_-]+/g, "_");
   const map: Record<string, string> = {
+    section: "section",
+    sections: "section",
+    nama_section: "section",
     title: "title",
     judul: "title",
     tc_id: "tcId",
@@ -3213,12 +3229,14 @@ const autoMatchField = (header: string): string => {
     test_case_id: "tcId",
     testcaseid: "tcId",
     scenario: "scenario",
+    description: "scenario",
     deskripsi: "scenario",
     detail_skenario: "scenario",
     precondition: "precondition",
     pre_condition: "precondition",
     preconditions: "precondition",
     steps: "steps",
+    test_steps: "steps",
     step_action: "steps",
     stepactions: "steps",
     langkah: "steps",
@@ -3277,10 +3295,9 @@ function ImportWizardModal({
   const setField = (header: string, field: string) =>
     setMapping((prev) => ({ ...prev, [header]: field }));
 
-  // Validasi: Title wajib terpetakan, Expected Result wajib terpetakan
+  // Validasi: hanya Title yang wajib terpetakan (field lain — termasuk Section — opsional).
   const titleHeader = headers.find((h) => mappedField(h) === "title");
-  const expectedHeader = headers.find((h) => mappedField(h) === "expectedResult");
-  const canImport = !!titleHeader && !!expectedHeader;
+  const canImport = !!titleHeader;
 
   // Sampel 8 baris pertama
   const previewRows = rows.slice(0, 8);
@@ -3574,6 +3591,15 @@ function ImportWizardModal({
                             borderRight: "1px solid var(--border)",
                           }}
                         >
+                          Section
+                        </th>
+                        <th
+                          style={{
+                            padding: "0.5rem 0.6rem",
+                            fontWeight: 600,
+                            borderRight: "1px solid var(--border)",
+                          }}
+                        >
                           Title
                         </th>
                         <th
@@ -3619,6 +3645,24 @@ function ImportWizardModal({
                               }}
                             >
                               {i + 1}
+                            </td>
+                            <td
+                              style={{
+                                padding: "0.45rem 0.6rem",
+                                color: "#374151",
+                                borderRight: "1px solid var(--border)",
+                                maxWidth: 140,
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                              }}
+                              title={cellValue(r, "section") || "Tanpa Section"}
+                            >
+                              {cellValue(r, "section") || (
+                                <span style={{ color: "#9CA3AF", fontStyle: "italic" }}>
+                                  Tanpa Section
+                                </span>
+                              )}
                             </td>
                             <td
                               style={{
@@ -3703,7 +3747,7 @@ function ImportWizardModal({
                   ) : (
                     <>
                       <AlertCircle size={15} />
-                      Petakan kolom Title &amp; Expected Result untuk melanjutkan
+                      Petakan kolom Title untuk melanjutkan
                     </>
                   )}
                 </div>

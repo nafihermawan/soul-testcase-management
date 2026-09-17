@@ -269,3 +269,156 @@ export async function quickUpdateTestCase(
     return handleError(error);
   }
 }
+
+/* ------------------------- Import Test Case (wizard) ------------------------- */
+
+/**
+ * Satu baris siap-impor hasil mapping kolom file.
+ * `testData` & `status` dipertahankan (opsional) supaya file lama yang masih
+ * memakainya tidak kehilangan data — template baru tidak lagi memuat keduanya.
+ */
+export type ImportTestCaseRow = {
+  /** Nama section target (opsional). Kosong = Tanpa Section. */
+  section?: string;
+  tcId?: string;
+  title: string;
+  priority?: string;
+  scenario?: string;
+  precondition?: string;
+  expectedResult?: string;
+  steps?: string;
+  testData?: string;
+  status?: string;
+};
+
+export type ImportTestCasesState = {
+  error?: string;
+  created?: number;
+  /** Indeks (0-based, relatif terhadap array yang dikirim) baris yang gagal. */
+  failedIndexes?: number[];
+};
+
+const PRIORITY_VALUES = ["LOW", "MEDIUM", "HIGH", "CRITICAL"] as const;
+const STATUS_VALUES = ["DRAFT", "ACTIVE", "DEPRECATED"] as const;
+
+function normalizePriority(value?: string): (typeof PRIORITY_VALUES)[number] {
+  const v = (value ?? "").trim().toUpperCase();
+  return (PRIORITY_VALUES as readonly string[]).includes(v)
+    ? (v as (typeof PRIORITY_VALUES)[number])
+    : "MEDIUM";
+}
+
+function normalizeStatus(value?: string): (typeof STATUS_VALUES)[number] {
+  const v = (value ?? "").trim().toUpperCase();
+  return (STATUS_VALUES as readonly string[]).includes(v)
+    ? (v as (typeof STATUS_VALUES)[number])
+    : "DRAFT";
+}
+
+/**
+ * Cari section berdasarkan nama DI DALAM suite (case-insensitive) dan buat kalau
+ * belum ada. `cache` dipegang per pemanggilan impor supaya satu nama section
+ * tidak di-query/dibuat berulang kali untuk baris-baris berikutnya.
+ */
+async function ensureSectionId(
+  suiteId: string,
+  name: string,
+  cache: Map<string, string>
+): Promise<string> {
+  const key = name.toLowerCase();
+  const cached = cache.get(key);
+  if (cached) return cached;
+
+  const existing = await prisma.section.findFirst({
+    where: { suiteId, name: { equals: name, mode: "insensitive" } },
+    select: { id: true },
+  });
+  if (existing) {
+    cache.set(key, existing.id);
+    return existing.id;
+  }
+
+  const count = await prisma.section.count({ where: { suiteId } });
+  const created = await prisma.section.create({
+    data: { suiteId, name, order: count },
+    select: { id: true },
+  });
+  cache.set(key, created.id);
+  return created.id;
+}
+
+/**
+ * Impor banyak Test Case dari wizard import (CSV/XLSX).
+ *
+ * Aturan:
+ * - `title` wajib; baris tanpa title dicatat sebagai gagal (index-nya dikembalikan).
+ * - Field lain opsional — Description kosong disimpan sebagai null.
+ * - Kolom `section` opsional: section dicari (case-insensitive) atau dibuat
+ *   otomatis, lalu TC-nya langsung ditempatkan di section tersebut.
+ */
+export async function importTestCases(
+  suiteId: string,
+  rows: ImportTestCaseRow[]
+): Promise<ImportTestCasesState> {
+  const user = await requireRole("QA");
+  const trimmedSuiteId = (suiteId ?? "").trim();
+  if (!trimmedSuiteId) return { error: "Suite wajib diisi." };
+  if (rows.length === 0) return { created: 0, failedIndexes: [] };
+
+  try {
+    const suite = await prisma.suite.findUnique({
+      where: { id: trimmedSuiteId },
+      select: { id: true },
+    });
+    if (!suite) return { error: "Suite tidak ditemukan." };
+
+    const sectionCache = new Map<string, string>();
+    const failedIndexes: number[] = [];
+    let created = 0;
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const title = (row.title ?? "").trim();
+      if (!title) {
+        failedIndexes.push(i);
+        continue;
+      }
+
+      try {
+        const sectionName = (row.section ?? "").trim();
+        const sectionId = sectionName
+          ? await ensureSectionId(trimmedSuiteId, sectionName, sectionCache)
+          : null;
+
+        const tcId = await buildTcId(trimmedSuiteId, row.tcId);
+        const tc = await prisma.testCase.create({
+          data: {
+            tcId,
+            title,
+            suiteId: trimmedSuiteId,
+            sectionId,
+            scenario: (row.scenario ?? "").trim() || null,
+            precondition: (row.precondition ?? "").trim() || null,
+            steps: (row.steps ?? "").trim() || null,
+            testData: (row.testData ?? "").trim() || null,
+            expectedResult: (row.expectedResult ?? "").trim() || null,
+            priority: normalizePriority(row.priority),
+            status: normalizeStatus(row.status),
+            createdById: user.id,
+          },
+          select: { id: true },
+        });
+        await logActivity(tc.id, "CREATED", `Test case diimpor (${tcId})`, user.id);
+        created++;
+      } catch (error) {
+        console.error(error);
+        failedIndexes.push(i);
+      }
+    }
+
+    revalidatePath(`/suites/${trimmedSuiteId}`);
+    return { created, failedIndexes };
+  } catch (error) {
+    return handleError(error);
+  }
+}

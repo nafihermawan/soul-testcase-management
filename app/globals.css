@@ -81,12 +81,93 @@ button {
   font-family: inherit;
 }
 
-/* Checkbox & radio memakai accent kuning/amber, bukan biru bawaan browser.
+/* Checkbox & radio: gaya kustom amber + tanda PUTIH.
+   `accent-color` bawaan browser memilih sendiri warna centang (di atas amber
+   hasilnya GELAP), jadi kontrolnya digambar manual:
+   - unchecked     : kotak putih, border slate-300 2px (bentuk jelas, tidak pudar)
+   - checked       : kotak amber-500 + centang putih (SVG, stroke 2.5, center)
+   - indeterminate : kotak amber-500 + garis putih
+   - radio         : bulatan amber-500 + titik tengah putih
+   Geometri sengaja angka bulat: 16px - 2px border = 12px content box, jadi
+   centang 12px / dot 6px duduk pas di piksel bulat (tanpa blur sub-piksel).
    Global supaya semua input native seragam: Platform, Select All, Test Cases,
    Suites, dan checkbox di halaman Automation. */
 input[type="checkbox"],
 input[type="radio"] {
-  accent-color: #f59e0b;
+  appearance: none;
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border: 2px solid #cbd5e1;
+  border-radius: 5px;
+  background: #fff;
+  cursor: pointer;
+  position: relative;
+  vertical-align: middle;
+  transition:
+    background-color 0.12s ease,
+    border-color 0.12s ease;
+}
+
+input[type="radio"] {
+  border-radius: 50%;
+}
+
+input[type="checkbox"]:hover:not(:disabled),
+input[type="radio"]:hover:not(:disabled) {
+  border-color: #f59e0b;
+}
+
+input[type="checkbox"]:checked,
+input[type="checkbox"]:indeterminate,
+input[type="radio"]:checked {
+  background-color: #f59e0b;
+  border-color: #f59e0b;
+}
+
+/* Centang putih: SVG 12px (stroke 2.5) — digambar browser, bukan glyph UA,
+   jadi tidak ada risiko centang gelap dan pusatnya presisi. */
+input[type="checkbox"]:checked:not(:indeterminate) {
+  background-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2012%2012'%3E%3Cpath%20d='M2.6%206.2L5%208.7L9.5%203.5'%20fill='none'%20stroke='%23fff'%20stroke-width='2.5'%20stroke-linecap='round'%20stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 12px 12px;
+}
+
+/* Garis putih untuk state indeterminate (Select All sebagian terpilih). */
+input[type="checkbox"]:indeterminate::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 6px;
+  height: 2px;
+  border-radius: 1px;
+  background: #fff;
+}
+
+/* Radio: titik tengah putih di dalam bulatan amber. */
+input[type="radio"]:checked::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #fff;
+}
+
+input[type="checkbox"]:focus-visible,
+input[type="radio"]:focus-visible {
+  outline: 2px solid rgba(245, 158, 11, 0.45);
+  outline-offset: 1px;
+}
+
+input[type="checkbox"]:disabled,
+input[type="radio"]:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 button {

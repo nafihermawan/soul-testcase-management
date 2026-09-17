@@ -425,7 +425,7 @@ export function AutomationPageClient({
           })
         }
         title="Pilih semua baris pada halaman ini"
-        style={{ accentColor: "#F59E0B", cursor: "pointer" }}
+        style={{ cursor: "pointer" }}
       />
     );
   };
@@ -621,7 +621,7 @@ export function AutomationPageClient({
         >
           {data.projects.map((p) => (
             <label key={p.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 4px", cursor: "pointer", fontSize: "0.85rem" }}>
-              <input type="checkbox" checked={selProjects.has(p.id)} onChange={() => toggleProject(p.id)} style={{ accentColor: "#F59E0B" }} />
+              <input type="checkbox" checked={selProjects.has(p.id)} onChange={() => toggleProject(p.id)} />
               {p.name}
               {p.platform ? (
                 <span style={{ fontSize: "0.7rem", color: "#94A3B8", background: "#F1F5F9", borderRadius: 4, padding: "1px 5px" }}>{PLATFORM_LABEL[p.platform]}</span>
@@ -644,7 +644,7 @@ export function AutomationPageClient({
         >
           {availableSuites.map((s) => (
             <label key={s.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 4px", cursor: "pointer", fontSize: "0.85rem" }}>
-              <input type="checkbox" checked={selSuites.has(s.id)} onChange={() => toggleSuite(s.id)} style={{ accentColor: "#F59E0B" }} />
+              <input type="checkbox" checked={selSuites.has(s.id)} onChange={() => toggleSuite(s.id)} />
               {s.name}
             </label>
           ))}
@@ -1117,7 +1117,7 @@ function RowTr({
     <tr style={{ borderTop: "1px solid #F1F5F9", background: selected ? "#FFFBEB" : undefined }}>
       <td style={{ padding: "10px 10px" }}>
         {canSel ? (
-          <input type="checkbox" checked={selected} onChange={onToggle} style={{ accentColor: "#F59E0B", cursor: "pointer" }} />
+          <input type="checkbox" checked={selected} onChange={onToggle} style={{ cursor: "pointer" }} />
         ) : canManage ? (
           <span title="Hanya baris Belum Automated yang bisa dipilih untuk bulk link" style={{ color: "#CBD5E1" }}>
             <CheckSquare size={15} />

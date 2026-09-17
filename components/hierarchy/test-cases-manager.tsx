@@ -690,25 +690,6 @@ function SectionCard({
           ({tcs.length} Test Case{tcs.length === 1 ? "" : "s"})
         </span>
 
-        {/* Jumlah item terpilih di section ini */}
-        {selectedInSection > 0 && (
-          <span
-            style={{
-              fontSize: 11,
-              fontWeight: 700,
-              color: "#B45309",
-              background: "rgba(255, 195, 72, 0.2)",
-              border: "1px solid #FFC348",
-              borderRadius: 999,
-              padding: "0.1rem 0.45rem",
-              whiteSpace: "nowrap",
-              flexShrink: 0,
-            }}
-          >
-            {selectedInSection}/{tcs.length} Selected
-          </span>
-        )}
-
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "0.5rem" }}>
           {canEdit && !addingTc && editingTcId === null && (
             <button

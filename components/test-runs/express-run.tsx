@@ -909,6 +909,17 @@ export function ExpressRunForm({
               <div style={{ fontWeight: 700, fontSize: "0.88rem", flexShrink: 0 }}>
                 Test Cases
               </div>
+              <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "0.6rem", flexShrink: 0 }}>
+                <button
+                  type="button"
+                  onClick={() => setSelectedTCs(new Set())}
+                  style={{ border: "none", background: "none", color: "#EF4444", fontSize: "0.78rem", fontWeight: 600, cursor: "pointer", padding: 0, transition: "color 0.12s ease" }}
+                  onMouseEnter={(e) => (e.currentTarget.style.color = "#DC2626")}
+                  onMouseLeave={(e) => (e.currentTarget.style.color = "#EF4444")}
+                >
+                  Clear
+                </button>
+              </div>
             </div>
             <div style={{ padding: "0.5rem 0.75rem" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", border: "1px solid var(--border-strong)", borderRadius: 7, padding: "0.3rem 0.55rem" }}>
@@ -976,25 +987,6 @@ export function ExpressRunForm({
                         />
                         <FolderOpen size={12} style={{ flexShrink: 0 }} />
                         <span>{g.name}</span>
-                        {selectedInSection > 0 && (
-                          <span
-                            style={{
-                              fontSize: 10,
-                              fontWeight: 700,
-                              color: "#B45309",
-                              background: "rgba(255, 195, 72, 0.35)",
-                              border: "1px solid #FFC348",
-                              borderRadius: 999,
-                              padding: "0.05rem 0.4rem",
-                              whiteSpace: "nowrap",
-                              flexShrink: 0,
-                              textTransform: "none",
-                              letterSpacing: 0,
-                            }}
-                          >
-                            {selectedInSection}/{g.items.length} Selected
-                          </span>
-                        )}
                         {/* Chevron di pojok kanan: rotasi halus saat open/close */}
                         <button
                           type="button"

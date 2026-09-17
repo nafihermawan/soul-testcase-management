@@ -2347,6 +2347,15 @@ function ExecutionModal({
   // Mode Fail -> form berubah jadi Bug Reporting Form.
   const isFail = status === "FAIL";
   const hasLinkedBug = (item.bugs?.length ?? 0) > 0;
+  /**
+   * Sudah pernah disimpan ke DB? Dilihat dari DATA TERSIMPAN (status bukan
+   * NOT_RUN, atau sudah ada actual result / notes) — bukan draft di form,
+   * supaya label baru berubah setelah benar-benar tersimpan.
+   */
+  const hasSavedExecution =
+    item.status !== "NOT_RUN" ||
+    (item.actualResult ?? "").trim() !== "" ||
+    (item.notes ?? "").trim() !== "";
 
   const bugLabelStyle: React.CSSProperties = {
     display: "block",
@@ -2974,7 +2983,9 @@ function ExecutionModal({
                 ? "Menyimpan..."
                 : isFail && !hasLinkedBug
                   ? "Laporkan Bug & Simpan"
-                  : "Simpan Detail"}
+                  : hasSavedExecution
+                    ? "Edit Detail"
+                    : "Simpan Detail"}
             </button>
           </div>
         )}

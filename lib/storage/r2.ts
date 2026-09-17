@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import {
   S3Client,
+  CopyObjectCommand,
   DeleteObjectCommand,
   HeadObjectCommand,
   PutObjectCommand,
@@ -136,6 +137,36 @@ export async function deleteObject(storageKey: string): Promise<boolean> {
   } catch (e) {
     console.error("Gagal hapus objek R2:", storageKey, e);
     return false;
+  }
+}
+
+/**
+ * Gandakan objek DI DALAM bucket (server-side copy, byte tidak lewat server)
+ * ke key baru. Dipakai saat evidence hasil eksekusi "diwarisi" ke bug: satu
+ * baris `Attachment` hanya boleh punya satu pemilik, jadi file-nya disalin.
+ * Return key baru, atau null kalau gagal.
+ */
+export async function copyObject(
+  sourceKey: string,
+  fileName: string,
+  mimeType: string
+): Promise<string | null> {
+  if (!isStorageConfigured()) return null;
+  const { client, bucket } = getClient();
+  const targetKey = buildStorageKey(fileName, mimeType);
+  try {
+    await client.send(
+      new CopyObjectCommand({
+        Bucket: bucket,
+        Key: targetKey,
+        // Key kita selalu URL-safe (`attachments/YYYY-MM/uuid.ext`).
+        CopySource: `${bucket}/${sourceKey}`,
+      })
+    );
+    return targetKey;
+  } catch (e) {
+    console.error("Gagal menyalin objek R2:", sourceKey, e);
+    return null;
   }
 }
 

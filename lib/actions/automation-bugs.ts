@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/permissions";
+import { copyObject } from "@/lib/storage/r2";
 
 export type AutomationBugActionState = {
   error?: string;
@@ -148,6 +149,44 @@ export async function createBug(data: {
     });
     if (linkedTestCaseId) revalidatePath(`/test-cases/${linkedTestCaseId}`);
     if (data.testRunResultId) revalidatePath(`/test-runs`);
+
+    /**
+     * Warisi evidence dari hasil eksekusi yang jadi sumber bug ini.
+     *
+     * Baris `Attachment` hanya boleh punya SATU pemilik (dijaga check
+     * constraint `Attachment_one_owner_check` di DB), jadi file-nya digandakan
+     * di R2 (server-side copy, byte tidak lewat server) lalu dibuat baris baru
+     * milik bug. Dengan begitu evidence langsung muncul di section
+     * "Evidence (Lampiran)" pada Bug Detail tanpa upload ulang, dan kedua sisi
+     * (run result & bug) tetap bisa hapus sendiri-sendiri.
+     *
+     * Best-effort: kalau penyalinan satu file gagal, bug tetap dibuat dan file
+     * itu saja yang dilewatkan (dicatat di log server).
+     */
+    if (data.testRunResultId) {
+      const source = await prisma.attachment.findMany({
+        where: { testRunResultId: data.testRunResultId },
+        select: { fileName: true, mimeType: true, size: true, storageKey: true },
+      });
+      let copied = 0;
+      for (const att of source) {
+        const newKey = await copyObject(att.storageKey, att.fileName, att.mimeType);
+        if (!newKey) continue;
+        await prisma.attachment.create({
+          data: {
+            fileName: att.fileName,
+            mimeType: att.mimeType,
+            size: att.size,
+            storageKey: newKey,
+            bugId: bug.id,
+            uploadedById: user.id,
+          },
+        });
+        copied++;
+      }
+      if (copied > 0) revalidatePath(`/bugs`);
+    }
+
     return { success: true, bugId: bug.id };
   } catch (error) {
     return handleError(error);

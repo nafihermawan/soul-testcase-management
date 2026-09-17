@@ -25,18 +25,23 @@ export function ListTextarea({
   name,
   rows = 3,
   required,
+  disabled,
   hasError,
   placeholder,
   ariaLabel,
+  style,
 }: {
   value: string;
   onChange: (value: string) => void;
   name?: string;
   rows?: number;
   required?: boolean;
+  disabled?: boolean;
   hasError?: boolean;
   placeholder?: string;
   ariaLabel?: string;
+  /** Override tampilan agar cocok dengan field di sekitarnya (mis. modal eksekusi). */
+  style?: React.CSSProperties;
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
   // Posisi caret yang dipulihkan setelah nilai berubah; tanpa ini caret
@@ -128,6 +133,7 @@ export function ListTextarea({
       name={name}
       rows={rows}
       required={required}
+      disabled={disabled}
       value={value}
       onChange={(e) => onChange(e.target.value)}
       onKeyDown={handleKeyDown}
@@ -146,6 +152,7 @@ export function ListTextarea({
         // Tinggi diatur autoGrow; tanpa scrollbar & handle resize sendiri.
         overflowY: "hidden",
         resize: "none",
+        ...style,
       }}
     />
   );

@@ -2452,13 +2452,6 @@ function TestCaseDetailModal({
     .map((st) => st.trim())
     .filter(Boolean);
 
-  // Expected Result per langkah: jika blok expectedResult punya jumlah baris
-  // sama dengan steps, petakan per baris; jika tidak, tampil sebagai blok global.
-  const stepExpectedResults = (tc.expectedResult ?? "")
-    .split("\n")
-    .map((st) => st.trim())
-    .filter(Boolean);
-
   // Pill warna untuk priority & status
   const priorityPill: React.CSSProperties = {
     display: "inline-block",
@@ -2813,23 +2806,14 @@ function TestCaseDetailModal({
                     >
                       #
                     </th>
-                    <th
-                      style={{
-                        padding: "0.5rem 0.75rem",
-                        fontWeight: 600,
-                        borderRight: "1px solid var(--border)",
-                      }}
-                    >
-                      Step Action
-                    </th>
-                    <th style={{ padding: "0.5rem 0.75rem", fontWeight: 600 }}>Expected Result</th>
+                    <th style={{ padding: "0.5rem 0.75rem", fontWeight: 600 }}>Step Action</th>
                   </tr>
                 </thead>
                 <tbody>
                   {stepsList.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={3}
+                        colSpan={2}
                         style={{
                           padding: "1.25rem",
                           color: "#9CA3AF",
@@ -2855,24 +2839,9 @@ function TestCaseDetailModal({
                           {i + 1}
                         </td>
                         <td
-                          style={{
-                            padding: "0.5rem 0.75rem",
-                            color: "#374151",
-                            lineHeight: 1.55,
-                            borderRight: "1px solid var(--border)",
-                          }}
-                        >
-                          {step}
-                        </td>
-                        <td
                           style={{ padding: "0.5rem 0.75rem", color: "#374151", lineHeight: 1.55 }}
                         >
-                          {stepExpectedResults.length === stepsList.length &&
-                          stepExpectedResults[i] ? (
-                            stepExpectedResults[i]
-                          ) : (
-                            <span style={{ color: "#9CA3AF", fontStyle: "italic" }}>—</span>
-                          )}
+                          {step}
                         </td>
                       </tr>
                     ))
@@ -2927,7 +2896,7 @@ function TestCaseDetailModal({
                   cursor: "pointer",
                 }}
               >
-                <Pencil size={14} /> Edit Test Case
+               Edit
               </button>
             )}
           </div>

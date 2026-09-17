@@ -11,6 +11,7 @@ import { createBug, unlinkBugFromRunResult } from "@/lib/actions/automation-bugs
 import { ConfirmDialog, Spinner, Toast, useToast } from "@/components/ui/feedback";
 import { entityCode, runCodeOf } from "@/lib/format";
 import { AttachmentsPanel } from "@/components/attachments/attachments-panel";
+import { ListTextarea } from "@/components/ui/list-textarea";
 import { Select } from "@/components/ui/select";
 import { BugDetailModal } from "@/components/bugs/bug-detail-modal";
 import { EditRunModal } from "@/components/test-runs/edit-run-modal";
@@ -2363,6 +2364,15 @@ function ExecutionModal({
     boxSizing: "border-box",
   };
 
+  /** Gaya field eksekusi (Actual Result / Notes) — disamakan dengan field modal. */
+  const execFieldStyle: React.CSSProperties = {
+    border: "1px solid #D1D5DB",
+    borderRadius: 6,
+    padding: "0.5rem 0.6rem",
+    fontSize: "0.78rem",
+    outline: "none",
+  };
+
   const save = async () => {
     if (saving) return; // penjaga double-click
     setMsg(null);
@@ -2721,12 +2731,14 @@ function ExecutionModal({
                   <label style={bugLabelStyle}>
                     Actual Result / Reproduction Steps <span style={{ color: "#E11D48" }}>*</span>
                   </label>
-                  <textarea
+                  <ListTextarea
                     value={actualResult}
-                    onChange={(e) => setActualResult(e.target.value)}
+                    onChange={setActualResult}
                     disabled={!canEdit}
+                    rows={4}
+                    ariaLabel="Actual Result / Reproduction Steps"
                     placeholder="Jelaskan hasil aktual dan langkah reproduksi ditemukannya bug..."
-                    style={{ ...bugFieldStyle, height: 80, padding: "0.5rem 0.75rem", resize: "vertical" }}
+                    style={{ ...bugFieldStyle, padding: "0.5rem 0.75rem" }}
                   />
                 </div>
               </>
@@ -2736,23 +2748,14 @@ function ExecutionModal({
                   <label style={{ display: "block", fontSize: "0.72rem", fontWeight: 600, color: "#4B5563", marginBottom: "0.3rem" }}>
                     Actual Result
                   </label>
-                  <textarea
+                  <ListTextarea
                     value={actualResult}
-                    onChange={(e) => setActualResult(e.target.value)}
+                    onChange={setActualResult}
                     disabled={!canEdit}
                     rows={2}
+                    ariaLabel="Actual Result"
                     placeholder="Tulis hasil aktual eksekusi..."
-                    style={{
-                      width: "100%",
-                      border: "1px solid #D1D5DB",
-                      borderRadius: 6,
-                      padding: "0.5rem 0.6rem",
-                      fontSize: "0.78rem",
-                      color: "#1F2937",
-                      outline: "none",
-                      resize: "vertical",
-                      background: "#fff",
-                    }}
+                    style={execFieldStyle}
                   />
                 </div>
 
@@ -2760,23 +2763,14 @@ function ExecutionModal({
                   <label style={{ display: "block", fontSize: "0.72rem", fontWeight: 600, color: "#4B5563", marginBottom: "0.3rem" }}>
                     Notes
                   </label>
-                  <textarea
+                  <ListTextarea
                     value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
+                    onChange={setNotes}
                     disabled={!canEdit}
                     rows={2}
+                    ariaLabel="Notes"
                     placeholder="Catatan tambahan..."
-                    style={{
-                      width: "100%",
-                      border: "1px solid #D1D5DB",
-                      borderRadius: 6,
-                      padding: "0.5rem 0.6rem",
-                      fontSize: "0.78rem",
-                      color: "#1F2937",
-                      outline: "none",
-                      resize: "vertical",
-                      background: "#fff",
-                    }}
+                    style={execFieldStyle}
                   />
                 </div>
               </>

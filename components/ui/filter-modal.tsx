@@ -84,8 +84,10 @@ export function FilterModal({
           display: "inline-flex",
           alignItems: "center",
           gap: 8,
-          height: 40,
-          padding: "0 16px",
+          // Ringkas & sejajar dengan search bar di sebelahnya: h-8 (32px),
+          // padding horizontal 12px, teks text-xs (12px).
+          height: 32,
+          padding: "0 12px",
           // Outlined/ghost amber: border tipis, latar putih, teks + ikon amber.
           border: "1px solid #FFC348",
           background: "#fff",
@@ -106,7 +108,7 @@ export function FilterModal({
           e.currentTarget.style.borderColor = "#FFC348";
         }}
       >
-        <SlidersHorizontal size={14} />
+        <SlidersHorizontal size={13} />
         Filter
         {activeCount > 0 && (
           <span

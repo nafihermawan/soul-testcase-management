@@ -873,7 +873,10 @@ export function HistoryControls({
             display: "inline-flex",
             alignItems: "center",
             gap: "0.4rem",
-            padding: "0.5rem 0.9rem",
+            // Ringkas & sejajar dengan search input di sebelahnya: h-8 (32px),
+            // padding horizontal 12px, teks text-xs (12px).
+            height: 32,
+            padding: "0 0.75rem",
             borderRadius: 8,
             // Outlined/ghost amber — disamakan dengan tombol Filter di
             // komponen FilterModal (Bugs Tracker / Dashboard / Reports).
@@ -881,7 +884,7 @@ export function HistoryControls({
             background: "#fff",
             color: "#F59E0B",
             fontWeight: 500,
-            fontSize: "0.83rem",
+            fontSize: "0.75rem",
             cursor: "pointer",
             transition: "background-color 0.15s ease, border-color 0.15s ease",
           }}
@@ -894,7 +897,7 @@ export function HistoryControls({
             e.currentTarget.style.borderColor = "#FFC348";
           }}
         >
-          <SlidersHorizontal size={14} />
+          <SlidersHorizontal size={13} />
           {activeCount > 0 ? `Filter (${activeCount})` : "Filter"}
         </button>
       )}

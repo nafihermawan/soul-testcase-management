@@ -2825,7 +2825,7 @@ function ExecutionModal({
                 supaya jejak bug tidak hilang setelah TC-nya jadi Pass. */}
             <div style={{ marginTop: "0.9rem" }}>
               <div style={{ fontSize: "0.72rem", fontWeight: 700, color: "#64748B", marginBottom: "0.4rem" }}>
-                LINKED BUGS &amp; HISTORY
+                Bug History
               </div>
 
               {bugsLoading ? (

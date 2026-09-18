@@ -897,7 +897,7 @@ export function RunExecutor({
                             fontSize: 12,
                             fontWeight: 700,
                             color: "#334155",
-                            textTransform: "uppercase",
+                            textTransform: "none",
                             letterSpacing: "0.05em",
                           }}
                         >
@@ -1555,7 +1555,7 @@ function CompleteRunModal({
     fontSize: "0.75rem",
     fontWeight: 700,
     color: "#64748B",
-    textTransform: "uppercase",
+    textTransform: "none",
     letterSpacing: "0.05em",
     marginBottom: "0.5rem",
   };
@@ -1872,7 +1872,7 @@ function BugModal({
     fontSize: "0.72rem",
     fontWeight: 700,
     letterSpacing: "0.06em",
-    textTransform: "uppercase",
+    textTransform: "none",
     color: "#374151",
   };
 
@@ -2355,7 +2355,7 @@ function ExecutionModal({
     fontSize: "0.72rem",
     fontWeight: 600,
     color: "#6B7280",
-    textTransform: "uppercase",
+    textTransform: "none",
     letterSpacing: "0.06em",
     margin: "0 0 0.4rem",
   };
@@ -2378,7 +2378,7 @@ function ExecutionModal({
     fontSize: "0.69rem",
     fontWeight: 700,
     color: "#64748B",
-    textTransform: "uppercase",
+    textTransform: "none",
     letterSpacing: "0.04em",
     marginBottom: "0.3rem",
   };
@@ -2760,7 +2760,7 @@ function ExecutionModal({
 
                 <div>
                   <label style={bugLabelStyle}>
-                    Actual Result / Reproduction Steps <span style={{ color: "#E11D48" }}>*</span>
+                    Bug Detail <span style={{ color: "#E11D48" }}>*</span>
                   </label>
                   <ListTextarea
                     value={actualResult}
@@ -2810,7 +2810,7 @@ function ExecutionModal({
             {/* Evidence: screenshot/video untuk hasil eksekusi ini */}
             <div style={{ marginTop: "0.9rem" }}>
               <div style={{ fontSize: "0.72rem", fontWeight: 700, color: "#64748B", marginBottom: "0.4rem" }}>
-                EVIDENCE
+                Evidence (Screenshot / Video)
               </div>
               <AttachmentsPanel
                 owner={{ testRunResultId: item.id }}

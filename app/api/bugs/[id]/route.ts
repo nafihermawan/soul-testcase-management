@@ -12,7 +12,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   const bug = await prisma.bug.findUnique({
     where: { id: params.id },
     include: {
-      testCase: { select: { id: true, tcId: true, title: true } },
+      testCase: { select: { id: true, tcId: true, title: true, expectedResult: true } },
       suite: { select: { id: true, name: true } },
       project: { select: { id: true, name: true } },
       testRunResult: {
@@ -49,6 +49,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     bug: row,
     canAttach: apiRoleAtLeast(user.role, "QA"),
     canUpdateStatus: apiRoleAtLeast(user.role, "DEVELOPER"),
+    canEdit: apiRoleAtLeast(user.role, "DEVELOPER"),
     canDelete: apiRoleAtLeast(user.role, "QA"),
   } satisfies BugDetailPayload);
 }

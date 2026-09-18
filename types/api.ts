@@ -112,7 +112,8 @@ export type BugRow = {
   createdAt: string;
   /** Diisi saat bug RESOLVED/CLOSED — dipakai sebagai data riwayat. */
   resolvedAt: string | null;
-  testCase: { id: string; tcId: string; title: string } | null;
+  /** `expectedResult` dipakai modal detail bug untuk section Expected Result. */
+  testCase: { id: string; tcId: string; title: string; expectedResult: string | null } | null;
   /** Suite/modul tempat bug ditemukan (diisi untuk temuan ad-hoc). */
   suite: { id: string; name: string } | null;
   /** Project pemilik suite di atas — dasar agregasi jumlah bug per project. */
@@ -127,6 +128,14 @@ export type BugRow = {
 };
 
 export type BugsPayload = { bugs: BugRow[]; /** Upload evidence butuh role QA. */ canAttach: boolean };
+
+/** Field konten bug yang boleh diubah lewat Edit Bug (dipakai detail & edit modal). */
+export type BugEditableFields = {
+  title: string;
+  description: string | null;
+  severity: string | null;
+  externalLink: string | null;
+};
 
 /* ---------- /api/suites ---------- */
 export type SuiteOption = {
@@ -147,6 +156,8 @@ export type BugDetailPayload = {
   canAttach: boolean;
   /** Ubah status bug butuh role DEVELOPER. */
   canUpdateStatus: boolean;
+  /** Edit konten bug (judul/deskripsi/severity/link) butuh role DEVELOPER. */
+  canEdit: boolean;
   /** Hapus bug butuh role QA. */
   canDelete: boolean;
 };

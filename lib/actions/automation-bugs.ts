@@ -208,6 +208,40 @@ export async function linkBugToTestCase(
   }
 }
 
+/** Edit konten bug (judul, deskripsi, severity, link eksternal).
+ *  Status sengaja TIDAK diubah di sini — itu jalur updateBugStatus. */
+export async function updateBug(data: {
+  bugId: string;
+  title: string;
+  description?: string;
+  severity?: string;
+  externalLink?: string;
+}): Promise<AutomationBugActionState> {
+  await requireRole("DEVELOPER");
+  const title = data.title.trim();
+  if (!title) {
+    return { error: "Judul bug wajib diisi." };
+  }
+
+  try {
+    const bug = await prisma.bug.update({
+      where: { id: data.bugId },
+      data: {
+        title,
+        description: data.description?.trim() || null,
+        severity: data.severity?.trim() || null,
+        externalLink: data.externalLink?.trim() || null,
+      },
+      select: { id: true, testCaseId: true },
+    });
+    if (bug.testCaseId) revalidatePath(`/test-cases/${bug.testCaseId}`);
+    revalidatePath(`/bugs`);
+    return { success: true, bugId: bug.id };
+  } catch (error) {
+    return handleError(error);
+  }
+}
+
 /** Update status bug. resolvedAt di-set otomatis saat RESOLVED/CLOSED,
  *  dan dikosongkan jika bug dibuka kembali (OPEN/IN_PROGRESS).
  *  Saat bug selesai (RESOLVED/CLOSED), TestRunResult FAIL yang tertaut

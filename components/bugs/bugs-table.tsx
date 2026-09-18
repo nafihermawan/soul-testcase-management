@@ -13,7 +13,7 @@ import { BugDetailModal } from "@/components/bugs/bug-detail-modal";
 import { ReportGeneralBugModal } from "@/components/bugs/report-general-bug-modal";
 import { HistoryPagination } from "@/components/test-runs/history-pagination";
 import { entityCode } from "@/lib/format";
-import type { AttachmentItem, BugSourceType, BugStatus } from "@/types/api";
+import type { AttachmentItem, BugSourceType } from "@/types/api";
 
 export type BugRow = {
   id: string;
@@ -573,8 +573,8 @@ export function BugsPageClient({
         <BugDetailModal
           bugId={detailBugId}
           onClose={() => setDetailBugId(null)}
-          onStatusChange={(bugId: string, status: BugStatus) => patchBug(bugId, { status })}
           onDeleted={(bugId: string) => setLocalBugs((prev) => prev.filter((b) => b.id !== bugId))}
+          onUpdated={patchBug}
         />
       )}
 

@@ -6,6 +6,7 @@ import { ChevronDown, ClipboardList, FolderOpen, Inbox, Play, RotateCcw, Search,
 import { createTestRun, updateTestRun } from "@/lib/actions/test-runs";
 import { getJSON, invalidateApiCache } from "@/lib/client/use-api";
 import { Select } from "@/components/ui/select";
+import { Toast, useToast } from "@/components/ui/feedback";
 import type { PlatformCode, RunOptionsPayload } from "@/types/api";
 
 type SuiteOption = {
@@ -84,6 +85,61 @@ const PLATFORM_ENUM_TO_LABEL: Record<string, string> = {
   HARDWARE: "Hardware",
   API: "API",
 };
+
+/** Field wajib Express Run — kunci pesan error inline per field. */
+type FieldKey =
+  | "runName"
+  | "activityType"
+  | "environment"
+  | "sprint"
+  | "taskLink"
+  | "platforms"
+  | "projects"
+  | "testCases";
+
+/** Urutan validasi mengikuti urutan visual field (atas → bawah) agar
+ *  "scroll ke error pertama" konsisten dengan yang dilihat user. */
+const FIELD_ORDER: FieldKey[] = [
+  "runName",
+  "activityType",
+  "environment",
+  "sprint",
+  "taskLink",
+  "platforms",
+  "projects",
+  "testCases",
+];
+
+/**
+ * Selector kontrol utama tiap field, dipakai untuk memfokuskan input error
+ * pertama. `Select` bukan `<select>` natif melainkan `<button>` ber-aria-haspopup.
+ */
+const FIELD_FOCUS_SELECTOR: Record<FieldKey, string> = {
+  runName: "input:not([type='checkbox'])",
+  activityType: "button[aria-haspopup='listbox']",
+  environment: "button[aria-haspopup='listbox']",
+  sprint: "input:not([type='checkbox'])",
+  taskLink: "input:not([type='checkbox'])",
+  platforms: "input[type='checkbox']",
+  projects: "button[aria-haspopup='listbox']",
+  testCases: "input[type='checkbox']",
+};
+
+/**
+ * Pesan error inline di bawah field. Setara `text-red-500 text-xs mt-1`,
+ * ditulis sebagai inline style karena proyek ini tidak memakai Tailwind.
+ */
+function FieldError({ message }: { message?: string }) {
+  if (!message) return null;
+  return (
+    <p
+      role="alert"
+      style={{ color: "#EF4444", fontSize: "0.75rem", margin: "0.25rem 0 0", lineHeight: 1.4 }}
+    >
+      {message}
+    </p>
+  );
+}
 
 /**
  * Empty state di dalam box daftar (Suites & Test Cases): ikon netral + teks,
@@ -175,6 +231,27 @@ export function ExpressRunForm({
   const [tcQuery, setTcQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  // Pesan error per field, muncul setelah tombol Express Run diklik.
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<FieldKey, string>>>({});
+  const formRef = useRef<HTMLDivElement>(null);
+  const { toast, showToast, dismissToast } = useToast();
+
+  /** Scroll ke field error pertama lalu fokuskan kontrol utamanya. */
+  const focusField = (key: FieldKey) => {
+    const wrapper = formRef.current?.querySelector<HTMLElement>(`[data-field="${key}"]`);
+    if (!wrapper) return;
+    wrapper.scrollIntoView({ behavior: "smooth", block: "center" });
+    wrapper.querySelector<HTMLElement>(FIELD_FOCUS_SELECTOR[key])?.focus({ preventScroll: true });
+  };
+
+  /** Buang pesan error satu field begitu nilainya diubah (error usang). */
+  const clearFieldError = (key: FieldKey) =>
+    setFieldErrors((prev) => {
+      if (!prev[key]) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
 
   // Suite & TC dimuat PER project yang dipilih, bukan seluruh repository
   // sekaligus (dulu ~78 KB untuk 331 TC — lihat audit performa navigasi §6).
@@ -295,6 +372,7 @@ export function ExpressRunForm({
   }, [platforms, projects, suites, testCases, matchesPlatform]);
 
   const toggleProject = (id: string) => {
+    clearFieldError("projects");
     setSelectedProjectIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -400,15 +478,6 @@ export function ExpressRunForm({
       return false;
     }
   };
-  const isFormValid =
-    runName.trim().length >= 3 &&
-    !!activityType &&
-    platforms.size > 0 &&
-    !!environment &&
-    sprint.trim().length > 0 &&
-    isUrlValid(taskLink.trim()) &&
-    selectedProjectIds.size > 0 &&
-    selectedTCs.size > 0;
 
   // Klik suite di kolom kiri -> set aktif (TIDAK reset pilihan global)
   const selectSuite = (id: string) => {
@@ -417,6 +486,7 @@ export function ExpressRunForm({
   };
 
   const toggleTC = (id: string) => {
+    clearFieldError("testCases");
     setSelectedTCs((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -427,6 +497,7 @@ export function ExpressRunForm({
 
   /** Select All per section: pilih/lepas semua TC di dalam satu section. */
   const toggleSectionTCs = (items: TCOption[]) => {
+    clearFieldError("testCases");
     setSelectedTCs((prev) => {
       const next = new Set(prev);
       const allOn = items.length > 0 && items.every((t) => next.has(t.id));
@@ -459,42 +530,32 @@ export function ExpressRunForm({
     setSuiteQuery("");
     setTcQuery("");
     setError(null);
+    setFieldErrors({});
   };
 
   const handleRun = async () => {
     setError(null);
-    if (runName.trim().length < 3) {
-      setError("Nama Run minimal 3 karakter.");
+    // Validasi seluruh field mandatory sekaligus, lalu tampilkan error inline
+    // per field. Tombol memang selalu aktif — penyaringan terjadi di sini.
+    const errs: Partial<Record<FieldKey, string>> = {};
+    if (runName.trim().length < 3) errs.runName = "Nama Run minimal 3 karakter.";
+    if (!activityType) errs.activityType = "Tipe Activity wajib dipilih.";
+    if (!environment) errs.environment = "Environment wajib dipilih.";
+    if (!sprint.trim()) errs.sprint = "Sprint wajib diisi.";
+    if (!isUrlValid(taskLink.trim()))
+      errs.taskLink = "Task / Card Link harus berupa URL valid (http/https).";
+    if (platforms.size === 0) errs.platforms = "Pilih minimal satu Platform.";
+    if (selectedProjectIds.size === 0) errs.projects = "Pilih minimal satu project.";
+    if (selectedTCs.size === 0) errs.testCases = "Pilih minimal satu test case.";
+
+    const firstInvalid = FIELD_ORDER.find((key) => errs[key]);
+    if (firstInvalid) {
+      setFieldErrors(errs);
+      focusField(firstInvalid);
+      showToast("Mohon lengkapi seluruh field yang wajib diisi.", "error");
       return;
     }
-    if (!activityType) {
-      setError("Tipe Activity wajib dipilih.");
-      return;
-    }
-    if (platforms.size === 0) {
-      setError("Pilih minimal satu Platform.");
-      return;
-    }
-    if (!environment) {
-      setError("Environment wajib dipilih.");
-      return;
-    }
-    if (!sprint.trim()) {
-      setError("Sprint wajib diisi.");
-      return;
-    }
-    if (!isUrlValid(taskLink.trim())) {
-      setError("Task / Card Link harus berupa URL valid (http/https).");
-      return;
-    }
-    if (selectedProjectIds.size === 0) {
-      setError("Pilih minimal satu project.");
-      return;
-    }
-    if (selectedTCs.size === 0) {
-      setError("Pilih minimal satu test case.");
-      return;
-    }
+    setFieldErrors({});
     setPending(true);
     try {
       // Suite unik yang dimiliki TC terpilih
@@ -604,7 +665,7 @@ export function ExpressRunForm({
   }, [selectedTCList, sections]);
 
   return (
-    <div style={{ width: "100%", display: "flex", flexDirection: "column" }}>
+    <div ref={formRef} style={{ width: "100%", display: "flex", flexDirection: "column" }}>
       {/* Body */}
       <div style={{ padding: "1.25rem" }}>
         {/* Form inputs: 4 baris — Run Name full width, sisanya 2 kolom */}
@@ -616,6 +677,7 @@ export function ExpressRunForm({
           }}
         >
           <div
+            data-field="runName"
             style={{
               display: "flex",
               flexDirection: "column",
@@ -628,19 +690,29 @@ export function ExpressRunForm({
             </label>
             <input
               value={runName}
-              onChange={(e) => setRunName(e.target.value)}
+              onChange={(e) => {
+                setRunName(e.target.value);
+                clearFieldError("runName");
+              }}
               placeholder="mis. Enhancement Membership"
               style={inputStyle}
             />
+            <FieldError message={fieldErrors.runName} />
           </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
+          <div
+            data-field="activityType"
+            style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}
+          >
             <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)" }}>
               Tipe Activity <span style={{ color: "#EF4444" }}>*</span>
             </label>
             <Select
               value={activityType}
               ariaLabel="Tipe activity"
-              onChange={(e) => setActivityType(e.target.value)}
+              onChange={(e) => {
+                setActivityType(e.target.value);
+                clearFieldError("activityType");
+              }}
             >
               <option value="">Pilih Tipe Activity</option>
               {ACTIVITY_OPTIONS.map((opt) => (
@@ -649,15 +721,22 @@ export function ExpressRunForm({
                 </option>
               ))}
             </Select>
+            <FieldError message={fieldErrors.activityType} />
           </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
+          <div
+            data-field="environment"
+            style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}
+          >
             <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)" }}>
               Environment <span style={{ color: "#EF4444" }}>*</span>
             </label>
             <Select
               value={environment}
               ariaLabel="Environment"
-              onChange={(e) => setEnvironment(e.target.value)}
+              onChange={(e) => {
+                setEnvironment(e.target.value);
+                clearFieldError("environment");
+              }}
             >
               <option value="">Pilih Environment</option>
               {ENVIRONMENT_OPTIONS.map((opt) => (
@@ -666,31 +745,49 @@ export function ExpressRunForm({
                 </option>
               ))}
             </Select>
+            <FieldError message={fieldErrors.environment} />
           </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
+          <div
+            data-field="sprint"
+            style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}
+          >
             <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)" }}>
               Sprint <span style={{ color: "#EF4444" }}>*</span>
             </label>
             <input
               value={sprint}
-              onChange={(e) => setSprint(e.target.value)}
+              onChange={(e) => {
+                setSprint(e.target.value);
+                clearFieldError("sprint");
+              }}
               placeholder="mis. Sprint 16"
               style={inputStyle}
             />
+            <FieldError message={fieldErrors.sprint} />
           </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
+          <div
+            data-field="taskLink"
+            style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}
+          >
             <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)" }}>
               Task / Card Link <span style={{ color: "#EF4444" }}>*</span>
             </label>
             <input
               type="url"
               value={taskLink}
-              onChange={(e) => setTaskLink(e.target.value)}
+              onChange={(e) => {
+                setTaskLink(e.target.value);
+                clearFieldError("taskLink");
+              }}
               placeholder="mis. https://app.clickup.com/..."
               style={inputStyle}
             />
+            <FieldError message={fieldErrors.taskLink} />
           </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
+          <div
+            data-field="platforms"
+            style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}
+          >
             <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)" }}>
               Platform <span style={{ color: "#EF4444" }}>*</span>
             </label>
@@ -723,14 +820,15 @@ export function ExpressRunForm({
                     <input
                       type="checkbox"
                       checked={checked}
-                      onChange={() =>
+                      onChange={() => {
+                        clearFieldError("platforms");
                         setPlatforms((prev) => {
                           const next = new Set(prev);
                           if (next.has(opt)) next.delete(opt);
                           else next.add(opt);
                           return next;
-                        })
-                      }
+                        });
+                      }}
                       style={{ margin: 0, cursor: "pointer" }}
                     />
                     {opt}
@@ -738,8 +836,12 @@ export function ExpressRunForm({
                 );
               })}
             </div>
+            <FieldError message={fieldErrors.platforms} />
           </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
+          <div
+            data-field="projects"
+            style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}
+          >
             <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)" }}>
               Project <span style={{ color: "#EF4444" }}>*</span>
             </label>
@@ -822,6 +924,7 @@ export function ExpressRunForm({
                   ))}
               </Select>
             </div>
+            <FieldError message={fieldErrors.projects} />
           </div>
         </div>
 
@@ -904,7 +1007,7 @@ export function ExpressRunForm({
           </div>
 
           {/* Test Cases column: menampilkan TC suite aktif, checkbox sync global */}
-          <div style={listBoxStyle}>
+          <div data-field="testCases" style={listBoxStyle}>
             <div style={{ padding: "0.6rem 0.75rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
               <div style={{ fontWeight: 700, fontSize: "0.88rem", flexShrink: 0 }}>
                 Test Cases
@@ -912,7 +1015,10 @@ export function ExpressRunForm({
               <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "0.6rem", flexShrink: 0 }}>
                 <button
                   type="button"
-                  onClick={() => setSelectedTCs(new Set())}
+                  onClick={() => {
+                    clearFieldError("testCases");
+                    setSelectedTCs(new Set());
+                  }}
                   style={{ border: "none", background: "none", color: "#EF4444", fontSize: "0.78rem", fontWeight: 600, cursor: "pointer", padding: 0, transition: "color 0.12s ease" }}
                   onMouseEnter={(e) => (e.currentTarget.style.color = "#DC2626")}
                   onMouseLeave={(e) => (e.currentTarget.style.color = "#EF4444")}
@@ -921,6 +1027,11 @@ export function ExpressRunForm({
                 </button>
               </div>
             </div>
+            {fieldErrors.testCases && (
+              <div style={{ padding: "0 0.75rem 0.35rem" }}>
+                <FieldError message={fieldErrors.testCases} />
+              </div>
+            )}
             <div style={{ padding: "0.5rem 0.75rem" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", border: "1px solid var(--border-strong)", borderRadius: 7, padding: "0.3rem 0.55rem" }}>
                 <Search size={13} style={{ color: "var(--text-muted)", flexShrink: 0 }} />
@@ -1216,7 +1327,7 @@ export function ExpressRunForm({
           <button
             type="button"
             onClick={() => void handleRun()}
-            disabled={pending || !isFormValid}
+            disabled={pending}
             style={{
               display: "inline-flex",
               alignItems: "center",
@@ -1231,13 +1342,13 @@ export function ExpressRunForm({
               color: "#0F172A",
               fontWeight: 600,
               fontSize: 12,
-              cursor: pending || !isFormValid ? "not-allowed" : "pointer",
-              opacity: !isFormValid ? 0.5 : 1,
+              cursor: pending ? "not-allowed" : "pointer",
+              opacity: pending ? 0.7 : 1,
               boxShadow: "0 1px 2px rgba(15, 23, 42, 0.08)",
               transition: "background-color 0.15s ease",
             }}
             onMouseEnter={(e) => {
-              if (isFormValid && !pending) e.currentTarget.style.background = "#F0B53D";
+              if (!pending) e.currentTarget.style.background = "#F0B53D";
             }}
             onMouseLeave={(e) => {
               e.currentTarget.style.background = "#FFC348";
@@ -1254,6 +1365,7 @@ export function ExpressRunForm({
           </button>
         </div>
       </div>
+      <Toast toast={toast} onDismiss={dismissToast} />
     </div>
   );
 }

@@ -16,7 +16,7 @@ import { Select } from "@/components/ui/select";
 import { BugDetailModal } from "@/components/bugs/bug-detail-modal";
 import { EditRunModal } from "@/components/test-runs/edit-run-modal";
 import type { ExpressRunInitial } from "@/components/test-runs/express-run";
-import type { AttachmentItem, BugRow, BugStatus, BugsPayload } from "@/types/api";
+import type { AttachmentItem, BugEditableFields, BugRow, BugStatus, BugsPayload } from "@/types/api";
 
 export type RunResultItem = {
   id: string;
@@ -222,6 +222,8 @@ export function RunExecutor({
   const [modalItem, setModalItem] = useState<RunResultItem | null>(null);
   // Bug yang sedang dibuka di Bug Detail Modal (dari badge bug di baris TC).
   const [bugDetailId, setBugDetailId] = useState<string | null>(null);
+  /** Sinyal patch bug untuk ExecutionModal (daftar "Linked Bugs" hidup di sana). */
+  const [bugPatch, setBugPatch] = useState<{ id: string; patch: BugEditableFields } | null>(null);
   const [bugItem, setBugItem] = useState<RunResultItem | null>(null);
   const [metaOpen, setMetaOpen] = useState(true);
   // Popover breakdown project & suite
@@ -274,15 +276,6 @@ export function RunExecutor({
     setModalItem((prev) => (prev ? fn(prev) : prev));
   };
 
-  /** Patch satu bug di semua cermin lokal (dipakai Bug Detail Modal). */
-  const patchBug = (bugId: string, patch: Partial<NonNullable<RunResultItem["bugs"]>[number]>) => {
-    mapResults((r) =>
-      r.bugs?.some((b) => b.id === bugId)
-        ? { ...r, bugs: r.bugs.map((b) => (b.id === bugId ? { ...b, ...patch } : b)) }
-        : r
-    );
-  };
-
   /** Buang satu bug dari semua cermin lokal setelah dihapus. */
   const removeBug = (bugId: string) => {
     mapResults((r) =>
@@ -291,15 +284,25 @@ export function RunExecutor({
   };
 
   /**
-   * Bug yang di-RESOLVED/CLOSED otomatis membuat TestRunResult FAIL-nya jadi
-   * PASS di server; cermin lokal disamakan supaya kartu tidak menampilkan data
-   * basi sampai halaman di-reload.
+   * Patch satu bug setelah Edit Bug sukses: badge bug di baris TC (`mapResults`)
+   * plus daftar "Linked Bugs" milik ExecutionModal, yang di-patch lewat sinyal
+   * `bugPatch` karena state-nya hidup di komponen itu.
    */
-  const handleBugStatusChange = (bugId: string, status: BugStatus) => {
-    patchBug(bugId, { status });
-    if (status !== "RESOLVED" && status !== "CLOSED") return;
-    const owner = items.find((r) => r.bugs?.some((b) => b.id === bugId));
-    if (owner && owner.status === "FAIL") patchResult(owner.id, { status: "PASS" });
+  const patchBug = (bugId: string, patch: BugEditableFields) => {
+    mapResults((r) =>
+      r.bugs?.some((b) => b.id === bugId)
+        ? {
+            ...r,
+            bugs: r.bugs.map((b) =>
+              b.id === bugId
+                ? { ...b, title: patch.title, severity: patch.severity, externalLink: patch.externalLink }
+                : b
+            ),
+          }
+        : r
+    );
+    // Objek baru tiap kali -> effect di ExecutionModal ikut jalan lagi.
+    setBugPatch({ id: bugId, patch });
   };
 
   const saveBug = async () => {
@@ -943,6 +946,7 @@ export function RunExecutor({
           onClose={() => setModalItem(null)}
           onAttachmentsChange={(list) => patchResult(modalItem.id, { attachments: list })}
           onOpenBugDetail={setBugDetailId}
+          bugPatch={bugPatch}
           onSave={async (data) => {
             const res = await updateRunResult(modalItem.id, {
               status: data.status,
@@ -1000,8 +1004,8 @@ export function RunExecutor({
         <BugDetailModal
           bugId={bugDetailId}
           onClose={() => setBugDetailId(null)}
-          onStatusChange={handleBugStatusChange}
           onDeleted={removeBug}
+          onUpdated={patchBug}
         />
       )}
 
@@ -2259,6 +2263,7 @@ function ExecutionModal({
   onClose,
   onAttachmentsChange,
   onOpenBugDetail,
+  bugPatch,
   onSave,
 }: {
   item: RunResultItem;
@@ -2268,6 +2273,8 @@ function ExecutionModal({
   onAttachmentsChange?: (list: AttachmentItem[]) => void;
   /** Buka Bug Detail Modal dari daftar riwayat bug TC ini. */
   onOpenBugDetail?: (bugId: string) => void;
+  /** Patch bug hasil Edit Bug dari parent — dipakai untuk update `linkedBugs` in-place. */
+  bugPatch?: { id: string; patch: BugEditableFields } | null;
   onSave: (data: {
     status: RunResultItem["status"];
     actualResult?: string;
@@ -2334,6 +2341,15 @@ function ExecutionModal({
       cancelled = true;
     };
   }, [item.testCaseId]);
+
+  // Edit Bug dari parent (via Bug Detail Modal) -> patch `linkedBugs` in-place,
+  // tanpa refetch, supaya daftar riwayat tidak menampilkan judul/severity basi.
+  useEffect(() => {
+    if (!bugPatch) return;
+    setLinkedBugs((prev) =>
+      prev.map((b) => (b.id === bugPatch.id ? { ...b, ...bugPatch.patch } : b))
+    );
+  }, [bugPatch]);
 
   const sectionLabel: React.CSSProperties = {
     fontSize: "0.72rem",
@@ -2982,7 +2998,7 @@ function ExecutionModal({
               {saving
                 ? "Menyimpan..."
                 : isFail && !hasLinkedBug
-                  ? "Laporkan Bug & Simpan"
+                  ? "Laporkan Bug"
                   : hasSavedExecution
                     ? "Edit Eksekusi"
                     : "Simpan Eksekusi"}

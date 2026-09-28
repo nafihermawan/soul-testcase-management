@@ -694,7 +694,7 @@ export function ExpressRunForm({
                 setRunName(e.target.value);
                 clearFieldError("runName");
               }}
-              placeholder="mis. Enhancement Membership"
+              placeholder="Samakan dengan Task Title Clickup"
               style={inputStyle}
             />
             <FieldError message={fieldErrors.runName} />
@@ -760,7 +760,7 @@ export function ExpressRunForm({
                 setSprint(e.target.value);
                 clearFieldError("sprint");
               }}
-              placeholder="mis. Sprint 16"
+              placeholder="mis. 06"
               style={inputStyle}
             />
             <FieldError message={fieldErrors.sprint} />

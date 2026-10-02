@@ -494,6 +494,7 @@ export type RunResultTestCase = {
   status: "DRAFT" | "ACTIVE" | "DEPRECATED";
   scenario: string | null;
   precondition: string | null;
+  testData: string | null;
   steps: string | null;
   expectedResult: string | null;
   createdAt: string;
@@ -503,7 +504,7 @@ export type RunResultTestCase = {
     id: string;
     name: string;
     projectId: string;
-    project: { name: string };
+    project: { name: string; platform: string | null };
   } | null;
   createdBy: { name: string | null } | null;
 };

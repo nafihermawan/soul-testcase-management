@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useImperativeHandle, useRef, useState, type CSSProperties } from "react";
 import { FileVideo, Image as ImageIcon, Loader2, Paperclip, Trash2, X } from "lucide-react";
 import {
   deleteAttachment,
@@ -12,6 +12,11 @@ import type { AttachmentItem } from "@/types/api";
 
 const MAX_MB = Math.round(MAX_ATTACHMENT_BYTES / 1024 / 1024);
 
+/** Ukuran thumbnail evidence & lebar item kartunya. Dipakai untuk memosisikan
+ *  tombol hapus saat mode `plain` (tanpa kontainer kartu). */
+const EVIDENCE_THUMB = 64;
+const EVIDENCE_ITEM_W = 116;
+
 const humanSize = (bytes: number): string => {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
@@ -19,6 +24,20 @@ const humanSize = (bytes: number): string => {
 };
 
 const isVideo = (mime: string) => mime.startsWith("video/");
+
+/** File evidence yang masih ditahan di klien (mode `deferred`, belum diunggah). */
+type PendingEvidence = { id: string; file: File; previewUrl: string };
+
+/**
+ * Handle imperatif panel untuk mode `deferred`: parent memutuskan KAPAN
+ * perubahan evidence (upload/penghapusan) benar-benar dikirim ke server.
+ */
+export type AttachmentsPanelHandle = {
+  /** Kirim perubahan tertunda: unggah file baru lalu hapus yang ditandai. */
+  commit: () => Promise<{ ok: boolean; error?: string }>;
+  /** Buang perubahan tertunda dan kembali ke daftar awal. */
+  reset: () => void;
+};
 
 /** Ambil file dari clipboard: `files` (salin dari file manager) atau `items` (screenshot). */
 function filesFromClipboard(data: DataTransfer | null): File[] {
@@ -56,6 +75,9 @@ export function AttachmentsPanel({
   canEdit = true,
   onChange,
   compact = false,
+  plain = false,
+  deferred = false,
+  handleRef,
 }: {
   owner: AttachmentOwner;
   attachments: AttachmentItem[];
@@ -65,6 +87,16 @@ export function AttachmentsPanel({
   onChange?: (items: AttachmentItem[]) => void;
   /** Tampilan lebih rapat untuk di dalam modal. */
   compact?: boolean;
+  /** Tanpa kontainer kartu (border/latar/padding) di tiap attachment —
+   *  thumbnail & detail file tampil langsung. Default `false` supaya panel
+   *  lain (modal Bug, tab Attachments) tidak berubah. */
+  plain?: boolean;
+  /** Tahan perubahan di klien dulu: tambah/hapus file TIDAK memanggil API
+   *  apa pun sampai `handleRef.commit()` dipanggil (tombol Simpan). Dipakai
+   *  modal eksekusi agar evidence batal tersimpan saat Batal/Close. */
+  deferred?: boolean;
+  /** Handle untuk memicu commit/reset saat `deferred`. */
+  handleRef?: React.Ref<AttachmentsPanelHandle>;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   // Identitas panel di stack `mountedPanels` (untuk scoping paste).
@@ -81,6 +113,37 @@ export function AttachmentsPanel({
     setItems(attachments);
   }, [attachments]);
 
+  // Mode `deferred`: file baru ditahan di klien (preview objek URL) dan
+  // penghapusan hanya ditandai — keduanya baru dikirim saat commit().
+  const [pending, setPending] = useState<PendingEvidence[]>([]);
+  const [removedIds, setRemovedIds] = useState<string[]>([]);
+  const pendingRef = useRef<PendingEvidence[]>([]);
+  useEffect(() => {
+    pendingRef.current = pending;
+  }, [pending]);
+  // Objek URL harus dilepas saat unmount supaya tidak bocor.
+  useEffect(
+    () => () => {
+      pendingRef.current.forEach((p) => URL.revokeObjectURL(p.previewUrl));
+    },
+    []
+  );
+
+  /** Daftar yang ditampilkan: file tertunda (preview lokal) + attachment
+   *  tersimpan yang belum ditandai hapus. Non-deferred → sama dengan `items`. */
+  const displayed: AttachmentItem[] = [
+    ...pending.map((p) => ({
+      id: p.id,
+      fileName: p.file.name,
+      mimeType: p.file.type,
+      size: p.file.size,
+      url: p.previewUrl,
+      createdAt: new Date().toISOString(),
+      uploadedBy: null,
+    })),
+    ...items.filter((a) => !removedIds.includes(a.id)),
+  ];
+
   /** Update state lokal lalu beri tahu parent — tanpa refetch. */
   const applyItems = (next: AttachmentItem[]) => {
     setItems(next);
@@ -95,6 +158,31 @@ export function AttachmentsPanel({
     // Penjaga untuk semua jalur pemanggil (pilih, drop, paste).
     if (uploading) return;
     setError(null);
+
+    // Mode `deferred`: tahan file di klien (preview lokal) TANPA API call.
+    // Upload sebenarnya baru dijalankan saat commit() — yaitu tombol Simpan.
+    if (deferred) {
+      const accepted: PendingEvidence[] = [];
+      for (const file of list) {
+        if (!file.type.startsWith("image/") && !file.type.startsWith("video/")) {
+          setError(`"${file.name}": hanya file gambar atau video yang diperbolehkan.`);
+          continue;
+        }
+        if (file.size > MAX_ATTACHMENT_BYTES) {
+          setError(`"${file.name}": ukuran melebihi ${MAX_MB} MB.`);
+          continue;
+        }
+        accepted.push({
+          id: `pending-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          file,
+          previewUrl: URL.createObjectURL(file),
+        });
+      }
+      if (inputRef.current) inputRef.current.value = "";
+      if (accepted.length > 0) setPending((prev) => [...accepted, ...prev]);
+      return;
+    }
+
     // Kumpulkan hasil upload, baru terapkan sekali di akhir agar tidak
     // menimpa state dengan snapshot yang basi saat multi-file.
     const created: AttachmentItem[] = [];
@@ -178,8 +266,21 @@ export function AttachmentsPanel({
   }, [canEdit]);
 
   const remove = async (att: AttachmentItem) => {
-    setDeletingId(att.id);
     setError(null);
+
+    // Mode `deferred`: jangan panggil server — cukup ubah state lokal.
+    if (deferred) {
+      const staged = pending.find((p) => p.id === att.id);
+      if (staged) {
+        URL.revokeObjectURL(staged.previewUrl);
+        setPending((prev) => prev.filter((p) => p.id !== att.id));
+      } else {
+        setRemovedIds((prev) => (prev.includes(att.id) ? prev : [...prev, att.id]));
+      }
+      return;
+    }
+
+    setDeletingId(att.id);
     const res = await deleteAttachment(att.id);
     setDeletingId(null);
     if (res.error) {
@@ -190,10 +291,76 @@ export function AttachmentsPanel({
     applyItems(items.filter((a) => a.id !== att.id));
   };
 
+  /** Buang file tertunda & batalkan penandaan hapus (mode `deferred`). */
+  const resetStaged = () => {
+    pending.forEach((p) => URL.revokeObjectURL(p.previewUrl));
+    setPending([]);
+    setRemovedIds([]);
+    setError(null);
+  };
+
+  /**
+   * Kirim perubahan tertunda ke server: unggah file baru dulu, lalu hapus
+   * attachment yang ditandai. File yang sudah berhasil diunggah saat terjadi
+   * kegagalan tetap disimpan agar tidak terunggah dua kali saat retry.
+   */
+  const commitStaged = async (): Promise<{ ok: boolean; error?: string }> => {
+    if (!deferred) return { ok: true };
+    setError(null);
+    let current = items;
+
+    if (pending.length > 0) {
+      setUploading(true);
+      const uploaded: AttachmentItem[] = [];
+      let failure: string | null = null;
+      for (const p of pending) {
+        setProgress(0);
+        const result = await uploadAttachmentFile(p.file, owner, setProgress);
+        if (!result.ok) {
+          failure = result.error;
+          break;
+        }
+        uploaded.push(result.attachment);
+        URL.revokeObjectURL(p.previewUrl);
+      }
+      setUploading(false);
+      setProgress(0);
+
+      // Sisa yang belum berhasil tetap tertahan (untuk retry).
+      setPending(pending.slice(uploaded.length));
+      if (uploaded.length > 0) {
+        current = [...uploaded, ...current];
+        applyItems(current);
+      }
+      if (failure) {
+        setError(failure);
+        return { ok: false, error: failure };
+      }
+    }
+
+    if (removedIds.length > 0) {
+      for (const id of removedIds) {
+        const res = await deleteAttachment(id);
+        if (res.error) {
+          setError(res.error);
+          return { ok: false, error: res.error };
+        }
+      }
+      const removed = removedIds;
+      setRemovedIds([]);
+      current = current.filter((a) => !removed.includes(a.id));
+      applyItems(current);
+    }
+
+    return { ok: true };
+  };
+
+  useImperativeHandle(handleRef, () => ({ commit: commitStaged, reset: resetStaged }));
+
   /** Thumbnail ringkas 64×64 di dalam kartu mini evidence. */
   const thumbMediaStyle: CSSProperties = {
-    width: 64,
-    height: 64,
+    width: EVIDENCE_THUMB,
+    height: EVIDENCE_THUMB,
     borderRadius: 8,
     border: "1px solid var(--border)",
     display: "block",
@@ -213,7 +380,7 @@ export function AttachmentsPanel({
 
       {/* Dropzone hanya tampil saat belum ada file. Setelah ada file, yang
           tampil cukup preview + tombol "Ubah file" yang ringkas. */}
-      {canEdit && items.length === 0 && (
+      {canEdit && displayed.length === 0 && (
         <div
           role="button"
           tabIndex={0}
@@ -277,7 +444,7 @@ export function AttachmentsPanel({
       )}
 
       {/* Sedang mengunggah file tambahan saat daftar sudah berisi. */}
-      {canEdit && items.length > 0 && uploading && (
+      {canEdit && displayed.length > 0 && uploading && (
         <div
           style={{
             display: "flex",
@@ -308,7 +475,7 @@ export function AttachmentsPanel({
         </div>
       )}
 
-      {items.length === 0 ? (
+      {displayed.length === 0 ? (
         // Untuk pengunggah, dropzone di atas sudah menjelaskan keadaannya —
         // tidak perlu teks tambahan. Teks ini untuk yang hanya bisa melihat.
         !canEdit && (
@@ -339,7 +506,7 @@ export function AttachmentsPanel({
                   cursor: uploading ? "wait" : "pointer",
                 }}
               >
-                <Paperclip size={12} /> Tambah / ubah file
+                <Paperclip size={12} /> Tambah File
               </button>
             </div>
           )}
@@ -351,7 +518,7 @@ export function AttachmentsPanel({
               gap: compact ? "0.6rem" : "0.75rem",
             }}
           >
-            {items.map((att) => {
+            {displayed.map((att) => {
               const video = isVideo(att.mimeType);
               const openable = Boolean(att.url);
               return (
@@ -359,15 +526,23 @@ export function AttachmentsPanel({
                   key={att.id}
                   style={{
                     position: "relative",
-                    width: 116,
+                    width: EVIDENCE_ITEM_W,
                     display: "flex",
                     flexDirection: "column",
-                    alignItems: "center",
+                    // Mode `plain`: rata kiri penuh agar sejajar dengan label
+                    // section; mode kartu tetap terpusat.
+                    alignItems: plain ? "flex-start" : "center",
                     gap: "0.3rem",
-                    padding: "0.5rem 0.5rem 0.55rem",
-                    border: "1px solid var(--border)",
-                    borderRadius: 10,
-                    background: "#fff",
+                    // Mode `plain`: tanpa kontainer kartu — thumbnail & detail
+                    // file tampil langsung di atas latar panel.
+                    ...(plain
+                      ? null
+                      : {
+                          padding: "0.5rem 0.5rem 0.55rem",
+                          border: "1px solid var(--border)",
+                          borderRadius: 10,
+                          background: "#fff",
+                        }),
                   }}
                 >
                   {openable && !video ? (
@@ -408,8 +583,11 @@ export function AttachmentsPanel({
                       className="icon-btn-circle"
                       style={{
                         position: "absolute",
-                        top: 6,
-                        right: 6,
+                        // Kartu: menempel di sudut kanan-atas kartu.
+                        // Plain: menempel di sudut kanan-atas thumbnail (yang
+                        // sudah rata kiri).
+                        top: plain ? 0 : 6,
+                        right: plain ? EVIDENCE_ITEM_W - EVIDENCE_THUMB : 6,
                         width: 24,
                         height: 24,
                         padding: 4,
@@ -433,7 +611,7 @@ export function AttachmentsPanel({
                     title={att.fileName}
                     style={{
                       width: "100%",
-                      textAlign: "center",
+                      textAlign: plain ? "left" : "center",
                       fontSize: "0.72rem",
                       fontWeight: 600,
                       color: "#1F2937",

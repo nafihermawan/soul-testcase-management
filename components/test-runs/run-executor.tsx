@@ -5,12 +5,15 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRefresh } from "@/lib/client/refresh-context";
-import { Bug, CheckCircle2, ChevronDown, ChevronRight, CircleSlash, ExternalLink, FolderOpen, MinusCircle, Paperclip, Pencil, X, XCircle } from "lucide-react";
+import { Bug, Check, CheckCircle2, ChevronDown, ChevronRight, CircleSlash, Copy, ExternalLink, FolderOpen, MinusCircle, Paperclip, Pencil, X, XCircle } from "lucide-react";
 import { completeRun, completeRunWithSkip, deleteRun, updateRunResult } from "@/lib/actions/test-runs";
-import { createBug, unlinkBugFromRunResult } from "@/lib/actions/automation-bugs";
+import { createBug } from "@/lib/actions/automation-bugs";
 import { ConfirmDialog, Spinner, Toast, useToast } from "@/components/ui/feedback";
 import { entityCode, runCodeOf } from "@/lib/format";
-import { AttachmentsPanel } from "@/components/attachments/attachments-panel";
+import {
+  AttachmentsPanel,
+  type AttachmentsPanelHandle,
+} from "@/components/attachments/attachments-panel";
 import { ListTextarea } from "@/components/ui/list-textarea";
 import { Select } from "@/components/ui/select";
 import { BugDetailModal } from "@/components/bugs/bug-detail-modal";
@@ -42,12 +45,19 @@ export type RunResultItem = {
     status: string;
     scenario: string | null;
     precondition: string | null;
+    testData: string | null;
     steps: string | null;
     expectedResult: string | null;
     createdAt: string | Date;
     /** Section TC — dipakai untuk header kelompok di halaman eksekusi. */
     section?: { id: string; name: string } | null;
-    suiteName?: string | null;
+    /** Suite + project pemiliknya — dipakai untuk kartu per-Suite. */
+    suite?: {
+      id: string;
+      name: string;
+      projectId: string;
+      project: { name: string; platform: string | null };
+    } | null;
     createdBy: { name: string | null } | null;
   } | null;
 };
@@ -71,7 +81,9 @@ const STATUS_BADGE: Record<
   PASS: { label: "Passed", bg: "#ECFDF5", color: "#047857", border: "#A7F3D0", bold: true },
   FAIL: { label: "Failed", bg: "#FFF1F2", color: "#BE123C", border: "#FECDD3", bold: true },
   BLOCKED: { label: "Blocked", bg: "#FFFBEB", color: "#B45309", border: "#FDE68A", bold: true },
-  SKIPPED: { label: "Skipped", bg: "#F1F5F9", color: "#334155", border: "#CBD5E1", bold: true },
+  // Skipped sengaja UNGU (bukan amber) supaya tidak ketuker dengan Blocked
+  // yang sudah memakai amber, sekaligus kontras terhadap Untested yang abu-abu.
+  SKIPPED: { label: "Skipped", bg: "#FAF5FF", color: "#7E22CE", border: "#E9D5FF", bold: true },
 };
 
 /**
@@ -84,14 +96,6 @@ const BUG_STATUS_BADGE: Record<BugStatus, { label: string; bg: string; color: st
   IN_PROGRESS: { label: "In Progress", bg: "#FFFBEB", color: "#B45309", border: "#FDE68A" },
   RESOLVED: { label: "Resolved", bg: "#ECFDF5", color: "#047857", border: "#A7F3D0" },
   CLOSED: { label: "Closed", bg: "#DCFCE7", color: "#166534", border: "#86EFAC" },
-};
-
-/** Badge severity bug: amber tegas untuk MEDIUM, makin merah makin berat. */
-const BUG_SEVERITY_BADGE: Record<string, { bg: string; color: string; border: string }> = {
-  CRITICAL: { bg: "#FEF2F2", color: "#B91C1C", border: "#FECACA" },
-  HIGH: { bg: "#FFF7ED", color: "#C2410C", border: "#FED7AA" },
-  MEDIUM: { bg: "#FFFBEB", color: "#B45309", border: "#FDE68A" },
-  LOW: { bg: "#F1F5F9", color: "#475569", border: "#CBD5E1" },
 };
 
 /** Severity bug pada Bug Reporting Form (nilai disimpan uppercase, sama dgn data Bug). */
@@ -210,10 +214,8 @@ export function RunExecutor({
     }),
     [runName, activityType, environment, platforms, sprint, taskLink, groups]
   );
-  // Accordion per project: default semua expanded
-  const [openProjects, setOpenProjects] = useState<Record<string, boolean>>(() =>
-    Object.fromEntries(projects.map((p) => [p.projectId, true]))
-  );
+  // Accordion per SUITE (kartu teratas daftar eksekusi): default expanded.
+  const [openSuites, setOpenSuites] = useState<Record<string, boolean>>({});
   // Accordion per Section TC: default semua expanded. Kuncinya sectionId
   // (unik lintas suite) atau "__none__" untuk kelompok "Tanpa Section".
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
@@ -225,7 +227,7 @@ export function RunExecutor({
   /** Sinyal patch bug untuk ExecutionModal (daftar "Linked Bugs" hidup di sana). */
   const [bugPatch, setBugPatch] = useState<{ id: string; patch: BugEditableFields } | null>(null);
   const [bugItem, setBugItem] = useState<RunResultItem | null>(null);
-  const [metaOpen, setMetaOpen] = useState(true);
+  const [metaOpen, setMetaOpen] = useState(false);
   // Popover breakdown project & suite
   const [breakdownOpen, setBreakdownOpen] = useState(false);
   const [breakdownPos, setBreakdownPos] = useState<{ top: number; left: number } | null>(null);
@@ -236,7 +238,6 @@ export function RunExecutor({
   const [bugSeverity, setBugSeverity] = useState("");
   const [bugError, setBugError] = useState<string | null>(null);
   const [bugPending, setBugPending] = useState(false);
-  const [unlinkPending, setUnlinkPending] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deletePending, setDeletePending] = useState(false);
   // Modal ringkasan + overall notes sebelum Complete (Completion Summary)
@@ -335,22 +336,6 @@ export function RunExecutor({
     refresh();
   };
 
-  const unlinkBug = async (bugId: string, runResultId: string) => {
-    setUnlinkPending(bugId);
-    const res = await unlinkBugFromRunResult(bugId, runResultId);
-    setUnlinkPending(null);
-    if (res.error) {
-      showToast(res.error, "error");
-      return;
-    }
-    setItems((prev) =>
-      prev.map((r) =>
-        r.id === runResultId ? { ...r, bugs: (r.bugs ?? []).filter((b) => b.id !== bugId) } : r
-      )
-    );
-    showToast("Bug dilepas dari hasil run.", "success");
-  };
-
   const passed = items.filter((i) => i.status === "PASS").length;
   const failed = items.filter((i) => i.status === "FAIL").length;
   const untested = items.filter((i) => i.status === "NOT_RUN").length;
@@ -389,6 +374,41 @@ export function RunExecutor({
     return { ...p, passed: pPassed, failed: pFailed, untested: pUntested, pct: pPct };
   });
 
+  /**
+   * Kelompok untuk DAFTAR eksekusi: per SUITE (kartu teratas), bukan per
+   * project. Diturunkan dari `groups` (cermin lokal yang ikut ter-patch) supaya
+   * perubahan status tetap langsung tampil. TC tanpa suite dikumpulkan di grup
+   * "Tanpa Suite" supaya tidak ada yang hilang.
+   */
+  const suiteStats = useMemo(() => {
+    const map = new Map<
+      string,
+      {
+        key: string;
+        name: string;
+        projectName: string;
+        platform: string | null;
+        items: RunResultItem[];
+      }
+    >();
+    for (const g of groups) {
+      for (const item of g.items) {
+        const suite = item.testCase?.suite ?? null;
+        const key = suite?.id ?? `__no_suite__${g.projectId}`;
+        const entry = map.get(key) ?? {
+          key,
+          name: suite?.name ?? "Tanpa Suite",
+          projectName: suite?.project?.name ?? g.projectName,
+          platform: suite?.project?.platform ?? null,
+          items: [] as RunResultItem[],
+        };
+        entry.items.push(item);
+        map.set(key, entry);
+      }
+    }
+    return Array.from(map.values());
+  }, [groups]);
+
   // --- Complete Run flow ---
   // Complete selalu lewat Completion Summary Modal dulu: QA me-review catatan
   // per TC dan mengisi overall notes sebelum status run diubah.
@@ -417,7 +437,7 @@ export function RunExecutor({
   const reportRows = items.map((item) => ({
     tcId: item.testCase?.tcId ?? "—",
     title: item.titleSnapshot,
-    suite: item.testCase?.suiteName ?? "—",
+    suite: item.testCase?.suite?.name ?? "—",
     status: item.status,
     actualResult: item.actualResult ?? "",
   }));
@@ -517,22 +537,23 @@ export function RunExecutor({
                   display: "inline-flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  gap: 8,
-                  height: 40,
-                  padding: "0 16px",
+                  gap: 6,
+                  // Tinggi ditentukan padding saja (tanpa `height` tetap) supaya
+                  // ringkas dan sejajar dengan tombol action lain di app.
+                  padding: "0.375rem 0.75rem",
                   borderRadius: 8,
                   border: "1px solid #CBD5E1",
                   background: "#fff",
                   color: "#334155",
                   fontWeight: 600,
-                  fontSize: 14,
+                  fontSize: "0.75rem",
                   cursor: "pointer",
                   transition: "background-color 0.15s ease, color 0.15s ease",
                 }}
                 onMouseEnter={(e) => (e.currentTarget.style.background = "#F8FAFC")}
                 onMouseLeave={(e) => (e.currentTarget.style.background = "#fff")}
               >
-                <Pencil size={15} /> Edit
+                <Pencil size={13} /> Edit
               </button>
             )}
             {!isCompleted && canEdit ? (
@@ -544,15 +565,14 @@ export function RunExecutor({
                 display: "inline-flex",
                 alignItems: "center",
                 justifyContent: "center",
-                gap: 8,
-                height: 40,
-                padding: "0 16px",
+                gap: 6,
+                padding: "0.375rem 0.75rem",
                 borderRadius: 8,
                 border: "none",
                 background: "#FFC348",
                 color: "#0F172A",
                 fontWeight: 700,
-                fontSize: 14,
+                fontSize: "0.75rem",
                 cursor: completing ? "wait" : "pointer",
                 boxShadow: "0 1px 2px rgba(15, 23, 42, 0.08)",
                 transition: "background-color 0.15s ease",
@@ -587,18 +607,18 @@ export function RunExecutor({
                 style={{
                   display: "inline-flex",
                   alignItems: "center",
-                  gap: "0.4rem",
-                  padding: "0.4rem 1rem",
+                  gap: "0.35rem",
+                  padding: "0.375rem 0.75rem",
                   borderRadius: 8,
                   border: "1px solid #D1D5DB",
                   background: "#fff",
                   color: "#374151",
                   fontWeight: 600,
-                  fontSize: "0.82rem",
+                  fontSize: "0.75rem",
                   cursor: "pointer",
                 }}
               >
-                Export Report <ChevronDown size={14} aria-hidden="true" />
+                Export Report <ChevronDown size={13} aria-hidden="true" />
               </button>
             </div>
           )}
@@ -803,17 +823,18 @@ export function RunExecutor({
       </div>
     </div>
 
-      {/* Accordion per Project (default expanded) */}
-      {projectStats.length === 0 && (
+      {/* Daftar eksekusi: kartu teratas = SUITE, di dalamnya Section (folder),
+          baru kartu TC. Section tidak lagi digabung lintas suite. */}
+      {suiteStats.length === 0 && (
         <div style={{ padding: "1.5rem", textAlign: "center", color: "var(--text-muted)", fontSize: "0.9rem" }}>
           Belum ada test case dalam run ini.
         </div>
       )}
-      {projectStats.map((p) => {
-        const open = openProjects[p.projectId] ?? true;
+      {suiteStats.map((s) => {
+        const open = openSuites[s.key] ?? true;
         return (
           <div
-            key={p.projectId}
+            key={s.key}
             style={{
               background: "#fff",
               border: "1px solid var(--border)",
@@ -822,118 +843,199 @@ export function RunExecutor({
               overflow: "hidden",
             }}
           >
-            {/* Accordion header */}
+            {/* Header Suite Card: nama suite + breadcrumb project (kiri);
+                badge Platform + jumlah TC + chevron (kanan). */}
             <div
               style={{
                 display: "flex",
                 alignItems: "center",
-                gap: "0.75rem",
+                gap: "0.6rem",
                 padding: "0.85rem 1.25rem",
                 background: "#F8FAFC",
-                borderBottom: open ? "1px solid var(--border)" : "none",
+                // Border dibuat transparan (bukan `none`) + di-transition agar
+                // tingginya tidak "melompat" 1px saat buka/tutup.
+                borderBottom: `1px solid ${open ? "var(--border)" : "transparent"}`,
+                transition: "border-color 300ms ease-in-out",
                 cursor: "pointer",
                 flexWrap: "wrap",
               }}
-              onClick={() =>
-                setOpenProjects((prev) => ({ ...prev, [p.projectId]: !open }))
-              }
+              onClick={() => setOpenSuites((prev) => ({ ...prev, [s.key]: !open }))}
             >
               <span style={{ fontWeight: 700, fontSize: "0.95rem", color: "#111827" }}>
-                {p.projectName}
+                {s.name}
               </span>
-              <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                {/* Area kanan header project hanya berisi chevron accordion. */}
-                <span style={{ color: "#6B7280", display: "inline-flex", transition: "transform 0.2s ease", transform: open ? "rotate(180deg)" : "none" }}>
+              {/* Konteks project (dulu kartu tersendiri) kini jadi breadcrumb. */}
+              <span style={{ fontSize: "0.72rem", color: "#94A3B8" }}>{s.projectName}</span>
+
+              <div
+                style={{
+                  marginLeft: "auto",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.5rem",
+                }}
+              >
+                {s.platform && (
+                  <span
+                    style={{
+                      padding: "0.1rem 0.45rem",
+                      borderRadius: 999,
+                      fontSize: "0.6875rem",
+                      fontWeight: 700,
+                      letterSpacing: "0.02em",
+                      background: "#F1F5F9",
+                      color: "#475569",
+                      border: "1px solid #E2E8F0",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {platformLabel(s.platform)}
+                  </span>
+                )}
+                <span
+                  style={{
+                    fontSize: "0.72rem",
+                    fontWeight: 600,
+                    color: "#64748B",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {s.items.length} TC
+                </span>
+                <span
+                  style={{
+                    color: "#6B7280",
+                    display: "inline-flex",
+                    transition: "transform 300ms ease-in-out",
+                    transform: open ? "rotate(180deg)" : "rotate(0deg)",
+                  }}
+                >
                   <ChevronDown size={16} aria-hidden="true" />
                 </span>
               </div>
             </div>
 
-            {/* Accordion body: hierarki Project -> Section -> kartu TC */}
-            {open && (
-              <div style={{ padding: "0.75rem", display: "flex", flexDirection: "column" }}>
-                {groupItemsBySection(p.items).map((sec) => {
-                  const secOpen = !collapsedSections[sec.key];
-                  return (
-                    <div key={sec.key}>
-                      {/* Header Section — klik untuk collapse/expand. Chevron
-                          berputar halus; ikon folder tetap sebagai penanda. */}
-                      <div
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => toggleSection(sec.key)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" || e.key === " ") {
-                            e.preventDefault();
-                            toggleSection(sec.key);
-                          }
-                        }}
-                        aria-expanded={secOpen}
-                        aria-label={`${sec.name} — ${sec.items.length} test case`}
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 8,
-                          padding: "8px 4px",
-                          marginTop: 16,
-                          marginBottom: 8,
-                          borderBottom: "1px solid #F1F5F9",
-                          cursor: "pointer",
-                          userSelect: "none",
-                        }}
-                      >
-                        <ChevronRight
-                          size={12}
-                          style={{
-                            color: "#94A3B8",
-                            flexShrink: 0,
-                            transform: secOpen ? "rotate(90deg)" : "rotate(0deg)",
-                            transition: "transform 0.15s ease",
+            {/* Body Suite: Section-section DI DALAM suite ini. Aksen border kiri
+                + margin bertingkat menegaskan bahwa Section milik suite di
+                atasnya. Buka/tutup pakai trik grid-rows 0fr ↔ 1fr. */}
+            <div
+              style={{
+                display: "grid",
+                gridTemplateRows: open ? "1fr" : "0fr",
+                opacity: open ? 1 : 0,
+                transition: "grid-template-rows 300ms ease-in-out, opacity 300ms ease-in-out",
+              }}
+            >
+              <div style={{ overflow: "hidden", minHeight: 0 }}>
+                <div
+                  style={{
+                    margin: "0.75rem 0.75rem 0.75rem 1rem",
+                    paddingLeft: "0.9rem",
+                    borderLeft: "2px solid #E2E8F0",
+                    display: "flex",
+                    flexDirection: "column",
+                  }}
+                >
+                  {groupItemsBySection(s.items).map((sec) => {
+                    const secOpen = !collapsedSections[sec.key];
+                    return (
+                      <div key={sec.key}>
+                        {/* Header Section — klik untuk collapse/expand. Chevron
+                            berputar halus; ikon folder tetap sebagai penanda. */}
+                        <div
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => toggleSection(sec.key)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              toggleSection(sec.key);
+                            }
                           }}
-                        />
-                        <FolderOpen size={12} style={{ color: "#94A3B8", flexShrink: 0 }} />
-                        <span
+                          aria-expanded={secOpen}
+                          aria-label={`${sec.name} — ${sec.items.length} test case`}
                           style={{
-                            fontSize: 12,
-                            fontWeight: 700,
-                            color: "#334155",
-                            textTransform: "none",
-                            letterSpacing: "0.05em",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 8,
+                            padding: "8px 4px",
+                            marginTop: 16,
+                            marginBottom: 8,
+                            borderBottom: "1px solid #F1F5F9",
+                            cursor: "pointer",
+                            userSelect: "none",
                           }}
                         >
-                          {sec.name}
-                        </span>
-                      </div>
-                      {secOpen && (
-                        <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
-                          {sec.items.map((item) => (
-                            <RunItemCard
-                              key={item.id}
-                              item={item}
-                              isCompleted={isCompleted}
-                              canEdit={canEdit}
-                              unlinkPending={unlinkPending}
-                              onOpenDetail={() => setModalItem(item)}
-                              onOpenBugDetail={setBugDetailId}
-                              onUnlinkBug={(bugId) => void unlinkBug(bugId, item.id)}
-                              onOpenBug={() => {
-                                setBugItem(item);
-                                setBugTitle(item.titleSnapshot);
-                                setBugDesc("");
-                                setBugExpectedResult(item.testCase?.expectedResult ?? "");
-                                setBugSeverity("MEDIUM");
-                                setBugError(null);
-                                setBugPending(false);
-                              }}
-                            />
-                          ))}
+                          <ChevronRight
+                            size={12}
+                            style={{
+                              color: "#94A3B8",
+                              flexShrink: 0,
+                              transform: secOpen ? "rotate(90deg)" : "rotate(0deg)",
+                              transition: "transform 300ms ease-in-out",
+                            }}
+                          />
+                          <FolderOpen size={12} style={{ color: "#94A3B8", flexShrink: 0 }} />
+                          <span
+                            style={{
+                              fontSize: 12,
+                              fontWeight: 700,
+                              color: "#334155",
+                              textTransform: "none",
+                              letterSpacing: "0.05em",
+                            }}
+                          >
+                            {sec.name}
+                          </span>
                         </div>
-                      )}
-                    </div>
-                  );
-                })}
+
+                        {/* Isi Section — juga pakai grid-rows agar animasinya
+                            konsisten dengan kartu suite di atasnya. */}
+                        <div
+                          style={{
+                            display: "grid",
+                            gridTemplateRows: secOpen ? "1fr" : "0fr",
+                            opacity: secOpen ? 1 : 0,
+                            transition:
+                              "grid-template-rows 300ms ease-in-out, opacity 300ms ease-in-out",
+                          }}
+                        >
+                          <div style={{ overflow: "hidden", minHeight: 0 }}>
+                            <div
+                              style={{
+                                display: "flex",
+                                flexDirection: "column",
+                                gap: "0.6rem",
+                              }}
+                            >
+                              {sec.items.map((item) => (
+                                <RunItemCard
+                                  key={item.id}
+                                  item={item}
+                                  isCompleted={isCompleted}
+                                  canEdit={canEdit}
+                                  onOpenDetail={() => setModalItem(item)}
+                                  onOpenBugDetail={setBugDetailId}
+                                  onOpenBug={() => {
+                                    setBugItem(item);
+                                    setBugTitle(item.titleSnapshot);
+                                    setBugDesc("");
+                                    setBugExpectedResult(item.testCase?.expectedResult ?? "");
+                                    setBugSeverity("MEDIUM");
+                                    setBugError(null);
+                                    setBugPending(false);
+                                  }}
+                                />
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
-            )}
+            </div>
           </div>
         );
       })}
@@ -1237,7 +1339,7 @@ export function RunExecutor({
                 // Hitung TC per suite di project ini
                 const suiteCounts = new Map<string, number>();
                 for (const item of p.items) {
-                  const suiteName = item.testCase?.suiteName ?? "Tanpa Suite";
+                  const suiteName = item.testCase?.suite?.name ?? "Tanpa Suite";
                   suiteCounts.set(suiteName, (suiteCounts.get(suiteName) ?? 0) + 1);
                 }
                 return (
@@ -1274,20 +1376,16 @@ function RunItemCard({
   item,
   isCompleted,
   canEdit,
-  unlinkPending,
   onOpenDetail,
   onOpenBugDetail,
-  onUnlinkBug,
   onOpenBug,
 }: {
   item: RunResultItem;
   isCompleted: boolean;
   canEdit: boolean;
-  unlinkPending: string | null;
   onOpenDetail: () => void;
   /** Buka Bug Detail Modal untuk bug yang menempel di hasil eksekusi ini. */
   onOpenBugDetail: (bugId: string) => void;
-  onUnlinkBug: (bugId: string) => void;
   onOpenBug: () => void;
 }) {
   const attachedBugs = item.bugs ?? [];
@@ -1295,6 +1393,70 @@ function RunItemCard({
   const evidenceCount = item.attachments?.length ?? 0;
   /** Actual result hanya ditampilkan saat eksekusi gagal atau terblokir. */
   const showActualResult = item.status === "FAIL" || item.status === "BLOCKED";
+  /** Slot bug: ada bug ter-link, atau tautan "Buat Bug" (FAIL & belum ada bug). */
+  const hasBugLinks =
+    attachedBugs.length > 0 ||
+    (attachedBugs.length === 0 && item.status === "FAIL" && !isCompleted && canEdit);
+
+  /** Link bug polos (ikon + ID) — hover = underline sederhana, tanpa pill/box. */
+  const renderBugLinks = () => (
+    <>
+      {attachedBugs.map((b) => (
+        <button
+          key={b.id}
+          type="button"
+          title="Buka detail bug"
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpenBugDetail(b.id);
+          }}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "0.3rem",
+            padding: 0,
+            border: "none",
+            background: "transparent",
+            color: "#BE123C",
+            fontFamily: "var(--font-mono, monospace)",
+            fontSize: "0.6875rem",
+            fontWeight: 600,
+            cursor: "pointer",
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.textDecoration = "underline")}
+          onMouseLeave={(e) => (e.currentTarget.style.textDecoration = "none")}
+        >
+          <Bug size={12} /> {entityCode("BUG", b.id)}
+        </button>
+      ))}
+      {attachedBugs.length === 0 && item.status === "FAIL" && !isCompleted && canEdit && (
+        <button
+          type="button"
+          title="Buat bug dari hasil eksekusi ini"
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpenBug();
+          }}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "0.3rem",
+            padding: 0,
+            border: "none",
+            background: "transparent",
+            color: "#BE123C",
+            fontSize: "0.6875rem",
+            fontWeight: 600,
+            cursor: "pointer",
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.textDecoration = "underline")}
+          onMouseLeave={(e) => (e.currentTarget.style.textDecoration = "none")}
+        >
+          <Bug size={12} /> Buat Bug
+        </button>
+      )}
+    </>
+  );
   return (
     <div
       onClick={onOpenDetail}
@@ -1303,8 +1465,9 @@ function RunItemCard({
       style={{
         display: "flex",
         flexDirection: "column",
-        gap: "0.625rem",
-        padding: "1rem",
+        // Ringkas: jarak & padding dirapatkan supaya daftar TC lebih padat.
+        gap: "0.5rem",
+        padding: "0.75rem 1rem",
         borderRadius: 12,
         border: "1px solid #E2E8F0",
         background: "#fff",
@@ -1360,6 +1523,7 @@ function RunItemCard({
               {evidenceCount > 1 && evidenceCount}
             </button>
           )}
+
           {/* Indikator status pasif: perubahan status hanya lewat modal detail */}
           <span
             style={{
@@ -1381,132 +1545,54 @@ function RunItemCard({
         </div>
       </div>
 
-      {/* Blok 2 — hasil eksekusi. Hanya relevan saat eksekusi gagal/terblokir;
-          untuk PASS / SKIPPED / belum dieksekusi blok ini disembunyikan. */}
+      {/* Blok hasil eksekusi: deskripsi di kiri, link bug di POJOK KANAN
+          dalam container yang sama. Hanya tampil saat gagal/terblokir. */}
       {showActualResult && item.actualResult && (
         <div
           style={{
+            display: "flex",
+            alignItems: "flex-start",
+            justifyContent: "space-between",
+            gap: "0.75rem",
             fontSize: "0.75rem",
             color: "#475569",
             lineHeight: 1.55,
             background: "#F8FAFC",
             borderLeft: "2px solid #CBD5E1",
             paddingLeft: "0.75rem",
+            paddingRight: "0.6rem",
             paddingTop: "0.375rem",
             paddingBottom: "0.375rem",
             borderRadius: "0 6px 6px 0",
           }}
         >
-          <span style={{ fontWeight: 700, color: "#334155" }}>Actual Result: </span>
-          {item.actualResult}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ fontWeight: 700, color: "#334155" }}>Actual Result: </span>
+            {item.actualResult}
+          </div>
+
+          {hasBugLinks && (
+            <div
+              style={{
+                flexShrink: 0,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "flex-end",
+                gap: "0.5rem",
+                flexWrap: "wrap",
+              }}
+            >
+              {renderBugLinks()}
+            </div>
+          )}
         </div>
       )}
 
-      {/* Blok 3 — bug ticket yang ter-link ke hasil eksekusi ini */}
-      {item.status === "FAIL" && canEdit && (
-        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
-          {attachedBugs.length > 0 ? (
-            attachedBugs.map((b) => {
-              const bugCode = entityCode("BUG", b.id);
-              return (
-                <span key={b.id} style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
-                  {/* Badge -> Bug Detail Modal (bukan lagi lompat ke /bugs) */}
-                  <button
-                    type="button"
-                    title="Buka detail bug"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onOpenBugDetail(b.id);
-                    }}
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: "0.375rem",
-                      padding: "0.25rem 0.625rem",
-                      background: "#FFF1F2",
-                      border: "1px solid #FECDD3",
-                      color: "#BE123C",
-                      borderRadius: 6,
-                      fontFamily: "var(--font-mono, monospace)",
-                      fontSize: "0.6875rem",
-                      fontWeight: 500,
-                      cursor: "pointer",
-                    }}
-                    onMouseEnter={(e) => (e.currentTarget.style.background = "#FFE4E6")}
-                    onMouseLeave={(e) => (e.currentTarget.style.background = "#FFF1F2")}
-                  >
-                    <Bug size={12} /> {bugCode}
-                  </button>
-                  {b.externalLink && (
-                    <a
-                      href={b.externalLink}
-                      target="_blank"
-                      rel="noreferrer"
-                      title="Buka link eksternal bug"
-                      onClick={(e) => e.stopPropagation()}
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        color: "#BE123C",
-                        opacity: 0.7,
-                      }}
-                    >
-                      <ExternalLink size={12} />
-                    </a>
-                  )}
-                  {!isCompleted && (
-                    <button
-                      type="button"
-                      title="Lepas bug dari hasil run ini"
-                      disabled={unlinkPending === b.id}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onUnlinkBug(b.id);
-                      }}
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        padding: 2,
-                        border: "none",
-                        borderRadius: 4,
-                        background: "transparent",
-                        color: "#BE123C",
-                        cursor: unlinkPending === b.id ? "progress" : "pointer",
-                      }}
-                      onMouseEnter={(e) => (e.currentTarget.style.background = "#FFE4E6")}
-                      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-                    >
-                      <X size={12} />
-                    </button>
-                  )}
-                </span>
-              );
-            })
-          ) : (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onOpenBug();
-              }}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "0.35rem",
-                padding: "0.35rem 0.85rem",
-                borderRadius: 8,
-                border: "1px solid var(--danger)",
-                background: "#fff",
-                color: "var(--danger)",
-                fontWeight: 600,
-                fontSize: "0.82rem",
-                cursor: "pointer",
-              }}
-            >
-              <Bug size={13} /> Buat Bug
-            </button>
-          )}
+      {/* Kalau box Actual Result tidak tampil (mis. TC sudah Passed karena
+          bug-nya selesai), link bug tetap muncul sebagai teks polos. */}
+      {!(showActualResult && item.actualResult) && hasBugLinks && (
+        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+          {renderBugLinks()}
         </div>
       )}
     </div>
@@ -2257,6 +2343,17 @@ function BugModal({
   );
 }
 
+/** Batas lebar kolom kiri split panel modal eksekusi (persen dari lebar modal). */
+const SPLIT_MIN_PCT = 40;
+const SPLIT_MAX_PCT = 70;
+/** Lebar area drag divider (px). */
+const SPLIT_DIVIDER_W = 8;
+/** Durasi transisi buka/tutup modal eksekusi (ms). Animasi keluar ditahan
+ *  selama ini sebelum komponen benar-benar di-unmount. */
+const MODAL_TRANSITION_MS = 300;
+/** Jepit lebar kolom kiri ke rentang yang diizinkan. */
+const clampSplit = (pct: number) => Math.min(SPLIT_MAX_PCT, Math.max(SPLIT_MIN_PCT, pct));
+
 function ExecutionModal({
   item,
   canEdit,
@@ -2292,13 +2389,41 @@ function ExecutionModal({
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
+  /**
+   * Animasi buka/tutup. `entered` dipasang setelah frame pertama benar-benar
+   * digambar — pakai DOUBLE rAF, karena satu rAF bisa ter-batch dengan commit
+   * React sehingga frame opacity-0 tidak pernah dilukis dan transisinya diam.
+   * `closing` menahan modal tetap ter-mount sampai animasi keluar selesai.
+   */
+  const [entered, setEntered] = useState(false);
+  const [closing, setClosing] = useState(false);
+  const shown = entered && !closing;
+
+  useEffect(() => {
+    let raf2 = 0;
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => setEntered(true));
+    });
+    return () => {
+      cancelAnimationFrame(raf1);
+      cancelAnimationFrame(raf2);
+    };
+  }, []);
+
+  // Baru benar-benar unmount (via onClose) setelah transisi keluar selesai.
+  useEffect(() => {
+    if (!closing) return;
+    const t = setTimeout(onClose, MODAL_TRANSITION_MS);
+    return () => clearTimeout(t);
+  }, [closing, onClose]);
+
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") setClosing(true);
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [onClose]);
+  }, []);
 
   useEffect(() => {
     const prev = document.body.style.overflow;
@@ -2321,6 +2446,57 @@ function ExecutionModal({
    */
   const [linkedBugs, setLinkedBugs] = useState<BugRow[]>([]);
   const [bugsLoading, setBugsLoading] = useState(true);
+  // Accordion Bug History — default tertutup agar hemat ruang visual.
+  const [bugHistoryOpen, setBugHistoryOpen] = useState(false);
+  // Status tombol "Salin" Test Data (kembali normal setelah 2 detik).
+  const [testDataCopied, setTestDataCopied] = useState(false);
+
+  /**
+   * Split panel yang bisa di-resize: lebar kolom kiri dalam persen, dibatasi
+   * SPLIT_MIN_PCT–SPLIT_MAX_PCT agar layout tetap proporsional.
+   */
+  const [splitPct, setSplitPct] = useState(58);
+  const [dragging, setDragging] = useState(false);
+  // Divider "aktif" = sedang di-hover atau di-fokus (keyboard).
+  const [dividerActive, setDividerActive] = useState(false);
+  const gridRef = useRef<HTMLDivElement>(null);
+  // Handle panel Evidence (mode deferred): commit saat Simpan, reset saat Batal.
+  const evidenceRef = useRef<AttachmentsPanelHandle>(null);
+
+  // Pantau pergeseran mouse real-time selama drag; berhenti saat mouseup.
+  useEffect(() => {
+    if (!dragging) return;
+    const onMove = (e: MouseEvent) => {
+      const el = gridRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      if (!rect.width) return;
+      // Kurangi setengah lebar divider supaya panel tidak "melompat" saat
+      // divider mulai di-grab (titik acuan = tengah divider).
+      const pct = ((e.clientX - rect.left - SPLIT_DIVIDER_W / 2) / rect.width) * 100;
+      setSplitPct(clampSplit(pct));
+    };
+    const onUp = () => setDragging(false);
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, [dragging]);
+
+  // Saat drag: kunci kursor & matikan seleksi teks supaya tidak ikut tersorot.
+  useEffect(() => {
+    if (!dragging) return;
+    const prevCursor = document.body.style.cursor;
+    const prevSelect = document.body.style.userSelect;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    return () => {
+      document.body.style.cursor = prevCursor;
+      document.body.style.userSelect = prevSelect;
+    };
+  }, [dragging]);
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -2351,12 +2527,17 @@ function ExecutionModal({
     );
   }, [bugPatch]);
 
+  /**
+   * Label section standar modal: text-xs / bold / slate-500 / uppercase /
+   * tracking-wider. Dipakai semua heading section agar hierarki label vs isi
+   * konsisten.
+   */
   const sectionLabel: React.CSSProperties = {
-    fontSize: "0.72rem",
-    fontWeight: 600,
-    color: "#6B7280",
-    textTransform: "none",
-    letterSpacing: "0.06em",
+    fontSize: "0.75rem",
+    fontWeight: 700,
+    color: "#64748B",
+    textTransform: "uppercase",
+    letterSpacing: "0.05em",
     margin: "0 0 0.4rem",
   };
 
@@ -2372,6 +2553,70 @@ function ExecutionModal({
     item.status !== "NOT_RUN" ||
     (item.actualResult ?? "").trim() !== "" ||
     (item.notes ?? "").trim() !== "";
+
+  /**
+   * Mode modal: TC yang SUDAH pernah dieksekusi dibuka dalam mode view
+   * (read-only) lebih dulu — QA harus klik "Edit" untuk mengubahnya. TC yang
+   * belum pernah dieksekusi langsung masuk mode edit.
+   */
+  const [isEditing, setIsEditing] = useState(!hasSavedExecution);
+  /** Efektif editable: butuh izin edit (canEdit) DAN sedang di mode edit. */
+  const editable = canEdit && isEditing;
+
+  /**
+   * Form pelaporan bug (mode Fail) hanya relevan saat MENGEDIT. Di mode view
+   * cukup tampilkan hasil eksekusi sebagai teks polos tanpa input box.
+   */
+  const showBugForm = isFail && editable;
+
+  /**
+   * Teks polos hasil eksekusi untuk mode view — tanpa border/background/shadow.
+   * Nilai kosong jatuh ke placeholder italic muted.
+   */
+  const renderResultText = (value: string | null | undefined, empty: string) =>
+    (value ?? "").trim() ? (
+      <p
+        style={{
+          margin: 0,
+          fontSize: "0.75rem",
+          color: "#1E293B",
+          whiteSpace: "pre-wrap",
+          lineHeight: 1.6,
+        }}
+      >
+        {value}
+      </p>
+    ) : (
+      <p style={{ margin: 0, fontSize: "0.75rem", color: "#94A3B8", fontStyle: "italic" }}>
+        {empty}
+      </p>
+    );
+
+  /** Salin Test Data ke clipboard (tombol ringkas di samping nilainya). */
+  const copyTestData = async () => {
+    const value = tc?.testData ?? "";
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      setTestDataCopied(true);
+      setTimeout(() => setTestDataCopied(false), 2000);
+    } catch {
+      // clipboard tidak tersedia — abaikan
+    }
+  };
+
+  /** Tombol "Batal": buang draft form + evidence tertunda, kembali ke mode view. */
+  const cancelEdit = () => {
+    // Evidence yang belum di-commit dibuang; tidak ada API yang pernah dipanggil.
+    evidenceRef.current?.reset();
+    setStatus(item.status);
+    setActualResult(item.actualResult ?? "");
+    setNotes(item.notes ?? "");
+    setBugTitle(`[BUG] - ${item.titleSnapshot}`);
+    setBugSeverity("MEDIUM");
+    setMsg(null);
+    setIsEditing(false);
+  };
 
   const bugLabelStyle: React.CSSProperties = {
     display: "block",
@@ -2422,6 +2667,18 @@ function ExecutionModal({
     }
 
     setSaving(true);
+
+    // Evidence (mode edit) baru diunggah/dihapus ke server saat Simpan diklik.
+    // Kalau gagal, modal tetap terbuka supaya QA bisa mengulang.
+    if (editable) {
+      const ev = await evidenceRef.current?.commit();
+      if (ev && !ev.ok) {
+        setSaving(false);
+        setMsg(ev.error ?? "Gagal menyimpan evidence.");
+        return;
+      }
+    }
+
     const res = await onSave({
       status,
       actualResult,
@@ -2435,8 +2692,8 @@ function ExecutionModal({
       setMsg(res.error);
       return;
     }
-    // Sukses: tutup modal otomatis (data sudah dipatch ke daftar induk).
-    onClose();
+    // Sukses: tutup modal dengan animasi (data sudah dipatch ke daftar induk).
+    setClosing(true);
   };
 
   return createPortal(
@@ -2454,36 +2711,77 @@ function ExecutionModal({
         padding: "1rem",
         background: "rgba(0, 0, 0, 0.5)",
         backdropFilter: "blur(4px)",
+        // Backdrop: fade in/out.
+        opacity: shown ? 1 : 0,
+        transition: "opacity 300ms ease-out",
       }}
-      onClick={onClose}
+      onClick={() => setClosing(true)}
     >
       <div
+        ref={gridRef}
         style={{
+          position: "relative",
           width: "100%",
-          maxWidth: 640,
+          maxWidth: 1024,
           maxHeight: "85vh",
-          display: "flex",
-          flexDirection: "column",
+          display: "grid",
+          // Tiga track: kolom kiri (persen, bisa di-resize) — divider — kanan.
+          gridTemplateColumns: `${splitPct}% ${SPLIT_DIVIDER_W}px minmax(0, 1fr)`,
+          gridTemplateRows: "minmax(0, 1fr)",
           background: "#fff",
           borderRadius: 12,
           boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)",
           border: "1px solid var(--border)",
           overflow: "hidden",
-          animation: "modalIn 0.18s ease-out",
+          // Kotak modal: fade + scale + naik sedikit (translate-y-2 -> 0).
+          opacity: shown ? 1 : 0,
+          transform: shown ? "translateY(0) scale(1)" : "translateY(8px) scale(0.95)",
+          transition: "opacity 300ms ease-out, transform 300ms ease-out",
+          willChange: "opacity, transform",
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
-        <div
+        {/* Tombol tutup — melayang di sudut kanan atas modal. */}
+        <button
+          type="button"
+          aria-label="Tutup"
+          onClick={() => setClosing(true)}
           style={{
-            flexShrink: 0,
+            position: "absolute",
+            top: 16,
+            right: 16,
+            zIndex: 2,
             display: "flex",
-            alignItems: "flex-start",
-            justifyContent: "space-between",
-            gap: "0.75rem",
-            padding: "1.25rem 1.5rem",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "0.25rem",
+            lineHeight: 1,
+            border: "none",
+            background: "transparent",
+            color: "#64748B",
+            borderRadius: 6,
+            cursor: "pointer",
           }}
         >
+          <X size={14} />
+        </button>
+
+        {/* ===== KOLOM KIRI — info detail Test Case =====
+            Berisi ID & judul, metadata, skenario, expected result, dan test
+            steps. Lebarnya bisa diubah lewat divider di sebelah kanannya. */}
+        <div
+          style={{
+            gridColumn: "1",
+            minWidth: 0,
+            minHeight: 0,
+            overflowY: "auto",
+            padding: "1.5rem",
+            display: "flex",
+            flexDirection: "column",
+            gap: "1.25rem",
+          }}
+        >
+          {/* ID + Judul Test Case */}
           <div style={{ minWidth: 0 }}>
             {tc && (
               <span style={{ fontFamily: "var(--font-mono, monospace)", fontSize: "0.72rem", color: "#9CA3AF", fontWeight: 500 }}>
@@ -2494,46 +2792,7 @@ function ExecutionModal({
               {item.titleSnapshot}
             </h2>
           </div>
-          <button
-            type="button"
-            aria-label="Tutup"
-            onClick={onClose}
-            style={{
-              width: 30,
-              height: 30,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              border: "none",
-              background: "transparent",
-              color: "var(--text-muted)",
-              borderRadius: 6,
-              cursor: "pointer",
-              flexShrink: 0,
-            }}
-          >
-            <X size={18} />
-          </button>
-        </div>
 
-        {/* Garis pemisah di bawah judul modal — sengaja TIDAK full-width:
-            diberi margin kiri-kanan 1.5rem (px-6) agar selaras batas kontainer. */}
-        <div
-          aria-hidden="true"
-          style={{ flexShrink: 0, height: 1, background: "var(--border)", margin: "0 1.5rem" }}
-        />
-
-        {/* Bagian STATIS: metadata, skenario, expected result, dan test steps.
-            Sengaja tidak ikut scroll supaya konteks TC selalu terlihat. */}
-        <div
-          style={{
-            flexShrink: 0,
-            padding: "1.25rem 1.5rem 0",
-            display: "flex",
-            flexDirection: "column",
-            gap: "1.25rem",
-          }}
-        >
           {/* Metadata */}
           <div
             style={{
@@ -2547,20 +2806,20 @@ function ExecutionModal({
             }}
           >
             <div>
-              <span style={{ display: "block", color: "#9CA3AF", fontWeight: 500, fontSize: "0.72rem", marginBottom: "0.25rem" }}>Priority</span>
-              <span style={{ fontWeight: 600, color: "#1F2937", fontSize: "0.82rem" }}>{tc?.priority ?? "—"}</span>
+              <span style={{ display: "block", color: "#94A3B8", fontWeight: 500, fontSize: "0.6875rem", marginBottom: "0.25rem" }}>Priority</span>
+              <span style={{ fontWeight: 600, color: "#1E293B", fontSize: "0.75rem" }}>{tc?.priority ?? "—"}</span>
             </div>
             <div>
-              <span style={{ display: "block", color: "#9CA3AF", fontWeight: 500, fontSize: "0.72rem", marginBottom: "0.25rem" }}>Status</span>
-              <span style={{ fontWeight: 600, color: "#1F2937", fontSize: "0.82rem" }}>{tc?.status ?? "—"}</span>
+              <span style={{ display: "block", color: "#94A3B8", fontWeight: 500, fontSize: "0.6875rem", marginBottom: "0.25rem" }}>Status</span>
+              <span style={{ fontWeight: 600, color: "#1E293B", fontSize: "0.75rem" }}>{tc?.status ?? "—"}</span>
             </div>
             <div>
-              <span style={{ display: "block", color: "#9CA3AF", fontWeight: 500, fontSize: "0.72rem", marginBottom: "0.25rem" }}>Author</span>
-              <span style={{ fontWeight: 600, color: "#1F2937", fontSize: "0.82rem" }}>{tc?.createdBy?.name ?? "—"}</span>
+              <span style={{ display: "block", color: "#94A3B8", fontWeight: 500, fontSize: "0.6875rem", marginBottom: "0.25rem" }}>Author</span>
+              <span style={{ fontWeight: 600, color: "#1E293B", fontSize: "0.75rem" }}>{tc?.createdBy?.name ?? "—"}</span>
             </div>
             <div>
-              <span style={{ display: "block", color: "#9CA3AF", fontWeight: 500, fontSize: "0.72rem", marginBottom: "0.25rem" }}>Dibuat</span>
-              <span style={{ fontWeight: 500, color: "#374151", fontSize: "0.82rem" }}>
+              <span style={{ display: "block", color: "#94A3B8", fontWeight: 500, fontSize: "0.6875rem", marginBottom: "0.25rem" }}>Dibuat</span>
+              <span style={{ fontWeight: 600, color: "#1E293B", fontSize: "0.75rem" }}>
                 {tc?.createdAt
                   ? new Date(tc.createdAt).toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" })
                   : "—"}
@@ -2572,9 +2831,85 @@ function ExecutionModal({
           {tc?.scenario && (
             <div>
               <h4 style={sectionLabel}>Deskripsi / Skenario</h4>
-              <p style={{ margin: 0, fontSize: "0.88rem", color: "#374151", whiteSpace: "pre-wrap", lineHeight: 1.6 }}>
+              <p style={{ margin: 0, fontSize: "0.75rem", color: "#1E293B", whiteSpace: "pre-wrap", lineHeight: 1.6 }}>
                 {tc.scenario}
               </p>
+            </div>
+          )}
+
+          {/* Precondition — ditampilkan setelah Deskripsi/Skenario. */}
+          {tc?.precondition?.trim() && (
+            <div>
+              <h4 style={sectionLabel}>Precondition</h4>
+              <ul
+                style={{
+                  margin: 0,
+                  background: "rgba(254, 243, 199, 0.4)",
+                  border: "1px solid rgba(252, 211, 77, 0.5)",
+                  borderRadius: 8,
+                  padding: "0.7rem 1rem 0.7rem 1.8rem",
+                  fontSize: "0.75rem",
+                  color: "#1E293B",
+                  lineHeight: 1.6,
+                }}
+              >
+                {tc.precondition
+                  .split("\n")
+                  // Buang bullet manual ("•", "-", "*") supaya tidak dobel
+                  // dengan marker <li> bawaan browser.
+                  .map((line) => line.trim().replace(/^[•\-*]\s*/, "").trim())
+                  .filter(Boolean)
+                  .map((line, i) => (
+                    <li key={i}>{line}</li>
+                  ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Test Data — parameter data uji (key-value / list) apa adanya.
+              Teks polos (light) + tombol salin ringkas, selaras dengan
+              Deskripsi & Expected Result. */}
+          {tc?.testData?.trim() && (
+            <div>
+              <h4 style={sectionLabel}>Test Data</h4>
+              <div style={{ display: "flex", alignItems: "flex-start", gap: "0.5rem" }}>
+                <p
+                  style={{
+                    margin: 0,
+                    flex: 1,
+                    minWidth: 0,
+                    fontSize: "0.75rem",
+                    color: "#1E293B",
+                    whiteSpace: "pre-wrap",
+                    lineHeight: 1.6,
+                  }}
+                >
+                  {tc.testData}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void copyTestData()}
+                  title={testDataCopied ? "Tersalin" : "Salin Test Data"}
+                  aria-label="Salin Test Data"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexShrink: 0,
+                    padding: 0,
+                    border: "none",
+                    background: "transparent",
+                    color: "#64748B",
+                    cursor: "pointer",
+                    lineHeight: 1,
+                    transition: "color 0.15s ease",
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.color = "#0F172A")}
+                  onMouseLeave={(e) => (e.currentTarget.style.color = "#64748B")}
+                >
+                  {testDataCopied ? <Check size={14} /> : <Copy size={14} />}
+                </button>
+              </div>
             </div>
           )}
 
@@ -2582,7 +2917,7 @@ function ExecutionModal({
           {tc?.expectedResult && (
             <div>
               <h4 style={sectionLabel}>Expected Result</h4>
-              <p style={{ margin: 0, fontSize: "0.88rem", color: "#374151", whiteSpace: "pre-wrap", lineHeight: 1.6 }}>
+              <p style={{ margin: 0, fontSize: "0.75rem", color: "#1E293B", whiteSpace: "pre-wrap", lineHeight: 1.6 }}>
                 {tc.expectedResult}
               </p>
             </div>
@@ -2614,95 +2949,105 @@ function ExecutionModal({
           )}
         </div>
 
-        {/* Frame EKSEKUSI — flex child yang boleh menyusut (flex:1 + minHeight:0)
-            supaya kartu di dalamnya tidak meluap melebihi tinggi modal.
-            Scroll-nya ada DI DALAM kartu (lihat isi form eksekusi). */}
+        {/* ===== DIVIDER INTERAKTIF — drag kiri/kanan untuk ubah lebar kolom =====
+            Area drag 8px dengan garis 2px di tengahnya; menyala amber saat
+            hover/drag. Bisa juga digeser dengan tombol panah saat difokus. */}
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Ubah lebar panel"
+          aria-valuenow={Math.round(splitPct)}
+          aria-valuemin={SPLIT_MIN_PCT}
+          aria-valuemax={SPLIT_MAX_PCT}
+          tabIndex={0}
+          onMouseDown={(e) => {
+            e.preventDefault();
+            setDragging(true);
+          }}
+          onMouseEnter={() => setDividerActive(true)}
+          onMouseLeave={() => setDividerActive(false)}
+          onFocus={() => setDividerActive(true)}
+          onBlur={() => setDividerActive(false)}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowLeft") {
+              e.preventDefault();
+              setSplitPct((p) => clampSplit(p - 2));
+            }
+            if (e.key === "ArrowRight") {
+              e.preventDefault();
+              setSplitPct((p) => clampSplit(p + 2));
+            }
+          }}
+          style={{
+            gridColumn: "2",
+            display: "flex",
+            justifyContent: "center",
+            cursor: "col-resize",
+            userSelect: "none",
+            touchAction: "none",
+            outline: "none",
+          }}
+        >
+          {/* Garis tipis indikator — amber saat hover/drag/fokus. */}
+          <div
+            aria-hidden="true"
+            style={{
+              width: 2,
+              height: "100%",
+              background: dragging || dividerActive ? "#FBBF24" : "#E2E8F0",
+              transition: "background-color 0.15s ease",
+            }}
+          />
+        </div>
+
+        {/* ===== KOLOM KANAN — panel aksi eksekusi QA =====
+            Latar tipis memisahkannya dari kolom info (batasnya kini divider
+            interaktif). Judul & tombol status tetap di atas (tidak ikut
+            scroll); isi form + tombol simpan berada di bawahnya. */}
         <div
           style={{
-            flex: 1,
+            gridColumn: "3",
+            minWidth: 0,
             minHeight: 0,
             display: "flex",
             flexDirection: "column",
-            padding: "1.25rem 1.5rem",
+            background: "rgba(248, 250, 252, 0.6)",
           }}
         >
-          {/* Execution form — satu-satunya area yang scroll (flex:1 +
-              minHeight:0) supaya bagian statis di atas & footer tetap di tempat. */}
-          <div
-            style={{
-              background: "rgba(248, 250, 252, 0.8)",
-              border: "1px solid rgba(229, 231, 235, 0.8)",
-              borderRadius: 8,
-              padding: "1rem",
-              display: "flex",
-              flexDirection: "column",
-              // Tanpa `gap`: jarak antar bagian diatur margin masing-masing,
-              // supaya judul "Eksekusi" tidak berjarak terlalu jauh dari tombol.
-              // Ikut menyusut agar isi yang scroll punya batas tinggi nyata.
-              flex: 1,
-              minHeight: 0,
-              overflow: "hidden",
-            }}
-          >
-            <h4 style={{ ...sectionLabel, flexShrink: 0 }}>Eksekusi</h4>
-
-            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", flexShrink: 0 }}>
-              {STATUSES.map((s) => {
-                const Icon = s.icon;
-                const isActive = status === s.value;
-                return (
-                  <button
-                    key={s.value}
-                    type="button"
-                    disabled={!canEdit}
-                    aria-pressed={isActive}
-                    title={isActive ? "Klik lagi untuk membatalkan (Untested)" : `Tandai ${s.label}`}
-                    onClick={() => setStatus(isActive ? "NOT_RUN" : s.value)}
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: "0.3rem",
-                      padding: "0.35rem 0.9rem",
-                      borderRadius: 6,
-                      // Tidak aktif: border tipis senada (lembut). Aktif: solid penuh.
-                      border: `1px solid ${isActive ? s.color : `${s.color}4D`}`,
-                      background: isActive ? s.activeBg : s.bg,
-                      color: isActive ? "#fff" : s.color,
-                      fontSize: "0.75rem",
-                      fontWeight: 600,
-                      cursor: canEdit ? "pointer" : "not-allowed",
-                      transition: "background-color 0.15s ease, color 0.15s ease",
-                    }}
-                  >
-                    <Icon size={14} /> {s.label}
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Garis pemisah inset (bukan full-width) antara tombol status dan
-                input Actual Result. Ditaruh DI LUAR area scroll supaya tetap
-                diam menemani tombol status. */}
-            <div
-              aria-hidden="true"
-              style={{ flexShrink: 0, height: 1, background: "#E2E8F0", margin: "0.6rem 0 0.9rem" }}
-            />
-
-            {/* Isi eksekusi — HANYA bagian ini yang scroll. Header kartu &
-                tombol status di atasnya tetap di tempat (flexShrink: 0). */}
-            <div
+          {/* Judul panel eksekusi — tetap di atas, tidak ikut scroll. */}
+          <div style={{ flexShrink: 0, padding: "1.25rem 1.25rem 0" }}>
+            <h4
               style={{
-                flex: 1,
-                minHeight: 0,
-                overflowY: "auto",
-                display: "flex",
-                flexDirection: "column",
-                gap: "0.9rem",
+                ...sectionLabel,
+                fontSize: "0.875rem",
+                fontWeight: 700,
+                textTransform: "none",
+                margin: "0 0 0.6rem",
               }}
             >
-            {isFail ? (
+              Eksekusi
+            </h4>
+
+            {/* Garis pemisah tipis (inset) antara judul panel dan isi form. */}
+            <div aria-hidden="true" style={{ flexShrink: 0, height: 1, background: "#E2E8F0" }} />
+          </div>
+
+          {/* Isi eksekusi — HANYA bagian ini yang scroll. Judul panel &
+              tombol status di atasnya tetap di tempat (flexShrink: 0). */}
+          <div
+            style={{
+              flex: 1,
+              minHeight: 0,
+              overflowY: "auto",
+              padding: "0.9rem 1.25rem 1.25rem",
+              display: "flex",
+              flexDirection: "column",
+              gap: "0.9rem",
+            }}
+          >
+            {showBugForm ? (
               <>
-                {/* Bug Reporting Form: tampil otomatis ketika status Fail */}
+                {/* Bug Reporting Form: hanya di mode edit, saat status Fail */}
                 {hasLinkedBug ? (
                   <div
                     style={{
@@ -2734,7 +3079,7 @@ function ExecutionModal({
                         type="text"
                         value={bugTitle}
                         onChange={(e) => setBugTitle(e.target.value)}
-                        disabled={!canEdit}
+                        disabled={!editable}
                         placeholder="Ringkasan singkat isu/bug yang ditemukan..."
                         style={{ ...bugFieldStyle, height: 36 }}
                       />
@@ -2745,7 +3090,7 @@ function ExecutionModal({
                       <Select
                         value={bugSeverity}
                         onChange={(e) => setBugSeverity(e.target.value)}
-                        disabled={!canEdit}
+                        disabled={!editable}
                         ariaLabel="Severity bug"
                       >
                         {SEVERITIES.map((s) => (
@@ -2765,7 +3110,7 @@ function ExecutionModal({
                   <ListTextarea
                     value={actualResult}
                     onChange={setActualResult}
-                    disabled={!canEdit}
+                    disabled={!editable}
                     rows={4}
                     ariaLabel="Actual Result / Reproduction Steps"
                     placeholder="Jelaskan hasil aktual dan langkah reproduksi ditemukannya bug..."
@@ -2776,139 +3121,200 @@ function ExecutionModal({
             ) : (
               <>
                 <div>
-                  <label style={{ display: "block", fontSize: "0.72rem", fontWeight: 600, color: "#4B5563", marginBottom: "0.3rem" }}>
+                  <label style={{ ...sectionLabel, display: "block" }}>
                     Actual Result
                   </label>
-                  <ListTextarea
-                    value={actualResult}
-                    onChange={setActualResult}
-                    disabled={!canEdit}
-                    rows={2}
-                    ariaLabel="Actual Result"
-                    placeholder="Tulis hasil aktual eksekusi..."
-                    style={execFieldStyle}
-                  />
+                  {editable ? (
+                    <ListTextarea
+                      value={actualResult}
+                      onChange={setActualResult}
+                      rows={2}
+                      ariaLabel="Actual Result"
+                      placeholder="Tulis hasil aktual eksekusi..."
+                      style={execFieldStyle}
+                    />
+                  ) : (
+                    /* Mode view: teks polos tanpa border/background. */
+                    renderResultText(actualResult, "Belum ada hasil aktual.")
+                  )}
                 </div>
 
                 <div>
-                  <label style={{ display: "block", fontSize: "0.72rem", fontWeight: 600, color: "#4B5563", marginBottom: "0.3rem" }}>
+                  <label style={{ ...sectionLabel, display: "block" }}>
                     Notes
                   </label>
-                  <ListTextarea
-                    value={notes}
-                    onChange={setNotes}
-                    disabled={!canEdit}
-                    rows={2}
-                    ariaLabel="Notes"
-                    placeholder="Catatan tambahan..."
-                    style={execFieldStyle}
-                  />
+                  {editable ? (
+                    <ListTextarea
+                      value={notes}
+                      onChange={setNotes}
+                      rows={2}
+                      ariaLabel="Notes"
+                      placeholder="Catatan tambahan..."
+                      style={execFieldStyle}
+                    />
+                  ) : (
+                    renderResultText(notes, "Tidak ada catatan.")
+                  )}
                 </div>
               </>
             )}
 
             {/* Evidence: screenshot/video untuk hasil eksekusi ini */}
             <div style={{ marginTop: "0.9rem" }}>
-              <div style={{ fontSize: "0.72rem", fontWeight: 700, color: "#64748B", marginBottom: "0.4rem" }}>
-                Evidence (Screenshot / Video)
-              </div>
+              <div style={{ ...sectionLabel, margin: "0 0 0.4rem" }}>Evidence</div>
               <AttachmentsPanel
                 owner={{ testRunResultId: item.id }}
                 attachments={item.attachments ?? []}
-                canEdit={canEdit}
+                canEdit={editable}
                 onChange={onAttachmentsChange}
+                handleRef={evidenceRef}
+                deferred
                 compact
+                plain
               />
             </div>
 
             {/* Riwayat bug Test Case ini — termasuk yang sudah resolved/closed,
-                supaya jejak bug tidak hilang setelah TC-nya jadi Pass. */}
+                supaya jejak bug tidak hilang setelah TC-nya jadi Pass.
+                Berbentuk accordion (default tertutup) agar hemat ruang. */}
             <div style={{ marginTop: "0.9rem" }}>
-              <div style={{ fontSize: "0.72rem", fontWeight: 700, color: "#64748B", marginBottom: "0.4rem" }}>
-                Bug History
-              </div>
+              <button
+                type="button"
+                aria-expanded={bugHistoryOpen}
+                onClick={() => setBugHistoryOpen((v) => !v)}
+                title={bugHistoryOpen ? "Tutup riwayat bug" : "Buka riwayat bug"}
+                style={{
+                  ...sectionLabel,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.35rem",
+                  width: "100%",
+                  padding: 0,
+                  border: "none",
+                  background: "transparent",
+                  cursor: "pointer",
+                }}
+              >
+                <ChevronDown
+                  size={13}
+                  aria-hidden="true"
+                  style={{
+                    flexShrink: 0,
+                    transform: bugHistoryOpen ? "rotate(180deg)" : "rotate(0deg)",
+                    transition: "transform 300ms ease-in-out",
+                  }}
+                />
+                Bug History{!bugsLoading && linkedBugs.length > 0 ? ` (${linkedBugs.length})` : ""}
+              </button>
 
-              {bugsLoading ? (
-                <div style={{ fontSize: "0.75rem", color: "#94A3B8" }}>Memuat riwayat bug…</div>
-              ) : linkedBugs.length === 0 ? (
-                <div style={{ fontSize: "0.75rem", color: "#94A3B8", fontStyle: "italic" }}>
-                  Belum ada bug yang pernah dilaporkan untuk test case ini.
-                </div>
-              ) : (
-                <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
-                  {linkedBugs.map((b) => {
-                    const st = BUG_STATUS_BADGE[b.status];
-                    return (
-                      <div
-                        key={b.id}
-                        style={{
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: "0.2rem",
-                          padding: "0.5rem 0.65rem",
-                          border: "1px solid #E2E8F0",
-                          borderRadius: 8,
-                          background: "#fff",
-                        }}
-                      >
-                        {/* Baris 1 — ID bug (kiri) + severity & status (kanan) */}
-                        <div
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                            gap: "0.5rem",
-                          }}
-                        >
-                          <button
-                            type="button"
-                            onClick={() => onOpenBugDetail?.(b.id)}
-                            title="Buka detail bug"
+              {/* Buka/tutup pakai trik `grid-template-rows` 0fr ↔ 1fr supaya
+                  halus — konten tetap ter-mount, tidak muncul/hilang patah. */}
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateRows: bugHistoryOpen ? "1fr" : "0fr",
+                  opacity: bugHistoryOpen ? 1 : 0,
+                  transition: "grid-template-rows 300ms ease-in-out, opacity 300ms ease-in-out",
+                }}
+              >
+                <div
+                  style={{
+                    overflow: "hidden",
+                    minHeight: 0,
+                    paddingTop: bugHistoryOpen ? "0.5rem" : 0,
+                    transition: "padding-top 300ms ease-in-out",
+                  }}
+                >
+                  {bugsLoading ? (
+                    <div style={{ fontSize: "0.75rem", color: "#94A3B8" }}>
+                      Memuat riwayat bug…
+                    </div>
+                  ) : linkedBugs.length === 0 ? (
+                    <div style={{ fontSize: "0.75rem", color: "#94A3B8", fontStyle: "italic" }}>
+                      Belum ada bug yang pernah dilaporkan untuk test case ini.
+                    </div>
+                  ) : (
+                    /* List ringkas: SATU baris per bug (ID · judul · severity ·
+                       status), dengan batas tinggi + scroll agar tidak memanjang. */
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "0.3rem",
+                        maxHeight: "12rem",
+                        overflowY: "auto",
+                      }}
+                    >
+                      {linkedBugs.map((b) => {
+                        const st = BUG_STATUS_BADGE[b.status];
+                        // Metadata tetap dibawa sebagai tooltip judul — baris
+                        // metadatanya sendiri sudah dihapus agar tetap 1 baris.
+                        const meta = [
+                          new Date(b.createdAt).toLocaleDateString("id-ID", {
+                            day: "2-digit",
+                            month: "short",
+                            year: "numeric",
+                          }),
+                          b.resolvedAt
+                            ? `Selesai ${new Date(b.resolvedAt).toLocaleDateString("id-ID", {
+                                day: "2-digit",
+                                month: "short",
+                                year: "numeric",
+                              })}`
+                            : "",
+                          b.run ? b.run.name : "",
+                        ]
+                          .filter(Boolean)
+                          .join(" · ");
+
+                        return (
+                          <div
+                            key={b.id}
                             style={{
-                              display: "inline-flex",
+                              display: "flex",
                               alignItems: "center",
-                              gap: "0.3rem",
-                              border: "none",
-                              background: "none",
-                              padding: 0,
-                              color: "#BE123C",
-                              fontFamily: "var(--font-mono, monospace)",
-                              fontSize: "0.7rem",
-                              fontWeight: 700,
-                              whiteSpace: "nowrap",
-                              cursor: onOpenBugDetail ? "pointer" : "default",
+                              gap: "0.5rem",
+                              padding: "0.35rem 0.5rem",
+                              border: "1px solid #E2E8F0",
+                              borderRadius: 6,
+                              background: "#fff",
                             }}
-                            onMouseEnter={(e) => {
-                              if (onOpenBugDetail) e.currentTarget.style.textDecoration = "underline";
-                            }}
-                            onMouseLeave={(e) => (e.currentTarget.style.textDecoration = "none")}
                           >
-                            <Bug size={12} /> {entityCode("BUG", b.id)}
-                          </button>
+                            {/* Ikon bug + judulnya. Judul tetap jadi pintu
+                                masuk ke Bug Detail (ID-nya sudah dihapus). */}
+                            <Bug size={12} style={{ flexShrink: 0, color: "#DC2626" }} />
+                            <button
+                              type="button"
+                              onClick={() => onOpenBugDetail?.(b.id)}
+                              title={meta ? `${b.title} — ${meta}` : b.title}
+                              style={{
+                                flex: 1,
+                                minWidth: 0,
+                                border: "none",
+                                background: "none",
+                                padding: 0,
+                                textAlign: "left",
+                                fontSize: "0.75rem",
+                                color: "#334155",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                                cursor: onOpenBugDetail ? "pointer" : "default",
+                              }}
+                              onMouseEnter={(e) => {
+                                if (onOpenBugDetail)
+                                  e.currentTarget.style.textDecoration = "underline";
+                              }}
+                              onMouseLeave={(e) =>
+                                (e.currentTarget.style.textDecoration = "none")
+                              }
+                            >
+                              {b.title}
+                            </button>
 
-                          <div style={{ display: "flex", alignItems: "center", gap: "0.3rem", flexShrink: 0 }}>
-                            {b.severity &&
-                              (() => {
-                                const sv = BUG_SEVERITY_BADGE[b.severity] ?? BUG_SEVERITY_BADGE.LOW;
-                                return (
-                                  <span
-                                    style={{
-                                      padding: "0.1rem 0.45rem",
-                                      borderRadius: 999,
-                                      fontSize: "0.6875rem",
-                                      fontWeight: 700,
-                                      letterSpacing: "0.02em",
-                                      background: sv.bg,
-                                      color: sv.color,
-                                      border: `1px solid ${sv.border}`,
-                                    }}
-                                  >
-                                    {b.severity}
-                                  </span>
-                                );
-                              })()}
                             <span
                               style={{
+                                flexShrink: 0,
                                 padding: "0.1rem 0.45rem",
                                 borderRadius: 999,
                                 fontSize: "0.6875rem",
@@ -2922,89 +3328,152 @@ function ExecutionModal({
                               {st.label}
                             </span>
                           </div>
-                        </div>
-
-                        {/* Baris 2 — judul bug */}
-                        <div
-                          style={{
-                            fontSize: "0.75rem",
-                            fontWeight: 600,
-                            color: "#334155",
-                            lineHeight: 1.4,
-                          }}
-                        >
-                          {b.title}
-                        </div>
-
-                        {/* Baris 3 — metadata ringkas */}
-                        <div style={{ fontSize: "0.66rem", color: "#94A3B8" }}>
-                          {new Date(b.createdAt).toLocaleDateString("id-ID", {
-                            day: "2-digit",
-                            month: "short",
-                            year: "numeric",
-                          })}
-                          {b.resolvedAt
-                            ? ` · Selesai ${new Date(b.resolvedAt).toLocaleDateString("id-ID", {
-                                day: "2-digit",
-                                month: "short",
-                                year: "numeric",
-                              })}`
-                            : ""}
-                          {b.run ? ` · ${b.run.name}` : ""}
-                        </div>
-                      </div>
-                    );
-                  })}
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Footer: ikut fixed di bawah modal, terpisah dari area scroll.
-            Tanpa border atas sesuai permintaan — pemisahnya cukup latar putih. */}
-        {canEdit && (
+          {/* Blok bawah panel: pilihan status eksekusi + tombol Simpan, diam di
+              dasar panel (bukan ikut scroll). Blok ini selalu tampil supaya
+              status tetap terlihat saat read-only; tombol Simpan hanya dirender
+              saat punya hak edit. Tanpa garis pemisah di atas tombol simpan. */}
           <div
             style={{
               flexShrink: 0,
               display: "flex",
-              alignItems: "center",
-              justifyContent: "flex-end",
+              flexDirection: "column",
               gap: "0.75rem",
-              padding: "0.9rem 1.5rem",
+              padding: "0.9rem 1.25rem",
               background: "#fff",
             }}
           >
-            {msg && <div style={{ flex: 1, fontSize: "0.75rem", color: "#B91C1C" }}>{msg}</div>}
-            <button
-              type="button"
-              onClick={() => void save()}
-              disabled={saving}
-              style={{
-                padding: "0.5rem 1.25rem",
-                border: "none",
-                borderRadius: 6,
-                background: isFail ? "#E11D48" : "#FFC107",
-                color: isFail ? "#fff" : "#0F172A",
-                fontSize: "0.78rem",
-                fontWeight: 700,
-                cursor: saving ? "wait" : "pointer",
-                transition: "background-color 0.15s ease",
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = isFail ? "#BE123C" : "#E0A800")}
-              onMouseLeave={(e) => (e.currentTarget.style.background = isFail ? "#E11D48" : "#FFC107")}
-            >
-              {saving
-                ? "Menyimpan..."
-                : isFail && !hasLinkedBug
-                  ? "Laporkan Bug"
-                  : hasSavedExecution
-                    ? "Edit Eksekusi"
-                    : "Simpan Eksekusi"}
-            </button>
+            <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
+              {STATUSES.map((s) => {
+                const Icon = s.icon;
+                const isActive = status === s.value;
+                return (
+                  <button
+                    key={s.value}
+                    type="button"
+                    disabled={!editable}
+                    aria-pressed={isActive}
+                    title={isActive ? "Klik lagi untuk membatalkan (Untested)" : `Tandai ${s.label}`}
+                    onClick={() => setStatus(isActive ? "NOT_RUN" : s.value)}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "0.25rem",
+                      padding: "0.375rem 0.5rem",
+                      borderRadius: 6,
+                      // Tidak aktif: border tipis senada (lembut). Aktif: solid penuh.
+                      border: `1px solid ${isActive ? s.color : `${s.color}4D`}`,
+                      background: isActive ? s.activeBg : s.bg,
+                      color: isActive ? "#fff" : s.color,
+                      fontSize: "0.6875rem",
+                      fontWeight: 600,
+                      // Mode view: tombol status ikut diredupkan agar state
+                      // read-only terbaca (bukan hanya tidak bisa diklik).
+                      opacity: editable ? 1 : 0.6,
+                      cursor: editable ? "pointer" : "not-allowed",
+                      transition: "background-color 0.15s ease, color 0.15s ease",
+                    }}
+                  >
+                    <Icon size={14} /> {s.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {canEdit && (
+              <>
+                {/* Garis pembatas tipis non-full-width (inset dari padding blok)
+                    di atas tombol aksi. */}
+                <div aria-hidden="true" style={{ height: 1, background: "#E2E8F0" }} />
+
+                {editable && msg && (
+                  <div style={{ fontSize: "0.75rem", color: "#B91C1C" }}>{msg}</div>
+                )}
+
+                {/* Mode view: satu tombol "Edit". Mode edit: "Batal" + simpan.
+                    Tombol hug-contents, rata kanan. */}
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.5rem" }}>
+                  {!editable ? (
+                    <button
+                      type="button"
+                      onClick={() => setIsEditing(true)}
+                      style={{
+                        padding: "0.5rem 1.25rem",
+                        border: "none",
+                        borderRadius: 6,
+                        background: "#FFC107",
+                        color: "#0F172A",
+                        fontSize: "0.75rem",
+                        fontWeight: 600,
+                        cursor: "pointer",
+                        transition: "background-color 0.15s ease",
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = "#E0A800")}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = "#FFC107")}
+                    >
+                      Edit
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        onClick={cancelEdit}
+                        disabled={saving}
+                        style={{
+                          padding: "0.5rem 1rem",
+                          border: "1px solid #E2E8F0",
+                          borderRadius: 6,
+                          background: "#F8FAFC",
+                          color: "#334155",
+                          fontSize: "0.75rem",
+                          fontWeight: 600,
+                          cursor: saving ? "not-allowed" : "pointer",
+                          transition: "background-color 0.15s ease",
+                        }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = "#F1F5F9")}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = "#F8FAFC")}
+                      >
+                        Batal
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void save()}
+                        disabled={saving}
+                        style={{
+                          padding: "0.5rem 1.25rem",
+                          border: "none",
+                          borderRadius: 6,
+                          background: isFail ? "#E11D48" : "#FFC107",
+                          color: isFail ? "#fff" : "#0F172A",
+                          fontSize: "0.75rem",
+                          fontWeight: 600,
+                          cursor: saving ? "wait" : "pointer",
+                          transition: "background-color 0.15s ease",
+                        }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = isFail ? "#BE123C" : "#E0A800")}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = isFail ? "#E11D48" : "#FFC107")}
+                      >
+                        {saving
+                          ? "Menyimpan..."
+                          : isFail && !hasLinkedBug
+                            ? "Laporkan Bug"
+                            : "Simpan Eksekusi"}
+                      </button>
+                    </>
+                  )}
+                </div>
+              </>
+            )}
           </div>
-        )}
+        </div>
       </div>
     </div>,
     document.body

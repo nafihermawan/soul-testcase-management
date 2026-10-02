@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { apiSession, apiRoleAtLeast, json401, json404 } from "@/lib/api-auth";
 import { toAttachmentItems } from "@/lib/attachments";
 import { presignGetUrls } from "@/lib/storage/r2";
-import type { RunDetailPayload, RunResultItem } from "@/types/api";
+import type { RunDetailPayload, RunResultItem, RunResultTestCase } from "@/types/api";
 
 export async function GET(
   _req: Request,
@@ -49,6 +49,7 @@ export async function GET(
               status: true,
               scenario: true,
               precondition: true,
+              testData: true,
               steps: true,
               expectedResult: true,
               createdAt: true,
@@ -59,7 +60,7 @@ export async function GET(
                   id: true,
                   name: true,
                   projectId: true,
-                  project: { select: { name: true } },
+                  project: { select: { name: true, platform: true } },
                 },
               },
               createdBy: { select: { name: true } },
@@ -104,6 +105,7 @@ export async function GET(
             status: r.testCase.status,
             scenario: r.testCase.scenario,
             precondition: r.testCase.precondition,
+            testData: r.testCase.testData,
             steps: r.testCase.steps,
             expectedResult: r.testCase.expectedResult,
             createdAt: r.testCase.createdAt.toISOString(),
@@ -116,17 +118,12 @@ export async function GET(
   );
 
   // Suite unik yang terlibat dalam run ini (dari test case yang dieksekusi)
-  const suites = Array.from(
-    new Map(
-      run.results
-        .map((r) => r.testCase?.suite)
-        .filter(
-          (s): s is { id: string; name: string; projectId: string; project: { name: string } } =>
-            !!s
-        )
-        .map((s) => [s.id, s])
-    ).values()
-  );
+  const suiteMap = new Map<string, NonNullable<RunResultTestCase["suite"]>>();
+  for (const r of run.results) {
+    const s = r.testCase?.suite;
+    if (s) suiteMap.set(s.id, s);
+  }
+  const suites = Array.from(suiteMap.values());
 
   // Grouping per project: id project -> { projectId, projectName, suites, items }
   const projectMap = new Map<string, RunDetailPayload["projects"][number]>();

@@ -1,6 +1,6 @@
 "use client";
 
-import type { CSSProperties, ReactNode } from "react";
+import { useState, type CSSProperties, type ReactNode } from "react";
 import { TestRunStatusBadge } from "@/components/test-runs/test-run-status-badge";
 import { RunStatusSelect } from "@/components/test-runs/run-status-select";
 import { Select } from "@/components/ui/select";
@@ -11,6 +11,21 @@ const truncate: CSSProperties = {
   overflow: "hidden",
   textOverflow: "ellipsis",
 };
+
+/**
+ * Lebar kolom beku (px). Sumber tunggal untuk <colgroup>, offset `left` sticky
+ * kolom Run Name, dan padding-nya — supaya batas beku selalu presisi.
+ */
+export const STICKY_ID_WIDTH = 140;
+export const STICKY_RUN_NAME_WIDTH = 170;
+
+/** Sel beku: tetap menempel di kiri saat tabel digeser mendatar. */
+const stickyCell = (left: number, background: string): CSSProperties => ({
+  position: "sticky",
+  left,
+  zIndex: 20,
+  background,
+});
 
 export function TestRunRow({
   id,
@@ -56,17 +71,26 @@ export function TestRunRow({
   onStatusChange?: (status: string) => void;
   statusPending?: boolean;
 }) {
+  // Hover di-track di state supaya sel BEKU ikut berubah warna — kalau tidak,
+  // kolom beku tetap putih saat barisnya di-hover (background-nya opaque).
+  const [hovered, setHovered] = useState(false);
+  const frozenBg = hovered ? "#F8FAFC" : "#fff";
+
   return (
     <tr
-      style={{ borderTop: "1px solid var(--border)", cursor: "pointer" }}
+      style={{
+        borderTop: "1px solid var(--border)",
+        cursor: "pointer",
+        background: hovered ? "#F8FAFC" : "transparent",
+      }}
       onClick={() => {
         window.location.href = `/test-runs/${id}`;
       }}
-      onMouseEnter={(e) => (e.currentTarget.style.background = "#F8FAFC")}
-      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
     >
-      {/* 1. Run ID */}
-      <td style={{ padding: "0.6rem 1rem" }}>
+      {/* 1. Run ID — kolom BEKU (sticky kiri) */}
+      <td style={{ padding: "0.6rem 1rem", ...stickyCell(0, frozenBg) }}>
         <span
           style={{
             fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
@@ -78,8 +102,18 @@ export function TestRunRow({
           {runCode}
         </span>
       </td>
-      {/* 2. Nama Run */}
-      <td style={{ padding: "0.6rem 1rem", fontWeight: 600, ...truncate }}>{name}</td>
+      {/* 2. Nama Run — kolom BEKU kedua; diberi shadow sebagai batas area scroll */}
+      <td
+        style={{
+          padding: "0.6rem 1rem",
+          fontWeight: 600,
+          ...truncate,
+          ...stickyCell(STICKY_ID_WIDTH, frozenBg),
+          boxShadow: "2px 0 5px -2px rgba(0, 0, 0, 0.1)",
+        }}
+      >
+        {name}
+      </td>
       {/* 3. Projects Covered */}
       <td style={{ padding: "0.6rem 0.5rem", color: "var(--text-secondary)", ...truncate }}>
         {projects.length === 1 ? (

@@ -1,8 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { ChevronRight } from "lucide-react";
-import { TestRunRow } from "@/components/test-runs/test-run-row";
+import {
+  STICKY_ID_WIDTH,
+  STICKY_RUN_NAME_WIDTH,
+  TestRunRow,
+} from "@/components/test-runs/test-run-row";
 import { CreateRunButton } from "@/components/test-runs/create-run-button";
 import { RunRowActions } from "@/components/test-runs/run-row-actions";
 import { HistoryControls } from "@/components/test-runs/history-controls";
@@ -48,27 +52,62 @@ function applyStatusLocally(
  */
 const TABLE_COLUMNS: {
   label: string;
-  width: string;
+  /** Tanpa `width` = kolom AUTO (menyerap sisa lebar tabel). */
+  width?: string;
   pad: string;
   align?: "left" | "right";
   nowrap?: boolean;
+  /** Kolom BEKU: menempel di kiri saat tabel digeser mendatar. */
+  sticky?: "id" | "name";
 }[] = [
-  { label: "ID", width: "11%", pad: "0.65rem 1rem", nowrap: true },
-  { label: "Run Name", width: "12%", pad: "0.65rem 1rem" },
-  { label: "Projects Covered", width: "10%", pad: "0.65rem 0.5rem" },
-  { label: "Suites Included", width: "10%", pad: "0.65rem 0.5rem" },
-  { label: "Sprint", width: "5%", pad: "0.65rem 0.5rem" },
-  { label: "Status", width: "11%", pad: "0.65rem 0.5rem" },
-  { label: "Pass Rate", width: "6%", pad: "0.65rem 0.5rem" },
+  // Dua kolom pertama berlebar TETAP (px) supaya offset `left` kolom beku
+  // presisi; kalau memakai persen, lebarnya berubah mengikuti lebar tabel.
+  {
+    label: "ID",
+    width: `${STICKY_ID_WIDTH}px`,
+    pad: "0.65rem 1rem",
+    nowrap: true,
+    sticky: "id",
+  },
+  {
+    label: "Run Name",
+    width: `${STICKY_RUN_NAME_WIDTH}px`,
+    pad: "0.65rem 1rem",
+    sticky: "name",
+  },
+  { label: "Projects Covered", width: "130px", pad: "0.65rem 0.5rem" },
+  { label: "Suites Included", width: "130px", pad: "0.65rem 0.5rem" },
+  { label: "Sprint", width: "80px", pad: "0.65rem 0.5rem" },
+  { label: "Status", width: "130px", pad: "0.65rem 0.5rem" },
+  { label: "Pass Rate", width: "80px", pad: "0.65rem 0.5rem" },
   // Creator & executor dipisah: dulu kolom ini berlabel "Assignee" padahal
   // datanya createdByName, sehingga metrik "dibuat vs dieksekusi" jadi rancu.
-  { label: "Created By", width: "8%", pad: "0.65rem 0.5rem" },
-  // 11% (≈136px pada lebar minimum tabel) supaya dropdown assignee muat
-  // tanpa menabrak kolom Created Date.
-  { label: "Assignee", width: "11%", pad: "0.65rem 0.5rem" },
-  { label: "Created Date", width: "9%", pad: "0.65rem 1rem" },
-  { label: "Actions", width: "7%", pad: "0.65rem 1rem", align: "right" },
+  { label: "Created By", width: "120px", pad: "0.65rem 0.5rem" },
+  // 130px supaya dropdown assignee muat tanpa menabrak kolom Created Date.
+  { label: "Assignee", width: "130px", pad: "0.65rem 0.5rem" },
+  // Lebar minimum supaya tanggal tidak terpotong / tumpah ke kolom sebelahnya.
+  { label: "Created Date", width: "130px", pad: "0.65rem 1rem" },
+  { label: "Actions", width: "80px", pad: "0.65rem 1rem", align: "right" },
 ];
+
+/** Batas lebar kolom Run Name saat resizer-nya ditarik (px). */
+const RUN_NAME_MIN_W = 120;
+const RUN_NAME_MAX_W = 420;
+
+/** Gaya <th> untuk kolom beku — background WAJIB opaque agar isi tabel yang
+ *  digeser lewat di belakangnya tidak tembus pandang. */
+const stickyHeaderStyle = (which?: "id" | "name"): CSSProperties =>
+  which === "id"
+    ? { position: "sticky", left: 0, zIndex: 20, background: "#F8FAFC" }
+    : which === "name"
+      ? {
+          position: "sticky",
+          left: STICKY_ID_WIDTH,
+          zIndex: 20,
+          background: "#F8FAFC",
+          boxShadow: "2px 0 5px -2px rgba(0, 0, 0, 0.1)",
+        }
+      : {};
 
 export type ActiveRunsSearchParams = {
   q?: string;
@@ -105,6 +144,41 @@ export function RunListView({ searchParams }: { searchParams: ActiveRunsSearchPa
   const [pendingAssigneeId, setPendingAssigneeId] = useState<string | null>(null);
   // Accordion per status: default terbuka. Yang disimpan hanya yang ditutup.
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+
+  /**
+   * Lebar kolom Run Name (px) — bisa ditarik lewat resizer di border kanannya.
+   * Kolom-kolom setelahnya (Projects Covered, dst.) otomatis bergeser karena
+   * lebarnya diambil dari <colgroup>.
+   */
+  const [runNameWidth, setRunNameWidth] = useState(STICKY_RUN_NAME_WIDTH);
+  const [resizingName, setResizingName] = useState(false);
+  const [hoverResizer, setHoverResizer] = useState(false);
+  const resizeStart = useRef<{ x: number; width: number } | null>(null);
+
+  // Pantau geseran mouse selama drag; lepas saat mouseup (dan kunci kursor).
+  useEffect(() => {
+    if (!resizingName) return;
+    const onMove = (e: MouseEvent) => {
+      const s = resizeStart.current;
+      if (!s) return;
+      setRunNameWidth(
+        Math.min(RUN_NAME_MAX_W, Math.max(RUN_NAME_MIN_W, s.width + (e.clientX - s.x)))
+      );
+    };
+    const onUp = () => setResizingName(false);
+    const prevCursor = document.body.style.cursor;
+    const prevSelect = document.body.style.userSelect;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      document.body.style.cursor = prevCursor;
+      document.body.style.userSelect = prevSelect;
+    };
+  }, [resizingName]);
   const { toast, showToast, dismissToast } = useToast();
 
   /**
@@ -446,14 +520,22 @@ export function RunListView({ searchParams }: { searchParams: ActiveRunsSearchPa
                             marginBottom: 24,
                           }}
                         >
-                          <div style={{ overflowX: "auto" }}>
+                          <div style={{ width: "100%", overflowX: "auto" }}>
                           <table
                             style={{
                               width: "100%",
-                              // Lebar minimum: dengan table-layout: fixed, kolom yang
-                              // sempit akan memotong isinya. Tabel discroll mendatar
-                              // (wrapper overflowX: auto) alih-alih meremas kolom.
-                              minWidth: 1240,
+                              // Lebar minimum = jumlah lebar kolom (px). Dengan
+                              // table-layout: fixed, kolom tidak bisa menyusut di
+                              // bawah nilainya — kalau layar kurang lebar, tabel
+                              // discroll mendatar alih-alih saling menimpa.
+                              minWidth: columns.reduce(
+                                (sum, c) =>
+                                  sum +
+                                  (c.sticky === "name"
+                                    ? runNameWidth
+                                    : parseInt(c.width ?? "0", 10)),
+                                0
+                              ),
                               borderCollapse: "collapse",
                               fontSize: "0.85rem",
                               tableLayout: "fixed",
@@ -461,7 +543,13 @@ export function RunListView({ searchParams }: { searchParams: ActiveRunsSearchPa
                           >
                             <colgroup>
                               {columns.map((c) => (
-                                <col key={c.label} style={{ width: c.width }} />
+                                <col
+                                  key={c.label}
+                                  // Run Name memakai lebar dari state (bisa di-resize).
+                                  style={{
+                                    width: c.sticky === "name" ? `${runNameWidth}px` : c.width,
+                                  }}
+                                />
                               ))}
                             </colgroup>
                             <thead>
@@ -478,9 +566,63 @@ export function RunListView({ searchParams }: { searchParams: ActiveRunsSearchPa
                                       textAlign: c.align ?? "left",
                                       whiteSpace: c.nowrap ? "nowrap" : undefined,
                                       borderBottom: "1px solid rgba(226, 232, 240, 0.8)",
+                                      // Warna header SAMA untuk semua kolom —
+                                      // sel beku wajib opaque, jadi seluruh
+                                      // header disamakan ke slate-50 solid.
+                                      background: "#F8FAFC",
+                                      ...stickyHeaderStyle(c.sticky),
                                     }}
                                   >
                                     {c.label}
+                                    {/* Resizer: garis tipis di border kanan
+                                        kolom Run Name; menyala indigo saat
+                                        hover/drag. `position: absolute`
+                                        relatif ke th (sticky = positioned). */}
+                                    {c.sticky === "name" && (
+                                      <span
+                                        role="separator"
+                                        aria-orientation="vertical"
+                                        aria-label="Ubah lebar kolom Run Name"
+                                        title="Tarik untuk mengubah lebar kolom"
+                                        onMouseDown={(e) => {
+                                          e.preventDefault();
+                                          e.stopPropagation();
+                                          resizeStart.current = {
+                                            x: e.clientX,
+                                            width: runNameWidth,
+                                          };
+                                          setResizingName(true);
+                                        }}
+                                        onMouseEnter={() => setHoverResizer(true)}
+                                        onMouseLeave={() => setHoverResizer(false)}
+                                        style={{
+                                          position: "absolute",
+                                          top: 0,
+                                          right: -4,
+                                          width: 9,
+                                          height: "100%",
+                                          zIndex: 30,
+                                          display: "flex",
+                                          justifyContent: "center",
+                                          cursor: "col-resize",
+                                          userSelect: "none",
+                                          touchAction: "none",
+                                        }}
+                                      >
+                                        <span
+                                          aria-hidden="true"
+                                          style={{
+                                            width: 2,
+                                            height: "100%",
+                                            background:
+                                              resizingName || hoverResizer
+                                                ? "#4F46E5"
+                                                : "#E2E8F0",
+                                            transition: "background-color 0.15s ease",
+                                          }}
+                                        />
+                                      </span>
+                                    )}
                                   </th>
                                 ))}
                               </tr>

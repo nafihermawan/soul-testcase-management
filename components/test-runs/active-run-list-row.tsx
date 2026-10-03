@@ -6,11 +6,7 @@ import { AvatarStack } from "@/components/ui/avatar";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { AssigneeSelect } from "@/components/test-runs/assignee-select";
 import { RunStatusSelect } from "@/components/test-runs/run-status-select";
-import {
-  TestRunStatusBadge,
-  runStatusConfig,
-  runStatusIcon,
-} from "@/components/test-runs/test-run-status-badge";
+import { TestRunStatusBadge } from "@/components/test-runs/test-run-status-badge";
 
 /**
  * Template kolom list Active Runs — dipakai bersama oleh baris header grup dan
@@ -119,8 +115,6 @@ export function ActiveRunListRow({
   statusPending?: boolean;
 }) {
   const [hovered, setHovered] = useState(false);
-  const cfg = runStatusConfig(status);
-  const StatusIcon = runStatusIcon(status);
 
   // Avatar = assignee tersimpan; kalau belum ada, pakai eksekutor (bisa banyak).
   const avatarNames = assignee?.name ? [assignee.name] : executorNames;
@@ -167,34 +161,31 @@ export function ActiveRunListRow({
         transition: "background-color 0.12s ease",
       }}
     >
-      {/* 1. Run — ikon status, judul, mini-badge */}
-      <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-        <StatusIcon size={16} color={cfg.color} style={{ flexShrink: 0 }} />
-        <div style={{ minWidth: 0 }}>
-          <div
-            style={{ ...truncate, fontSize: 12, fontWeight: 500, color: "#334155" }}
-            title={name}
-          >
-            {name}
-          </div>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              marginTop: 2,
-              minWidth: 0,
-            }}
-          >
-            <MiniPill icon={<FolderOpen size={11} />} title="Jumlah suite">
-              {suites.length}
+      {/* 1. Run — judul + mini-badge, rata kiri sel */}
+      <div style={{ minWidth: 0 }}>
+        <div
+          style={{ ...truncate, fontSize: 12, fontWeight: 500, color: "#334155" }}
+          title={name}
+        >
+          {name}
+        </div>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            marginTop: 2,
+            minWidth: 0,
+          }}
+        >
+          <MiniPill icon={<FolderOpen size={11} />} title="Jumlah suite">
+            {suites.length}
+          </MiniPill>
+          {sprint && (
+            <MiniPill icon={<Tag size={11} />} title="Sprint">
+              {sprint}
             </MiniPill>
-            {sprint && (
-              <MiniPill icon={<Tag size={11} />} title="Sprint">
-                {sprint}
-              </MiniPill>
-            )}
-          </div>
+          )}
         </div>
       </div>
 

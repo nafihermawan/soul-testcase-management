@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useMemo, useState } from "react";
 import { ChevronRight } from "lucide-react";
 import {
-  STICKY_ID_WIDTH,
-  STICKY_RUN_NAME_WIDTH,
-  TestRunRow,
-} from "@/components/test-runs/test-run-row";
+  ActiveRunListRow,
+  listColumnLabels,
+  listGridTemplate,
+  listMinWidth,
+} from "@/components/test-runs/active-run-list-row";
+import { TestRunStatusBadge } from "@/components/test-runs/test-run-status-badge";
 import { CreateRunButton } from "@/components/test-runs/create-run-button";
 import { RunRowActions } from "@/components/test-runs/run-row-actions";
 import { HistoryControls } from "@/components/test-runs/history-controls";
@@ -41,73 +43,6 @@ function applyStatusLocally(
   if (ACTIVE_STATUSES.has(status)) return runs.map((r) => (r.id === runId ? { ...r, status } : r));
   return runs.filter((r) => r.id !== runId);
 }
-
-/**
- * Definisi kolom tabel Active Runs — sumber tunggal untuk <colgroup> dan
- * sub-header kolom per grup. Seluruh grup berbagi satu tabel dengan lebar
- * kolom dipatok (persen + tableLayout: fixed), sedangkan baris nama kolom
- * dirender ulang di dalam tiap grup agar ikut tersembunyi saat di-collapse.
- * Urutan & label sama persis dengan struktur kolom bawaan sistem.
- * Kolom "Aksi" paling akhir, dan hanya dipakai bila user boleh mengedit.
- */
-const TABLE_COLUMNS: {
-  label: string;
-  /** Tanpa `width` = kolom AUTO (menyerap sisa lebar tabel). */
-  width?: string;
-  pad: string;
-  align?: "left" | "right";
-  nowrap?: boolean;
-  /** Kolom BEKU: menempel di kiri saat tabel digeser mendatar. */
-  sticky?: "id" | "name";
-}[] = [
-  // Dua kolom pertama berlebar TETAP (px) supaya offset `left` kolom beku
-  // presisi; kalau memakai persen, lebarnya berubah mengikuti lebar tabel.
-  {
-    label: "ID",
-    width: `${STICKY_ID_WIDTH}px`,
-    pad: "0.65rem 1rem",
-    nowrap: true,
-    sticky: "id",
-  },
-  {
-    label: "Run Name",
-    width: `${STICKY_RUN_NAME_WIDTH}px`,
-    pad: "0.65rem 1rem",
-    sticky: "name",
-  },
-  { label: "Projects Covered", width: "130px", pad: "0.65rem 0.5rem" },
-  { label: "Suites Included", width: "130px", pad: "0.65rem 0.5rem" },
-  { label: "Sprint", width: "80px", pad: "0.65rem 0.5rem" },
-  { label: "Status", width: "130px", pad: "0.65rem 0.5rem" },
-  { label: "Pass Rate", width: "80px", pad: "0.65rem 0.5rem" },
-  // Creator & executor dipisah: dulu kolom ini berlabel "Assignee" padahal
-  // datanya createdByName, sehingga metrik "dibuat vs dieksekusi" jadi rancu.
-  { label: "Created By", width: "120px", pad: "0.65rem 0.5rem" },
-  // 130px supaya dropdown assignee muat tanpa menabrak kolom Created Date.
-  { label: "Assignee", width: "130px", pad: "0.65rem 0.5rem" },
-  // Lebar minimum supaya tanggal tidak terpotong / tumpah ke kolom sebelahnya.
-  { label: "Created Date", width: "130px", pad: "0.65rem 1rem" },
-  { label: "Actions", width: "80px", pad: "0.65rem 1rem", align: "right" },
-];
-
-/** Batas lebar kolom Run Name saat resizer-nya ditarik (px). */
-const RUN_NAME_MIN_W = 120;
-const RUN_NAME_MAX_W = 420;
-
-/** Gaya <th> untuk kolom beku — background WAJIB opaque agar isi tabel yang
- *  digeser lewat di belakangnya tidak tembus pandang. */
-const stickyHeaderStyle = (which?: "id" | "name"): CSSProperties =>
-  which === "id"
-    ? { position: "sticky", left: 0, zIndex: 20, background: "#F8FAFC" }
-    : which === "name"
-      ? {
-          position: "sticky",
-          left: STICKY_ID_WIDTH,
-          zIndex: 20,
-          background: "#F8FAFC",
-          boxShadow: "2px 0 5px -2px rgba(0, 0, 0, 0.1)",
-        }
-      : {};
 
 export type ActiveRunsSearchParams = {
   q?: string;
@@ -144,41 +79,6 @@ export function RunListView({ searchParams }: { searchParams: ActiveRunsSearchPa
   const [pendingAssigneeId, setPendingAssigneeId] = useState<string | null>(null);
   // Accordion per status: default terbuka. Yang disimpan hanya yang ditutup.
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
-
-  /**
-   * Lebar kolom Run Name (px) — bisa ditarik lewat resizer di border kanannya.
-   * Kolom-kolom setelahnya (Projects Covered, dst.) otomatis bergeser karena
-   * lebarnya diambil dari <colgroup>.
-   */
-  const [runNameWidth, setRunNameWidth] = useState(STICKY_RUN_NAME_WIDTH);
-  const [resizingName, setResizingName] = useState(false);
-  const [hoverResizer, setHoverResizer] = useState(false);
-  const resizeStart = useRef<{ x: number; width: number } | null>(null);
-
-  // Pantau geseran mouse selama drag; lepas saat mouseup (dan kunci kursor).
-  useEffect(() => {
-    if (!resizingName) return;
-    const onMove = (e: MouseEvent) => {
-      const s = resizeStart.current;
-      if (!s) return;
-      setRunNameWidth(
-        Math.min(RUN_NAME_MAX_W, Math.max(RUN_NAME_MIN_W, s.width + (e.clientX - s.x)))
-      );
-    };
-    const onUp = () => setResizingName(false);
-    const prevCursor = document.body.style.cursor;
-    const prevSelect = document.body.style.userSelect;
-    document.body.style.cursor = "col-resize";
-    document.body.style.userSelect = "none";
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
-    return () => {
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
-      document.body.style.cursor = prevCursor;
-      document.body.style.userSelect = prevSelect;
-    };
-  }, [resizingName]);
   const { toast, showToast, dismissToast } = useToast();
 
   /**
@@ -201,7 +101,7 @@ export function RunListView({ searchParams }: { searchParams: ActiveRunsSearchPa
   }
 
   /**
-   * Ubah status run dari baris tabel, murni di state lokal.
+   * Ubah status run dari baris list, murni di state lokal.
    *
    * Sengaja TIDAK memanggil reload(): reload menyalakan `loading`, sehingga
    * seluruh halaman sempat tertukar ke skeleton (terasa seperti refresh total).
@@ -254,7 +154,7 @@ export function RunListView({ searchParams }: { searchParams: ActiveRunsSearchPa
 
   /**
    * Buang baris dari daftar lokal setelah run benar-benar terhapus di server.
-   * Dipakai sebagai pengganti reload() agar tabel tidak berkedip skeleton.
+   * Dipakai sebagai pengganti reload() agar list tidak berkedip skeleton.
    */
   const removeRunLocally = (runId: string) =>
     setList((prev) => ({ ...prev, runs: prev.runs.filter((r) => r.id !== runId) }));
@@ -301,10 +201,7 @@ export function RunListView({ searchParams }: { searchParams: ActiveRunsSearchPa
     );
   }
 
-  const { allProjects } = data;
-  // Kolom "Aksi" hanya disertakan bila user boleh mengedit.
-  const columns = data.canEdit ? TABLE_COLUMNS : TABLE_COLUMNS.slice(0, -1);
-
+  const { allProjects, canEdit } = data;
   const hasFilter = !!(
     // Query pencarian kini hidup di state klien, bukan di URL.
     query.trim() ||
@@ -322,10 +219,14 @@ export function RunListView({ searchParams }: { searchParams: ActiveRunsSearchPa
     projectIds.unshift(searchParams.project);
   }
 
+  const gridTemplate = listGridTemplate(canEdit);
+  const minWidth = listMinWidth(canEdit);
+  const columnLabels = listColumnLabels(canEdit);
+
   return (
     <main style={{ fontFamily: "var(--font-sans)", width: "100%" }}>
       {/* Top control bar — card tersendiri di paling atas, terpisah dari card
-          tabel/kelompok status di bawahnya. */}
+          kelompok status di bawahnya. */}
       <div
         style={{
           background: "#fff",
@@ -378,12 +279,11 @@ export function RunListView({ searchParams }: { searchParams: ActiveRunsSearchPa
               (searchParams.from || searchParams.to ? 1 : 0)
             }
           />
-          {data.canEdit && <CreateRunButton />}
+          {canEdit && <CreateRunButton />}
         </div>
       </div>
 
-      {/* Daftar card per kelompok status — tiap grup punya kontainernya sendiri,
-          bukan lagi satu tabel raksasa. */}
+      {/* Daftar card per kelompok status — tiap grup punya kontainernya sendiri. */}
       <div style={{ display: "flex", flexDirection: "column" }}>
         {filteredRuns.length === 0 ? (
           <div
@@ -395,273 +295,185 @@ export function RunListView({ searchParams }: { searchParams: ActiveRunsSearchPa
               overflow: "hidden",
             }}
           >
-          {hasFilter ? (
-            <div
-              style={{
-                padding: "3rem 1.5rem",
-                textAlign: "center",
-                color: "var(--text-muted)",
-                fontSize: "0.9rem",
-              }}
-            >
-              Tidak ada run berjalan yang cocok dengan filter / pencarian.
-            </div>
-          ) : (
-            <div
-              style={{
-                padding: "3rem 1.5rem",
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                textAlign: "center",
-                gap: "0.5rem",
-              }}
-            >
+            {hasFilter ? (
               <div
                 style={{
-                  width: 56,
-                  height: 56,
-                  borderRadius: "50%",
-                  background: "var(--surface-muted)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
+                  padding: "3rem 1.5rem",
+                  textAlign: "center",
                   color: "var(--text-muted)",
-                  marginBottom: "0.25rem",
+                  fontSize: "0.9rem",
                 }}
               >
-                <svg width={26} height={26} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-                  <line x1="16" y1="2" x2="16" y2="6" />
-                  <line x1="8" y1="2" x2="8" y2="6" />
-                  <line x1="3" y1="10" x2="21" y2="10" />
-                </svg>
+                Tidak ada run berjalan yang cocok dengan filter / pencarian.
               </div>
-              <div style={{ fontSize: "1rem", fontWeight: 700 }}>Belum Ada Run Berjalan</div>
-              <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", maxWidth: 380, margin: 0 }}>
-                Klik &ldquo;+ Express Run&rdquo; untuk membuat run baru. Run yang sudah selesai otomatis
-                pindah ke History.
-              </p>
-            </div>
-          )}
+            ) : (
+              <div
+                style={{
+                  padding: "3rem 1.5rem",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  textAlign: "center",
+                  gap: "0.5rem",
+                }}
+              >
+                <div
+                  style={{
+                    width: 56,
+                    height: 56,
+                    borderRadius: "50%",
+                    background: "var(--surface-muted)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    color: "var(--text-muted)",
+                    marginBottom: "0.25rem",
+                  }}
+                >
+                  <svg width={26} height={26} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                    <line x1="16" y1="2" x2="16" y2="6" />
+                    <line x1="8" y1="2" x2="8" y2="6" />
+                    <line x1="3" y1="10" x2="21" y2="10" />
+                  </svg>
+                </div>
+                <div style={{ fontSize: "1rem", fontWeight: 700 }}>Belum Ada Run Berjalan</div>
+                <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", maxWidth: 380, margin: 0 }}>
+                  Klik &ldquo;+ Express Run&rdquo; untuk membuat run baru. Run yang sudah selesai otomatis
+                  pindah ke History.
+                </p>
+              </div>
+            )}
           </div>
         ) : (
           <>
             {groups.map((group) => {
-                  const open = !collapsedGroups[group.status];
-                  const label =
-                    RUN_STATUS_LABEL[group.status as RunStatusValue] ?? group.status;
-                  return (
-                    <div key={group.status}>
-                      {/* Section header status — teks polos + chevron, berdiri
-                          sendiri DI LUAR card putih tabel. */}
-                      <div
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => toggleGroup(group.status)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" || e.key === " ") {
-                            e.preventDefault();
-                            toggleGroup(group.status);
-                          }
-                        }}
-                        aria-expanded={open}
-                        aria-label={`${label} — ${group.runs.length} run`}
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 8,
-                          // py-1 + mb-2: menempel tepat di atas card tabelnya.
-                          padding: "4px 0",
-                          marginBottom: 8,
-                          cursor: "pointer",
-                          userSelect: "none",
-                          color: "#1E293B",
-                          // Catatan: app/globals.css memaksa
-                          // `[role="button"] { border-radius: 3px !important }`,
-                          // jadi nilai radius di sini tidak akan berpengaruh.
-                          // Tidak ada dampak visual karena header ini tanpa
-                          // background, border, maupun shadow.
-                        }}
-                      >
-                        <ChevronRight
-                          size={12}
-                          style={{
-                            color: "#64748B",
-                            flexShrink: 0,
-                            transform: open ? "rotate(90deg)" : "rotate(0deg)",
-                            transition: "transform 0.15s ease",
-                          }}
-                        />
-                        <span style={{ fontSize: 12, fontWeight: 700, color: "#1E293B" }}>
-                          {label}
-                        </span>
-                        <span style={{ fontSize: 12, fontWeight: 500, color: "#94A3B8" }}>
-                          {group.runs.length}
-                        </span>
-                        {/* Garis fleksibel mengisi sisa lebar — batas visual antar
-                            seksi status. */}
-                        <span
-                          aria-hidden="true"
-                          style={{ flex: 1, height: 1, background: "#E2E8F0" }}
-                        />
-                      </div>
+              const open = !collapsedGroups[group.status];
+              const label =
+                RUN_STATUS_LABEL[group.status as RunStatusValue] ?? group.status;
+              return (
+                <div key={group.status}>
+                  {/* Section header status — chevron + badge berwarna + counter,
+                      berdiri sendiri DI LUAR card list. */}
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => toggleGroup(group.status)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        toggleGroup(group.status);
+                      }
+                    }}
+                    aria-expanded={open}
+                    aria-label={`${label} — ${group.runs.length} run`}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      // py-1 + mb-2: menempel tepat di atas card listnya.
+                      padding: "4px 0",
+                      marginBottom: 8,
+                      cursor: "pointer",
+                      userSelect: "none",
+                      color: "#1E293B",
+                      // Catatan: app/globals.css memaksa
+                      // `[role="button"] { border-radius: 3px !important }`,
+                      // jadi nilai radius di sini tidak akan berpengaruh.
+                      // Tidak ada dampak visual karena header ini tanpa
+                      // background, border, maupun shadow.
+                    }}
+                  >
+                    <ChevronRight
+                      size={12}
+                      style={{
+                        color: "#64748B",
+                        flexShrink: 0,
+                        transform: open ? "rotate(90deg)" : "rotate(0deg)",
+                        transition: "transform 0.15s ease",
+                      }}
+                    />
+                    <TestRunStatusBadge status={group.status} />
+                    <span style={{ fontSize: 12, fontWeight: 500, color: "#94A3B8" }}>
+                      {group.runs.length}
+                    </span>
+                    {/* Garis fleksibel mengisi sisa lebar — batas visual antar
+                        seksi status. */}
+                    <span
+                      aria-hidden="true"
+                      style={{ flex: 1, height: 1, background: "#E2E8F0" }}
+                    />
+                  </div>
 
-                      {/* Tabel kolom + baris data — hanya dirender saat grup
-                          expanded; saat collapsed yang tersisa hanya header bar. */}
-                      {open && (
+                  {/* List kolom + baris data — hanya dirender saat grup
+                      expanded; saat collapsed yang tersisa hanya header bar.
+                      Tanpa framing card: header transparan & hanya garis tipis
+                      antar baris yang memisahkan. */}
+                  {open && (
+                    <div style={{ width: "100%", overflowX: "auto", marginBottom: 20 }}>
+                      <div style={{ minWidth }}>
+                        {/* Header kolom — melayang (tanpa background) di atas
+                            list, sejajar dengan grid baris. */}
                         <div
                           style={{
-                            background: "#fff",
-                            border: "1px solid #F1F5F9",
-                            borderRadius: 8,
-                            boxShadow: "0 1px 2px rgba(15, 23, 42, 0.05)",
-                            overflow: "hidden",
-                            marginBottom: 24,
+                            display: "grid",
+                            gridTemplateColumns: gridTemplate,
+                            alignItems: "center",
+                            gap: 12,
+                            padding: "8px 16px",
+                            borderBottom: "1px solid #CBD5E1",
                           }}
                         >
-                          <div style={{ width: "100%", overflowX: "auto" }}>
-                          <table
-                            style={{
-                              width: "100%",
-                              // Lebar minimum = jumlah lebar kolom (px). Dengan
-                              // table-layout: fixed, kolom tidak bisa menyusut di
-                              // bawah nilainya — kalau layar kurang lebar, tabel
-                              // discroll mendatar alih-alih saling menimpa.
-                              minWidth: columns.reduce(
-                                (sum, c) =>
-                                  sum +
-                                  (c.sticky === "name"
-                                    ? runNameWidth
-                                    : parseInt(c.width ?? "0", 10)),
-                                0
-                              ),
-                              borderCollapse: "collapse",
-                              fontSize: "0.85rem",
-                              tableLayout: "fixed",
-                            }}
-                          >
-                            <colgroup>
-                              {columns.map((c) => (
-                                <col
-                                  key={c.label}
-                                  // Run Name memakai lebar dari state (bisa di-resize).
-                                  style={{
-                                    width: c.sticky === "name" ? `${runNameWidth}px` : c.width,
-                                  }}
-                                />
-                              ))}
-                            </colgroup>
-                            <thead>
-                              <tr style={{ background: "rgba(248, 250, 252, 0.4)" }}>
-                                {columns.map((c) => (
-                                  <th
-                                    key={c.label}
-                                    scope="col"
-                                    style={{
-                                      padding: c.pad,
-                                      fontWeight: 700,
-                                      fontSize: "0.78rem",
-                                      color: "#334155",
-                                      textAlign: c.align ?? "left",
-                                      whiteSpace: c.nowrap ? "nowrap" : undefined,
-                                      borderBottom: "1px solid rgba(226, 232, 240, 0.8)",
-                                      // Warna header SAMA untuk semua kolom —
-                                      // sel beku wajib opaque, jadi seluruh
-                                      // header disamakan ke slate-50 solid.
-                                      background: "#F8FAFC",
-                                      ...stickyHeaderStyle(c.sticky),
-                                    }}
-                                  >
-                                    {c.label}
-                                    {/* Resizer: garis tipis di border kanan
-                                        kolom Run Name; menyala indigo saat
-                                        hover/drag. `position: absolute`
-                                        relatif ke th (sticky = positioned). */}
-                                    {c.sticky === "name" && (
-                                      <span
-                                        role="separator"
-                                        aria-orientation="vertical"
-                                        aria-label="Ubah lebar kolom Run Name"
-                                        title="Tarik untuk mengubah lebar kolom"
-                                        onMouseDown={(e) => {
-                                          e.preventDefault();
-                                          e.stopPropagation();
-                                          resizeStart.current = {
-                                            x: e.clientX,
-                                            width: runNameWidth,
-                                          };
-                                          setResizingName(true);
-                                        }}
-                                        onMouseEnter={() => setHoverResizer(true)}
-                                        onMouseLeave={() => setHoverResizer(false)}
-                                        style={{
-                                          position: "absolute",
-                                          top: 0,
-                                          right: -4,
-                                          width: 9,
-                                          height: "100%",
-                                          zIndex: 30,
-                                          display: "flex",
-                                          justifyContent: "center",
-                                          cursor: "col-resize",
-                                          userSelect: "none",
-                                          touchAction: "none",
-                                        }}
-                                      >
-                                        <span
-                                          aria-hidden="true"
-                                          style={{
-                                            width: 2,
-                                            height: "100%",
-                                            background:
-                                              resizingName || hoverResizer
-                                                ? "#4F46E5"
-                                                : "#E2E8F0",
-                                            transition: "background-color 0.15s ease",
-                                          }}
-                                        />
-                                      </span>
-                                    )}
-                                  </th>
-                                ))}
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {group.runs.map((run) => (
-                                <TestRunRow
-                                  key={run.id}
-                                  {...run}
-                                  assigneeOptions={data.assigneeOptions}
-                                  onAssigneeChange={
-                                    data.canEdit
-                                      ? (next) => void changeAssignee(run.id, next)
-                                      : undefined
-                                  }
-                                  assigneePending={pendingAssigneeId === run.id}
-                                  onStatusChange={
-                                    data.canEdit ? (next) => void changeStatus(run.id, next) : undefined
-                                  }
-                                  statusPending={pendingStatusId === run.id}
-                                  extraAction={
-                                    data.canEdit ? (
-                                      <RunRowActions
-                                        runId={run.id}
-                                        runName={run.name}
-                                        onDeleted={() => removeRunLocally(run.id)}
-                                      />
-                                    ) : undefined
-                                  }
-                                />
-                              ))}
-                            </tbody>
-                            </table>
-                          </div>
+                          {columnLabels.map((l, i) => (
+                            <span
+                              key={`${l}-${i}`}
+                              style={{
+                                fontSize: 11,
+                                fontWeight: 400,
+                                textTransform: "uppercase",
+                                letterSpacing: "0.08em",
+                                color: "#94A3B8",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              {l}
+                            </span>
+                          ))}
                         </div>
-                      )}
+
+                        {group.runs.map((run) => (
+                          <ActiveRunListRow
+                            key={run.id}
+                            {...run}
+                            assigneeOptions={data.assigneeOptions}
+                            onAssigneeChange={
+                              canEdit
+                                ? (next) => void changeAssignee(run.id, next)
+                                : undefined
+                            }
+                            assigneePending={pendingAssigneeId === run.id}
+                            onStatusChange={
+                              canEdit ? (next) => void changeStatus(run.id, next) : undefined
+                            }
+                            statusPending={pendingStatusId === run.id}
+                            showActions={canEdit}
+                            extraAction={
+                              canEdit ? (
+                                <RunRowActions
+                                  runId={run.id}
+                                  runName={run.name}
+                                  onDeleted={() => removeRunLocally(run.id)}
+                                />
+                              ) : undefined
+                            }
+                          />
+                        ))}
+                      </div>
                     </div>
-                  );
-                })}
+                  )}
+                </div>
+              );
+            })}
           </>
         )}
       </div>

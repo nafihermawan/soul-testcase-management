@@ -13,6 +13,14 @@ const PRINT_RUN_STATUS_TONE: Record<string, { color: string; bg: string; border:
   RE_OPEN: { color: "#1D4ED8", bg: "#EFF6FF", border: "#BFDBFE" },
 };
 
+/** Label + warna pill status bug untuk versi cetak. */
+const PRINT_BUG_STATUS: Record<string, { label: string; color: string; bg: string; border: string }> = {
+  OPEN: { label: "Open", color: "#B91C1C", bg: "#FEF2F2", border: "#FECACA" },
+  IN_PROGRESS: { label: "In Progress", color: "#B45309", bg: "#FFFBEB", border: "#FDE68A" },
+  RESOLVED: { label: "Resolved", color: "#047857", bg: "#ECFDF5", border: "#A7F3D0" },
+  CLOSED: { label: "Closed", color: "#475569", bg: "#F1F5F9", border: "#E2E8F0" },
+};
+
 export default async function RunReportPage({
   params,
 }: {
@@ -45,6 +53,16 @@ export default async function RunReportPage({
           titleSnapshot: true,
           actualResult: true,
           notes: true,
+          /** Bug yang ditautkan ke hasil eksekusi ini (dipakai seksi Bugs Found). */
+          bugs: {
+            select: {
+              id: true,
+              title: true,
+              severity: true,
+              status: true,
+              externalLink: true,
+            },
+          },
           testCase: {
             select: {
               tcId: true,
@@ -64,6 +82,23 @@ export default async function RunReportPage({
   const blocked = run.results.filter((r) => r.status === "BLOCKED").length;
   const skipped = run.results.filter((r) => r.status === "SKIPPED").length;
   const passRate = total > 0 ? Math.round((passed / total) * 100) : 0;
+
+  // Bug unik yang ditautkan ke hasil eksekusi run ini (satu bug bisa dirujuk
+  // dari beberapa hasil, jadi didedupe berdasarkan id).
+  const bugMap = new Map<
+    string,
+    {
+      id: string;
+      title: string;
+      severity: string | null;
+      status: string;
+      externalLink: string | null;
+    }
+  >();
+  for (const r of run.results) {
+    for (const b of r.bugs) if (!bugMap.has(b.id)) bugMap.set(b.id, b);
+  }
+  const bugList = Array.from(bugMap.values());
 
   // Grouping per project -> per suite
   const projectMap = new Map<string, Map<string, typeof run.results>>();
@@ -99,6 +134,9 @@ export default async function RunReportPage({
         fontFamily: "var(--font-sans, system-ui, sans-serif)",
         color: "#0F172A",
         padding: "2rem",
+        // Ruang bawah ekstra supaya tombol aksi (fixed, kanan bawah) tidak
+        // menutupi konten terakhir saat dokumen digulir sampai bawah.
+        paddingBottom: "4rem",
         maxWidth: 900,
         margin: "0 auto",
       }}
@@ -143,6 +181,7 @@ export default async function RunReportPage({
 
       {/* Metadata grid — 3 kolom seimbang, label + ":" sejajar */}
       <div
+        data-pdf-avoid-break=""
         style={{
           display: "grid",
           gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
@@ -231,6 +270,7 @@ export default async function RunReportPage({
 
       {/* Summary metrics table */}
       <table
+        data-pdf-avoid-break=""
         style={{
           width: "100%",
           borderCollapse: "collapse",
@@ -265,29 +305,32 @@ export default async function RunReportPage({
         </tbody>
       </table>
 
-      {/* Overall Testing Notes — catatan makro run (Completion Summary Modal).
-          Kontainer khusus di atas breakdown agar tidak tenggelam di bawah daftar TC. */}
-      {run.overallNotes?.trim() ? (
+      {/* Catatan Tambahan / Execution Notes — highlight summary utama, tepat
+          di bawah ringkasan metrik dan di atas daftar bug. Diisi QA saat
+          Complete Test Run (overallNotes). */}
+      <div
+        data-pdf-avoid-break=""
+        style={{
+          border: "1px solid #E2E8F0",
+          borderRadius: 8,
+          padding: "0.9rem 1rem",
+          marginBottom: "1.5rem",
+          background: "#F8FAFC",
+          breakInside: "avoid",
+        }}
+      >
         <div
           style={{
-            border: "1px solid #E2E8F0",
-            borderRadius: 8,
-            padding: "0.9rem 1rem",
-            marginBottom: "1.5rem",
-            background: "#F8FAFC",
+            fontSize: 11,
+            fontWeight: 700,
+            letterSpacing: "0.08em",
+            color: "#475569",
+            marginBottom: "0.4rem",
           }}
         >
-          <div
-            style={{
-              fontSize: 11,
-              fontWeight: 700,
-              letterSpacing: "0.08em",
-              color: "#475569",
-              marginBottom: "0.4rem",
-            }}
-          >
-            OVERALL TESTING NOTES
-          </div>
+          CATATAN TAMBAHAN / EXECUTION NOTES
+        </div>
+        {run.overallNotes?.trim() ? (
           <div
             style={{
               fontSize: 12,
@@ -299,18 +342,153 @@ export default async function RunReportPage({
           >
             {run.overallNotes.trim()}
           </div>
+        ) : (
+          <div style={{ fontSize: 12, color: "#94A3B8" }}>Tidak ada catatan tambahan.</div>
+        )}
+      </div>
+
+      {/* Bugs Found — daftar bug yang ditautkan ke hasil eksekusi run ini.
+          Diletakkan tepat di bawah ringkasan metrik (Execution Overview). */}
+      <div data-pdf-avoid-break="" style={{ marginBottom: "1.5rem", breakInside: "avoid" }}>
+        <div
+          style={{
+            fontSize: 11,
+            fontWeight: 700,
+            letterSpacing: "0.08em",
+            color: "#475569",
+            marginBottom: "0.5rem",
+          }}
+        >
+          BUGS FOUND
         </div>
-      ) : null}
+
+        {bugList.length === 0 ? (
+          <div
+            style={{
+              border: "1px solid #E2E8F0",
+              borderRadius: 8,
+              padding: "0.9rem 1rem",
+              background: "#F8FAFC",
+              fontSize: 12,
+              color: "#64748B",
+            }}
+          >
+            Tidak ada bug yang ditemukan selama eksekusi ini.
+          </div>
+        ) : (
+          <table
+            style={{
+              width: "100%",
+              borderCollapse: "collapse",
+              fontSize: 12,
+              border: "1px solid #E2E8F0",
+            }}
+          >
+            <thead>
+              <tr style={{ background: "#F1F5F9", color: "#475569" }}>
+                <th style={{ border: "1px solid #E2E8F0", padding: "0.4rem 0.5rem", textAlign: "left" }}>
+                  Title / Summary
+                </th>
+                <th style={{ border: "1px solid #E2E8F0", padding: "0.4rem 0.5rem", textAlign: "left" }}>
+                  Severity
+                </th>
+                <th style={{ border: "1px solid #E2E8F0", padding: "0.4rem 0.5rem", textAlign: "left" }}>
+                  Status
+                </th>
+                <th style={{ border: "1px solid #E2E8F0", padding: "0.4rem 0.5rem", textAlign: "left" }}>
+                  Link
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {bugList.map((b) => {
+                const tone = PRINT_BUG_STATUS[b.status] ?? PRINT_BUG_STATUS.OPEN;
+                return (
+                  <tr key={b.id}>
+                    <td style={{ border: "1px solid #E2E8F0", padding: "0.4rem 0.5rem" }}>
+                      {b.title}
+                    </td>
+                    <td
+                      style={{
+                        border: "1px solid #E2E8F0",
+                        padding: "0.4rem 0.5rem",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {b.severity ?? "—"}
+                    </td>
+                    <td style={{ border: "1px solid #E2E8F0", padding: "0.4rem 0.5rem" }}>
+                      <span
+                        style={{
+                          display: "inline-block",
+                          padding: "0.05rem 0.5rem",
+                          borderRadius: 999,
+                          fontSize: 11,
+                          fontWeight: 700,
+                          background: tone.bg,
+                          color: tone.color,
+                          border: `1px solid ${tone.border}`,
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {tone.label}
+                      </span>
+                    </td>
+                    <td
+                      style={{
+                        border: "1px solid #E2E8F0",
+                        padding: "0.4rem 0.5rem",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {b.externalLink ? (
+                        <a
+                          href={b.externalLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ color: "#2563EB", fontWeight: 600, textDecoration: "none" }}
+                        >
+                          ↗ Link
+                        </a>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
 
       {/* Detailed breakdown per project & suite */}
       {Array.from(projectMap.entries()).map(([pname, suiteMap]) => (
         <div key={pname} style={{ marginBottom: "1.5rem" }}>
-          <div style={{ fontSize: 14, fontWeight: 700, paddingBottom: "0.25rem", borderBottom: "1px solid #CBD5E1" }}>
+          <div
+            style={{
+              fontSize: 14,
+              fontWeight: 700,
+              paddingBottom: "0.25rem",
+              borderBottom: "1px solid #CBD5E1",
+              // Header project jangan menggantung sendiri di dasar halaman.
+              breakAfter: "avoid",
+            }}
+          >
             🔹 Project: {pname}
           </div>
           {Array.from(suiteMap.entries()).map(([sname, rows]) => (
             <div key={sname} style={{ marginTop: "0.75rem" }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: "#475569", marginBottom: "0.35rem" }}>
+              <div
+                style={{
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: "#475569",
+                  marginBottom: "0.35rem",
+                  // Header suite ikut dengan minimal satu kartu di bawahnya.
+                  breakAfter: "avoid",
+                }}
+              >
                 🔸 Suite: {sname}
               </div>
               {rows.map((r) => {
@@ -318,12 +496,17 @@ export default async function RunReportPage({
                 return (
                   <div
                     key={r.id}
+                    data-pdf-avoid-break=""
                     style={{
                       marginBottom: "0.75rem",
                       border: "1px solid #E2E8F0",
                       borderRadius: 6,
                       padding: "0.5rem 0.75rem",
                       fontSize: 12,
+                      // Kartu item tidak boleh terpotong di tengah halaman;
+                      // kalau tidak muat, pindah utuh ke halaman berikutnya.
+                      breakInside: "avoid",
+                      pageBreakInside: "avoid",
                     }}
                   >
                     <div style={{ fontWeight: 600 }}>
@@ -346,7 +529,12 @@ export default async function RunReportPage({
         </div>
       ))}
 
-      <div style={{ fontSize: 11, color: "#94A3B8", marginTop: "1.5rem", textAlign: "center" }}>
+      {/* Footer HTML — tampil di Print. Saat export PDF baris ini dibuang dari
+          kanvas (lihat report-action-bar) karena digantikan footer per-halaman. */}
+      <div
+        className="report-footer"
+        style={{ fontSize: 11, color: "#94A3B8", marginTop: "1.5rem", textAlign: "center" }}
+      >
         Generated by Soulparking Test Case Management · {new Date().toLocaleString("id-ID")}
       </div>
     </div>

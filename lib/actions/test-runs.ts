@@ -251,19 +251,25 @@ export async function updateRunResult(
 }
 
 /**
- * Ubah status sebuah TestRun (dipakai kontrol status di halaman Active Runs).
+ * Ubah status sebuah TestRun dari kontrol list (Active Runs & Run History).
  *
- * `completedAt` dijaga konsisten:
- * - COMPLETED  -> diisi waktu sekarang
- * - selain itu -> dikosongkan kembali
- * (Sebelumnya `completedAt` tidak pernah dikosongkan, sehingga run yang
- * dibuka ulang tetap tampak punya waktu selesai.)
+ * COMPLETED sengaja DITOLAK di sini: menyelesaikan run wajib lewat halaman
+ * detail Test Run karena butuh catatan penyelesaian (overallNotes) — pakai
+ * `completeRun` / `completeRunWithSkip`. Kontrol list hanya boleh memindahkan
+ * run antar status "belum selesai" (PENDING / IN_PROGRESS / RE_OPEN), sehingga
+ * `completedAt` selalu dikosongkan di jalur ini.
  */
 export async function setRunStatus(
   runId: string,
   status: RunStatusValue
 ): Promise<TestRunActionState> {
   await requireRole("QA");
+  if (status === "COMPLETED") {
+    return {
+      error:
+        "Status Completed hanya bisa diset dari halaman detail Test Run (butuh catatan penyelesaian).",
+    };
+  }
   try {
     const run = await prisma.testRun.findUnique({
       where: { id: runId },
@@ -275,7 +281,7 @@ export async function setRunStatus(
       where: { id: runId },
       data: {
         status,
-        completedAt: status === "COMPLETED" ? new Date() : null,
+        completedAt: null,
       },
     });
 

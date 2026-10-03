@@ -1,9 +1,25 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useState, type CSSProperties, type ReactNode } from "react";
 import { FileText } from "lucide-react";
 import Link from "next/link";
 import { RunStatusSelect } from "@/components/test-runs/run-status-select";
+import { STICKY_ID_WIDTH } from "@/components/test-runs/run-list-columns";
+
+/** Isi sel tabel: satu baris, kelebihan teks dipotong elipsis. */
+const truncate: CSSProperties = {
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+};
+
+/** Sel beku: tetap menempel di kiri saat tabel digeser mendatar. */
+const stickyCell = (left: number, background: string): CSSProperties => ({
+  position: "sticky",
+  left,
+  zIndex: 20,
+  background,
+});
 
 export function HistoryRunRow({
   id,
@@ -35,6 +51,11 @@ export function HistoryRunRow({
   onStatusChange?: (status: string) => void;
   statusPending?: boolean;
 }) {
+  // Hover di-track di state supaya sel BEKU ikut berubah warna — kalau tidak,
+  // kolom beku tetap putih saat barisnya di-hover (background-nya opaque).
+  const [hovered, setHovered] = useState(false);
+  const frozenBg = hovered ? "#F8FAFC" : "#fff";
+
   const projectLabel =
     projects.length > 1 ? (
       <span
@@ -89,34 +110,49 @@ export function HistoryRunRow({
 
   return (
     <tr
-      style={{ borderTop: "1px solid #E2E8F0", cursor: "pointer" }}
+      style={{
+        borderTop: "1px solid #E2E8F0",
+        cursor: "pointer",
+        background: hovered ? "#F8FAFC" : "transparent",
+      }}
       onClick={() => {
         window.location.href = `/test-runs/${id}`;
       }}
-      onMouseEnter={(e) => (e.currentTarget.style.background = "#F8FAFC")}
-      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
     >
-      {/* 1. Run ID */}
-      <td style={{ padding: "0.7rem 1rem" }}>
+      {/* 1. Run ID — kolom BEKU (sticky kiri) */}
+      <td style={{ padding: "0.7rem 1rem", ...stickyCell(0, frozenBg) }}>
         <span
           style={{
             fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
-            fontSize: 13,
-            fontWeight: 700,
-            color: "#334155",
+            fontSize: 11,
+            fontWeight: 400,
+            color: "#64748B",
           }}
         >
           {runCode}
         </span>
       </td>
-      {/* 2. Nama Run */}
-      <td style={{ padding: "0.7rem 1rem", fontWeight: 600 }}>{name}</td>
+      {/* 2. Nama Run — kolom BEKU kedua; diberi shadow sebagai batas area scroll */}
+      <td
+        style={{
+          padding: "0.7rem 1rem",
+          fontWeight: 700,
+          color: "#0F172A",
+          ...truncate,
+          ...stickyCell(STICKY_ID_WIDTH, frozenBg),
+          boxShadow: "2px 0 5px -2px rgba(0, 0, 0, 0.1)",
+        }}
+      >
+        {name}
+      </td>
       {/* 3. Projects Covered */}
-      <td style={{ padding: "0.7rem 0.5rem", color: "#475569" }}>{projectLabel}</td>
+      <td style={{ padding: "0.7rem 0.5rem", color: "#475569", ...truncate }}>{projectLabel}</td>
       {/* 4. Suites Included */}
-      <td style={{ padding: "0.7rem 0.5rem", color: "#475569" }}>{suiteLabel}</td>
+      <td style={{ padding: "0.7rem 0.5rem", color: "#475569", ...truncate }}>{suiteLabel}</td>
       {/* 5. Platform */}
-      <td style={{ padding: "0.7rem 0.5rem", color: "#475569" }}>{platforms ?? "—"}</td>
+      <td style={{ padding: "0.7rem 0.5rem", color: "#475569", ...truncate }}>{platforms ?? "—"}</td>
       {/* 6. Status — dropdown bila boleh diubah (mis. buka lagi run selesai) */}
       <td style={{ padding: "0.7rem 0.5rem" }}>
         {onStatusChange ? (
@@ -131,12 +167,12 @@ export function HistoryRunRow({
         )}
       </td>
       {/* 7. Sprint */}
-      <td style={{ padding: "0.7rem 0.5rem", color: "#475569" }}>{sprint ?? "—"}</td>
+      <td style={{ padding: "0.7rem 0.5rem", color: "#475569", ...truncate }}>{sprint ?? "—"}</td>
       {/* QA & Tanggal Execution (terpisah) */}
-      <td style={{ padding: "0.7rem 0.5rem", color: "#475569", fontSize: "0.82rem", whiteSpace: "nowrap" }}>
+      <td style={{ padding: "0.7rem 0.5rem", color: "#475569", fontSize: "0.82rem", ...truncate }}>
         {qaName ?? "—"}
       </td>
-      <td style={{ padding: "0.7rem 0.5rem", color: "#475569", fontSize: "0.82rem", whiteSpace: "nowrap" }}>
+      <td style={{ padding: "0.7rem 0.5rem", color: "#475569", fontSize: "0.82rem", ...truncate }}>
         {new Date(createdAt).toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" })}
       </td>
       {/* 10. Aksi */}

@@ -11,14 +11,7 @@
  */
 export type RunStatusValue = "PENDING" | "IN_PROGRESS" | "COMPLETED" | "RE_OPEN";
 
-/** Urutan tampilan (untuk dropdown status). */
-export const RUN_STATUS_ORDER: RunStatusValue[] = [
-  "PENDING",
-  "IN_PROGRESS",
-  "COMPLETED",
-  "RE_OPEN",
-];
-
+/** Label tampilan sebuah status. */
 export const RUN_STATUS_LABEL: Record<RunStatusValue, string> = {
   PENDING: "Pending",
   IN_PROGRESS: "In Progress",

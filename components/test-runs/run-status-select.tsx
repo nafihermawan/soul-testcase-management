@@ -1,10 +1,14 @@
 "use client";
 
-import { RUN_STATUS_LABEL, RUN_STATUS_ORDER } from "@/lib/run-status";
+import { OPEN_RUN_STATUSES, RUN_STATUS_LABEL } from "@/lib/run-status";
 import { Select } from "@/components/ui/select";
 
 /**
  * Dropdown untuk mengubah status sebuah TestRun dari baris tabel.
+ *
+ * Sengaja TIDAK menyertakan COMPLETED: menyelesaikan run wajib lewat halaman
+ * detail Test Run karena butuh catatan penyelesaian (overallNotes). Opsi di
+ * sini terbatas pada status "belum selesai" (OPEN_RUN_STATUSES).
  *
  * `stopPropagation` wajib: baris tabel menavigasi ke detail run saat diklik,
  * sehingga tanpa ini memilih status akan ikut memindahkan halaman.
@@ -33,7 +37,7 @@ export function RunStatusSelect({
         ariaLabel={`Ubah status run ${runCode}`}
         onChange={(e) => onChange(e.target.value)}
       >
-        {RUN_STATUS_ORDER.map((s) => (
+        {OPEN_RUN_STATUSES.map((s) => (
           <option key={s} value={s}>
             {RUN_STATUS_LABEL[s]}
           </option>

@@ -398,7 +398,22 @@ button,
 }
 
 /* Print: sembunyikan navigasi & action bar, konten full-width */
+/* Ukuran & margin kertas saat mencetak ke PDF. */
+@page {
+  size: A4;
+  margin: 12mm;
+}
+
 @media print {
+  /* Body aplikasi ber-`overflow: hidden` di layar; reset saat mencetak supaya
+     seluruh dokumen ikut tercetak dan tidak terpotong. */
+  html,
+  body {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
   .app-sidebar,
   .app-header,
   aside,
@@ -412,6 +427,18 @@ button,
     max-width: 100% !important;
     margin: 0 !important;
     padding: 0 !important;
+    overflow: visible !important;
+    /* Warna pill/status & header tabel tetap ikut tercetak. */
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Kontainer scroll layar (100vh + overflow) harus dilepas saat mencetak,
+     supaya seluruh dokumen ikut tercetak, bukan hanya bagian yang terlihat. */
+  .print-scroll {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
   }
 }
 

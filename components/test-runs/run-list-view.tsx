@@ -390,7 +390,7 @@ export function RunListView({ searchParams }: { searchParams: ActiveRunsSearchPa
                         color: "#64748B",
                         flexShrink: 0,
                         transform: open ? "rotate(90deg)" : "rotate(0deg)",
-                        transition: "transform 0.15s ease",
+                        transition: "transform 300ms ease",
                       }}
                     />
                     <TestRunStatusBadge status={group.status} />
@@ -405,13 +405,21 @@ export function RunListView({ searchParams }: { searchParams: ActiveRunsSearchPa
                     />
                   </div>
 
-                  {/* List kolom + baris data — hanya dirender saat grup
-                      expanded; saat collapsed yang tersisa hanya header bar.
-                      Tanpa framing card: header transparan & hanya garis tipis
-                      antar baris yang memisahkan. */}
-                  {open && (
-                    <div style={{ width: "100%", overflowX: "auto", marginBottom: 20 }}>
-                      <div style={{ minWidth }}>
+                  {/* List kolom + baris data. Konten TETAP ter-mount dan
+                      dilipat lewat grid-template-rows 0fr<->1fr supaya area
+                      meluncur mulus saat dibuka/ditutup. Tanpa framing card:
+                      header transparan & hanya garis tipis antar baris. */}
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateRows: open ? "1fr" : "0fr",
+                      transition: "grid-template-rows 300ms ease",
+                      marginBottom: 20,
+                    }}
+                  >
+                    <div style={{ overflow: "hidden", minHeight: 0 }} aria-hidden={!open}>
+                      <div style={{ width: "100%", overflowX: "auto" }}>
+                        <div style={{ minWidth }}>
                         {/* Header kolom — melayang (tanpa background) di atas
                             list, sejajar dengan grid baris. */}
                         <div
@@ -424,21 +432,26 @@ export function RunListView({ searchParams }: { searchParams: ActiveRunsSearchPa
                             borderBottom: "1px solid #CBD5E1",
                           }}
                         >
-                          {columnLabels.map((l, i) => (
-                            <span
-                              key={`${l}-${i}`}
-                              style={{
-                                fontSize: 11,
-                                fontWeight: 400,
-                                textTransform: "uppercase",
-                                letterSpacing: "0.08em",
-                                color: "#94A3B8",
-                                whiteSpace: "nowrap",
-                              }}
-                            >
-                              {l}
-                            </span>
-                          ))}
+                          {columnLabels.map((l, i) => {
+                            const isActions = canEdit && i === columnLabels.length - 1;
+                            return (
+                              <span
+                                key={`${l}-${i}`}
+                                style={{
+                                  fontSize: 11,
+                                  fontWeight: 400,
+                                  letterSpacing: "0.08em",
+                                  color: "#94A3B8",
+                                  whiteSpace: "nowrap",
+                                  // Header "Actions" sejajar dengan tombolnya
+                                  // yang rata kanan.
+                                  textAlign: isActions ? "right" : undefined,
+                                }}
+                              >
+                                {l}
+                              </span>
+                            );
+                          })}
                         </div>
 
                         {group.runs.map((run) => (
@@ -468,9 +481,10 @@ export function RunListView({ searchParams }: { searchParams: ActiveRunsSearchPa
                             }
                           />
                         ))}
+                        </div>
                       </div>
                     </div>
-                  )}
+                  </div>
                 </div>
               );
             })}

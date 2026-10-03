@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, type CSSProperties, type ReactNode } from "react";
-import { FolderOpen, Tag } from "lucide-react";
 import { AvatarStack } from "@/components/ui/avatar";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { AssigneeSelect } from "@/components/test-runs/assignee-select";
@@ -17,53 +16,19 @@ import { TestRunStatusBadge } from "@/components/test-runs/test-run-status-badge
  */
 export function listGridTemplate(showActions: boolean): string {
   return showActions
-    ? "minmax(260px, 1fr) 180px 150px 130px 130px 110px 80px"
-    : "minmax(260px, 1fr) 180px 150px 130px 130px 110px";
+    ? "minmax(260px, 1fr) 180px 100px 150px 130px 130px 110px 80px"
+    : "minmax(260px, 1fr) 180px 100px 150px 130px 130px 110px";
 }
 
 /** Lebar minimum konten (px) agar tabel tetap bisa discroll mendatar. */
 export function listMinWidth(showActions: boolean): number {
-  return showActions ? 1120 : 1030;
+  return showActions ? 1230 : 1140;
 }
 
 /** Label kolom untuk baris header (urutannya sama dengan grid di atas). */
 export function listColumnLabels(showActions: boolean): string[] {
-  const labels = ["Run", "Projects", "Assignee", "Status", "Progress", "Created"];
-  return showActions ? [...labels, ""] : labels;
-}
-
-/** Pill kecil untuk metadata (jumlah suite, sprint). */
-function MiniPill({
-  children,
-  icon,
-  title,
-}: {
-  children: ReactNode;
-  icon?: ReactNode;
-  title?: string;
-}) {
-  return (
-    <span
-      title={title}
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 4,
-        padding: "1px 7px",
-        borderRadius: 999,
-        fontSize: 11,
-        fontWeight: 500,
-        lineHeight: 1.6,
-        background: "#F1F5F9",
-        color: "#475569",
-        border: "1px solid #E2E8F0",
-        whiteSpace: "nowrap",
-      }}
-    >
-      {icon}
-      {children}
-    </span>
-  );
+  const labels = ["Run", "Projects", "Sprint", "Assignee", "Status", "Progress", "Created"];
+  return showActions ? [...labels, "Actions"] : labels;
 }
 
 const truncate: CSSProperties = {
@@ -77,7 +42,6 @@ export function ActiveRunListRow({
   runCode,
   name,
   projects,
-  suites,
   sprint,
   status,
   pct,
@@ -96,7 +60,6 @@ export function ActiveRunListRow({
   runCode: string;
   name: string;
   projects: { id: string; name: string }[];
-  suites: { id: string; name: string }[];
   sprint: string | null;
   status: string;
   pct: number;
@@ -161,32 +124,12 @@ export function ActiveRunListRow({
         transition: "background-color 0.12s ease",
       }}
     >
-      {/* 1. Run — judul + mini-badge, rata kiri sel */}
-      <div style={{ minWidth: 0 }}>
-        <div
-          style={{ ...truncate, fontSize: 12, fontWeight: 500, color: "#334155" }}
-          title={name}
-        >
-          {name}
-        </div>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-            marginTop: 2,
-            minWidth: 0,
-          }}
-        >
-          <MiniPill icon={<FolderOpen size={11} />} title="Jumlah suite">
-            {suites.length}
-          </MiniPill>
-          {sprint && (
-            <MiniPill icon={<Tag size={11} />} title="Sprint">
-              {sprint}
-            </MiniPill>
-          )}
-        </div>
+      {/* 1. Run — hanya nama run */}
+      <div
+        style={{ ...truncate, fontSize: 12, fontWeight: 500, color: "#334155" }}
+        title={name}
+      >
+        {name}
       </div>
 
       {/* 2. Projects — teks polos */}
@@ -194,7 +137,12 @@ export function ActiveRunListRow({
         {projectText}
       </div>
 
-      {/* 3. Assignee — avatar stack (+ dropdown saat boleh edit) */}
+      {/* 3. Sprint — teks polos */}
+      <div style={{ ...truncate, fontSize: 12, fontWeight: 500, color: "#475569" }}>
+        {sprint?.trim() ? sprint : <span style={{ color: "#94A3B8" }}>—</span>}
+      </div>
+
+      {/* 4. Assignee — avatar stack (+ dropdown saat boleh edit) */}
       <div
         style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}
         onClick={(e) => e.stopPropagation()}
@@ -214,7 +162,7 @@ export function ActiveRunListRow({
         )}
       </div>
 
-      {/* 4. Status — dropdown bila bisa diubah, badge bila read-only */}
+      {/* 5. Status — dropdown bila bisa diubah, badge bila read-only */}
       <div>
         {onStatusChange ? (
           <RunStatusSelect
@@ -228,7 +176,7 @@ export function ActiveRunListRow({
         )}
       </div>
 
-      {/* 5. Progress / Pass Rate */}
+      {/* 6. Progress / Pass Rate */}
       <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
         <span style={{ flex: 1, minWidth: 24 }}>
           <ProgressBar value={pct} color={progressColor} />
@@ -238,7 +186,7 @@ export function ActiveRunListRow({
         </span>
       </div>
 
-      {/* 6. Created */}
+      {/* 7. Created */}
       <div style={{ fontSize: 11, color: "#64748B", whiteSpace: "nowrap" }}>
         {new Date(createdAt).toLocaleDateString("id-ID", {
           day: "2-digit",
@@ -247,7 +195,7 @@ export function ActiveRunListRow({
         })}
       </div>
 
-      {/* 7. Actions */}
+      {/* 8. Actions */}
       {showActions && (
         <div style={{ display: "flex", justifyContent: "flex-end" }}>{extraAction}</div>
       )}

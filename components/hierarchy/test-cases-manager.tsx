@@ -34,7 +34,7 @@ import {
   renameSection as renameSectionAction,
 } from "@/lib/actions/sections";
 import { RowActionsMenu } from "@/components/settings/row-actions-menu";
-import { ConfirmDialog } from "@/components/ui/feedback";
+import { ConfirmDialog, Spinner } from "@/components/ui/feedback";
 import { ListTextarea } from "@/components/ui/list-textarea";
 import { Select } from "@/components/ui/select";
 
@@ -49,6 +49,8 @@ export type TestCase = {
   expectedResult: string | null;
   priority: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
   status: "DRAFT" | "ACTIVE" | "DEPRECATED";
+  /** Jenis skenario: POSITIVE / NEGATIVE; null = belum dipilih. */
+  type: "POSITIVE" | "NEGATIVE" | null;
   sectionId: string | null;
   createdAt?: string | Date;
   createdBy?: { name: string | null } | null;
@@ -66,6 +68,9 @@ const priorityTone = (p: TestCase["priority"]) =>
   p === "CRITICAL" ? "danger" : p === "HIGH" ? "warning" : p === "MEDIUM" ? "info" : "neutral";
 const statusTone = (s: TestCase["status"]) =>
   s === "ACTIVE" ? "success" : s === "DEPRECATED" ? "neutral" : "warning";
+/** POSITIVE hijau muda, NEGATIVE merah muda, belum dipilih netral. */
+const typeTone = (t: TestCase["type"]) =>
+  t === "NEGATIVE" ? "rose" : t === "POSITIVE" ? "emerald" : "neutral";
 
 const badgeStyle = (tone: string): React.CSSProperties => ({
   display: "inline-block",
@@ -78,6 +83,16 @@ const badgeStyle = (tone: string): React.CSSProperties => ({
   ...(tone === "info" && { background: "var(--info-bg)", color: "var(--info)" }),
   ...(tone === "success" && { background: "var(--success-bg)", color: "var(--success)" }),
   ...(tone === "neutral" && { background: "var(--surface-muted)", color: "var(--text-secondary)" }),
+  ...(tone === "emerald" && {
+    background: "#ECFDF5",
+    color: "#059669",
+    border: "1px solid #A7F3D0",
+  }),
+  ...(tone === "rose" && {
+    background: "#FFF1F2",
+    color: "#E11D48",
+    border: "1px solid #FECDD3",
+  }),
 });
 
 const inputStyle: React.CSSProperties = {
@@ -143,6 +158,8 @@ function TestCaseForm({
   // (pola yang sama dengan title/scenario di bawah).
   const [priorityValue, setPriorityValue] = useState(initial?.priority ?? "MEDIUM");
   const [statusValue, setStatusValue] = useState(initial?.status ?? "DRAFT");
+  // Type sengaja TIDAK diberi default: kosong = "belum dipilih" (tersimpan null).
+  const [typeValue, setTypeValue] = useState<"POSITIVE" | "NEGATIVE" | "">(initial?.type ?? "");
   // Field auto-list (- / * / 1.) ditahan sebagai state supaya penulisan ulang
   // marker bisa langsung terlihat; FormData tetap membaca nilai terbaru karena
   // textarea-nya controlled dan tetap punya atribut name.
@@ -195,6 +212,7 @@ function TestCaseForm({
       formData.set("suiteId", suiteId);
       formData.set("priority", priorityValue);
       formData.set("status", statusValue);
+      formData.set("type", typeValue);
       const res = await onSubmit(formData);
       if (res?.error) setError(res.error);
       else if (res?.success) onCancel();
@@ -312,7 +330,7 @@ function TestCaseForm({
               gap: "0.75rem",
             }}
           >
-            {/* Row 1: TC ID | Status | Priority (2-col grid) */}
+            {/* Row 1: TC ID | Type */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
               <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
                 <label
@@ -327,40 +345,58 @@ function TestCaseForm({
                   style={inputStyle}
                 />
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
-                <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
-                  <label
-                    style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)" }}
-                  >
-                    Priority
-                  </label>
-                  <Select
-                    value={priorityValue}
-                    ariaLabel="Priority"
-                    onChange={(e) => setPriorityValue(e.target.value as TestCase["priority"])}
-                  >
-                    <option value="LOW">Low</option>
-                    <option value="MEDIUM">Medium</option>
-                    <option value="HIGH">High</option>
-                    <option value="CRITICAL">Critical</option>
-                  </Select>
-                </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
-                  <label
-                    style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)" }}
-                  >
-                    Status
-                  </label>
-                  <Select
-                    value={statusValue}
-                    ariaLabel="Status"
-                    onChange={(e) => setStatusValue(e.target.value as TestCase["status"])}
-                  >
-                    <option value="DRAFT">Draft</option>
-                    <option value="ACTIVE">Active</option>
-                    <option value="DEPRECATED">Deprecated</option>
-                  </Select>
-                </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
+                <label
+                  style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)" }}
+                >
+                  Type
+                </label>
+                <Select
+                  value={typeValue}
+                  ariaLabel="Type"
+                  onChange={(e) => setTypeValue(e.target.value as "POSITIVE" | "NEGATIVE" | "")}
+                >
+                  <option value="">— Belum dipilih —</option>
+                  <option value="POSITIVE">Positive</option>
+                  <option value="NEGATIVE">Negative</option>
+                </Select>
+              </div>
+            </div>
+
+            {/* Row 2: Priority | Status */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
+                <label
+                  style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)" }}
+                >
+                  Priority
+                </label>
+                <Select
+                  value={priorityValue}
+                  ariaLabel="Priority"
+                  onChange={(e) => setPriorityValue(e.target.value as TestCase["priority"])}
+                >
+                  <option value="LOW">Low</option>
+                  <option value="MEDIUM">Medium</option>
+                  <option value="HIGH">High</option>
+                  <option value="CRITICAL">Critical</option>
+                </Select>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
+                <label
+                  style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)" }}
+                >
+                  Status
+                </label>
+                <Select
+                  value={statusValue}
+                  ariaLabel="Status"
+                  onChange={(e) => setStatusValue(e.target.value as TestCase["status"])}
+                >
+                  <option value="DRAFT">Draft</option>
+                  <option value="ACTIVE">Active</option>
+                  <option value="DEPRECATED">Deprecated</option>
+                </Select>
               </div>
             </div>
 
@@ -562,7 +598,11 @@ function SectionCard({
   onToggleAll: (tcList: TestCase[]) => void;
   onQuickUpdate: (
     t: TestCase,
-    data: { priority?: TestCase["priority"]; status?: TestCase["status"] }
+    data: {
+      priority?: TestCase["priority"];
+      status?: TestCase["status"];
+      type?: TestCase["type"];
+    }
   ) => void;
 }) {
   const [editingTitle, setEditingTitle] = useState(false);
@@ -852,7 +892,11 @@ function TestCaseTable({
   onToggleAll?: (tcList: TestCase[]) => void;
   onQuickUpdate: (
     t: TestCase,
-    data: { priority?: TestCase["priority"]; status?: TestCase["status"] }
+    data: {
+      priority?: TestCase["priority"];
+      status?: TestCase["status"];
+      type?: TestCase["type"];
+    }
   ) => void;
 }) {
   if (testCases.length === 0) {
@@ -903,10 +947,21 @@ function TestCaseTable({
                 )}
               </th>
             )}
-            <th style={{ padding: "0.5rem 1rem", fontWeight: 600, width: 220 }}>TC ID</th>
-            <th style={{ padding: "0.5rem 0.5rem", fontWeight: 600, width: "auto" }}>Title</th>
-            <th style={{ padding: "0.5rem 0.5rem", fontWeight: 600, width: 140 }}>Priority</th>
-            <th style={{ padding: "0.5rem 0.5rem", fontWeight: 600, width: 140 }}>Status</th>
+            <th style={{ padding: "0.5rem 1rem", fontWeight: 600, width: 220, textAlign: "left" }}>
+              TC ID
+            </th>
+            <th style={{ padding: "0.5rem 0.5rem", fontWeight: 600, width: "auto", textAlign: "left" }}>
+              Title
+            </th>
+            <th style={{ padding: "0.5rem 0.5rem", fontWeight: 600, width: 110, textAlign: "center" }}>
+              Type
+            </th>
+            <th style={{ padding: "0.5rem 0.5rem", fontWeight: 600, width: 140, textAlign: "center" }}>
+              Priority
+            </th>
+            <th style={{ padding: "0.5rem 0.5rem", fontWeight: 600, width: 140, textAlign: "center" }}>
+              Status
+            </th>
             {canEdit && (
               <th
                 style={{
@@ -975,6 +1030,7 @@ function TestCaseTable({
                   width: 220,
                   overflow: "hidden",
                   textOverflow: "ellipsis",
+                  textAlign: "left",
                 }}
               >
                 <button
@@ -1008,17 +1064,50 @@ function TestCaseTable({
                   overflow: "hidden",
                   textOverflow: "ellipsis",
                   whiteSpace: "nowrap",
+                  textAlign: "left",
                 }}
               >
                 {t.title}
               </td>
-              <td style={{ padding: "0.5rem 0.5rem", width: 140 }}>
+              <td style={{ padding: "0.5rem 0.5rem", width: 110, textAlign: "center" }}>
+                <Select
+                  size="sm"
+                  value={t.type ?? ""}
+                  disabled={!canEdit}
+                  ariaLabel="Ubah type TC"
+                  style={{
+                    ...badgeStyle(typeTone(t.type)),
+                    maxWidth: "100%",
+                    // Menyusut ke konten agar bisa muncul rata tengah di sel.
+                    width: "auto",
+                    display: "inline-flex",
+                  }}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    onQuickUpdate(t, {
+                      type: val === "POSITIVE" || val === "NEGATIVE" ? val : null,
+                    });
+                  }}
+                >
+                  <option value="">— Belum dipilih —</option>
+                  <option value="POSITIVE">Positive</option>
+                  <option value="NEGATIVE">Negative</option>
+                </Select>
+              </td>
+              <td style={{ padding: "0.5rem 0.5rem", width: 140, textAlign: "center" }}>
                 <Select
                   size="sm"
                   value={t.priority}
                   disabled={!canEdit}
                   ariaLabel="Ubah priority TC"
-                  style={{ ...badgeStyle(priorityTone(t.priority)), border: "none", maxWidth: "100%" }}
+                  style={{
+                    ...badgeStyle(priorityTone(t.priority)),
+                    border: "none",
+                    maxWidth: "100%",
+                    // Menyusut ke konten agar bisa muncul rata tengah di sel.
+                    width: "auto",
+                    display: "inline-flex",
+                  }}
                   onChange={(e) => {
                     const val = e.target.value as TestCase["priority"];
                     onQuickUpdate(t, { priority: val });
@@ -1030,13 +1119,20 @@ function TestCaseTable({
                   <option value="LOW">LOW</option>
                 </Select>
               </td>
-              <td style={{ padding: "0.5rem 0.5rem", width: 140 }}>
+              <td style={{ padding: "0.5rem 0.5rem", width: 140, textAlign: "center" }}>
                 <Select
                   size="sm"
                   value={t.status}
                   disabled={!canEdit}
                   ariaLabel="Ubah status TC"
-                  style={{ ...badgeStyle(statusTone(t.status)), border: "none", maxWidth: "100%" }}
+                  style={{
+                    ...badgeStyle(statusTone(t.status)),
+                    border: "none",
+                    maxWidth: "100%",
+                    // Menyusut ke konten agar bisa muncul rata tengah di sel.
+                    width: "auto",
+                    display: "inline-flex",
+                  }}
                   onChange={(e) => {
                     const val = e.target.value as TestCase["status"];
                     onQuickUpdate(t, { status: val });
@@ -1217,9 +1313,21 @@ export function TestCasesManager({
       prev.map((t) => (ids.includes(t.id) ? { ...t, sectionId } : t))
     );
 
-  const moveTc = async (tcId: string, sectionId: string | null) => {
-    const res = await assignTestCaseToSection(tcId, sectionId);
-    if (res.success) patchTcSection([tcId], sectionId);
+  /** Pindah satu TC ke section lain. Return `true` bila sukses. */
+  const moveTc = async (tcId: string, sectionId: string | null): Promise<boolean> => {
+    try {
+      const res = await assignTestCaseToSection(tcId, sectionId);
+      if (res.error) {
+        showToast(res.error, "error");
+        return false;
+      }
+      patchTcSection([tcId], sectionId);
+      showToast("Test Case dipindahkan.", "success");
+      return true;
+    } catch {
+      showToast("Gagal memindahkan test case. Coba lagi", "error");
+      return false;
+    }
   };
 
   /** Drop handler: pindahkan 1 TC (drag biasa) atau semua TC terpilih (bulk drag). */
@@ -1321,15 +1429,25 @@ export function TestCasesManager({
 
   const clearSelection = () => setSelectedTcIds(new Set());
 
-  const bulkMove = async (sectionId: string | null) => {
+  const bulkMove = async (sectionId: string | null): Promise<boolean> => {
     const ids = Array.from(selectedTcIds);
-    for (const tcId of ids) {
-      await assignTestCaseToSection(tcId, sectionId);
+    try {
+      for (const tcId of ids) {
+        const res = await assignTestCaseToSection(tcId, sectionId);
+        if (res.error) {
+          showToast(res.error, "error");
+          return false;
+        }
+      }
+      patchTcSection(ids, sectionId);
+      clearSelection();
+      setBulkMoveOpen(false);
+      showToast(`${ids.length} Test Case dipindahkan!`, "success");
+      return true;
+    } catch {
+      showToast("Gagal memindahkan test case. Coba lagi", "error");
+      return false;
     }
-    patchTcSection(ids, sectionId);
-    clearSelection();
-    setBulkMoveOpen(false);
-    showToast(`${ids.length} Test Case dipindahkan!`, "success");
   };
 
   const bulkDelete = async () => {
@@ -1370,7 +1488,11 @@ export function TestCasesManager({
   /** Update prioritas/status cepat dari dropdown — update in-place, tanpa refresh penuh. */
   const handleQuickUpdate = async (
     t: TestCase,
-    data: { priority?: TestCase["priority"]; status?: TestCase["status"] }
+    data: {
+      priority?: TestCase["priority"];
+      status?: TestCase["status"];
+      type?: TestCase["type"];
+    }
   ) => {
     const res = await quickUpdateTestCase(t.id, data);
     if (!res.success) {
@@ -1381,18 +1503,31 @@ export function TestCasesManager({
   };
 
   const handleExport = async (format: "csv" | "xlsx") => {
-    const rows = localTestCases.map((t) => ({
-      tcId: t.tcId,
-      title: t.title,
-      scenario: t.scenario ?? "",
-      precondition: t.precondition ?? "",
-      steps: t.steps ?? "",
-      testData: t.testData ?? "",
-      expectedResult: t.expectedResult ?? "",
-      priority: t.priority,
-      status: t.status,
-    }));
-    const fileName = `test-cases-${suiteName.replace(/\s+/g, "-").toLowerCase()}`;
+    // SPESIFIKASI HEADER CSV EXPORT — urutan & penamaan diambil dari
+    // TC_EXPORT_HEADER supaya presisi dan tidak bisa melenceng.
+    const sectionNameOf = (sectionId: string | null) =>
+      localSections.find((s) => s.id === sectionId)?.name ?? "";
+    const rows = localTestCases.map((t) => {
+      const byHeader: Record<(typeof TC_EXPORT_HEADER)[number], string> = {
+        section: sectionNameOf(t.sectionId),
+        title: t.title,
+        tcid: t.tcId,
+        scenario: t.scenario ?? "",
+        precondition: t.precondition ?? "",
+        steps: t.steps ?? "",
+        testData: t.testData ?? "",
+        expectedResult: t.expectedResult ?? "",
+        priority: t.priority,
+        status: t.status,
+      };
+      return Object.fromEntries(TC_EXPORT_HEADER.map((h) => [h, byHeader[h]]));
+    });
+    // Nama file diberi timestamp tanggal-jam lokal supaya tiap download unik —
+    // mencegah file lama dengan nama sama tertukar saat mau di-upload ulang.
+    const d = new Date();
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const stamp = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}`;
+    const fileName = `test-cases-${suiteName.replace(/\s+/g, "-").toLowerCase()}-${stamp}`;
     if (format === "csv") {
       const Papa = (await import("papaparse")).default;
       const csv = Papa.unparse(rows);
@@ -1413,26 +1548,20 @@ export function TestCasesManager({
   };
 
   const handleDownloadTemplate = () => {
-    // Urutan kolom template: Section (opsional) di kolom A, sisanya mengikuti.
-    const header = [
-      "Section",
-      "TC ID",
-      "Title",
-      "Priority",
-      "Description",
-      "Precondition",
-      "Expected Result",
-      "Test Steps",
-    ];
+    // Template memakai header yang persis sama dengan hasil export
+    // (TC_EXPORT_HEADER) supaya keduanya kompatibel dua arah.
+    const header = [...TC_EXPORT_HEADER];
     const example = [
-      "Appeal",
-      "",
-      "Login berhasil dengan kredensial valid",
-      "HIGH",
-      "User membuka halaman login dan memasukkan email + password yang benar",
-      "User memiliki akun aktif dan koneksi internet",
-      "User masuk ke dashboard utama",
-      "Buka halaman login\nMasukkan email valid\nKlik tombol Masuk",
+      "Appeal", // section (opsional)
+      "Login berhasil dengan kredensial valid", // title
+      "", // tcid (kosong = auto-generate)
+      "User membuka halaman login dan memasukkan email + password yang benar", // scenario
+      "User memiliki akun aktif dan koneksi internet", // precondition
+      "Buka halaman login\nMasukkan email valid\nKlik tombol Masuk", // steps
+      "", // testData
+      "User masuk ke dashboard utama", // expectedResult
+      "HIGH", // priority
+      "ACTIVE", // status
     ];
     // Escape nilai yang mengandung koma/quote/baris baru
     const escapeCsv = (v: string) => {
@@ -1779,8 +1908,10 @@ export function TestCasesManager({
           sections={sections}
           onClose={() => setMoveModalTc(null)}
           onMove={async (sectionId: string | null) => {
-            await moveTc(moveModalTc.id, sectionId);
-            setMoveModalTc(null);
+            // Tutup modal hanya bila pemindahan sukses — kalau gagal, biarkan
+            // terbuka supaya user bisa coba lagi.
+            const ok = await moveTc(moveModalTc.id, sectionId);
+            if (ok) setMoveModalTc(null);
           }}
         />
       )}
@@ -1854,6 +1985,7 @@ export function TestCasesManager({
                     section: r.section ?? "",
                     tcId: r.tcId ?? "",
                     title: r.title ?? "",
+                    type: r.type ?? "",
                     priority: r.priority ?? "MEDIUM",
                     scenario: r.scenario ?? "",
                     precondition: r.precondition ?? "",
@@ -2121,6 +2253,18 @@ function MoveSectionModal({
   onMove: (sectionId: string | null) => Promise<void>;
 }) {
   const [selected, setSelected] = useState<string>("");
+  /** Proses pemindahan sedang berjalan (tombol dikunci + spinner). */
+  const [moving, setMoving] = useState(false);
+
+  const submit = async () => {
+    if (moving || !selected) return;
+    setMoving(true);
+    try {
+      await onMove(selected === "__none__" ? null : selected);
+    } finally {
+      setMoving(false);
+    }
+  };
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -2198,6 +2342,7 @@ function MoveSectionModal({
           <button
             type="button"
             onClick={onClose}
+            disabled={moving}
             style={{
               padding: "0.4rem 0.9rem",
               border: "1px solid #D1D5DB",
@@ -2205,16 +2350,20 @@ function MoveSectionModal({
               background: "#fff",
               color: "#374151",
               fontSize: "0.78rem",
-              cursor: "pointer",
+              cursor: moving ? "not-allowed" : "pointer",
+              opacity: moving ? 0.6 : 1,
             }}
           >
             Batal
           </button>
           <button
             type="button"
-            disabled={!selected}
-            onClick={() => void onMove(selected === "__none__" ? null : selected)}
+            disabled={!selected || moving}
+            onClick={() => void submit()}
             style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "0.35rem",
               padding: "0.4rem 1rem",
               border: "none",
               borderRadius: 6,
@@ -2222,11 +2371,17 @@ function MoveSectionModal({
               color: "#000000",
               fontSize: "0.78rem",
               fontWeight: 500,
-              cursor: selected ? "pointer" : "not-allowed",
-              opacity: selected ? 1 : 0.5,
+              cursor: !selected || moving ? "not-allowed" : "pointer",
+              opacity: !selected || moving ? 0.5 : 1,
             }}
           >
-            Pindahkan
+            {moving ? (
+              <>
+                <Spinner size={13} /> Memindahkan...
+              </>
+            ) : (
+              "Pindahkan"
+            )}
           </button>
         </div>
       </div>
@@ -3246,15 +3401,33 @@ const IMPORT_BATCH_SIZE = 25;
 
 const IMPORT_FIELDS = [
   { value: "section", label: "Section" },
-  { value: "title", label: "Title (Judul)" },
   { value: "tcId", label: "TC ID" },
-  { value: "scenario", label: "Scenario" },
+  { value: "title", label: "Title (Judul)" },
+  { value: "type", label: "Type" },
+  { value: "priority", label: "Priority" },
+  { value: "scenario", label: "Description / Scenario" },
   { value: "precondition", label: "Pre-conditions" },
+  { value: "expectedResult", label: "Expected Result" },
   { value: "steps", label: "Step Action" },
   { value: "testData", label: "Test Data" },
-  { value: "expectedResult", label: "Expected Result" },
-  { value: "priority", label: "Priority" },
   { value: "status", label: "Status" },
+] as const;
+
+/**
+ * Urutan kolom + nama header CSV EXPORT — 100% presisi dengan format template
+ * upload terbaru (10 kolom, camelCase). Sumber tunggal supaya tidak melenceng.
+ */
+const TC_EXPORT_HEADER = [
+  "section",
+  "title",
+  "tcid",
+  "scenario",
+  "precondition",
+  "steps",
+  "testData",
+  "expectedResult",
+  "priority",
+  "status",
 ] as const;
 
 /** Auto-match: cocokkan nama header file ke field sistem (case-insensitive, toleran spasi/_/-). */
@@ -3299,6 +3472,11 @@ const autoMatchField = (header: string): string => {
     priority: "priority",
     prioritas: "priority",
     status: "status",
+    type: "type",
+    jenis: "type",
+    tc_type: "type",
+    tctype: "type",
+    jenis_test_case: "type",
   };
   return map[key] ?? "";
 };
@@ -4201,6 +4379,18 @@ function BulkMoveModal({
   onMove: (sectionId: string | null) => Promise<void>;
 }) {
   const [selected, setSelected] = useState<string>("");
+  /** Proses pemindahan sedang berjalan (tombol dikunci + spinner). */
+  const [moving, setMoving] = useState(false);
+
+  const submit = async () => {
+    if (moving || !selected) return;
+    setMoving(true);
+    try {
+      await onMove(selected === "__none__" ? null : selected);
+    } finally {
+      setMoving(false);
+    }
+  };
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -4278,6 +4468,7 @@ function BulkMoveModal({
           <button
             type="button"
             onClick={onClose}
+            disabled={moving}
             style={{
               padding: "0.4rem 0.9rem",
               border: "1px solid #D1D5DB",
@@ -4285,16 +4476,20 @@ function BulkMoveModal({
               background: "#fff",
               color: "#374151",
               fontSize: "0.78rem",
-              cursor: "pointer",
+              cursor: moving ? "not-allowed" : "pointer",
+              opacity: moving ? 0.6 : 1,
             }}
           >
             Batal
           </button>
           <button
             type="button"
-            disabled={!selected}
-            onClick={() => void onMove(selected === "__none__" ? null : selected)}
+            disabled={!selected || moving}
+            onClick={() => void submit()}
             style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "0.35rem",
               padding: "0.4rem 1rem",
               border: "none",
               borderRadius: 6,
@@ -4302,11 +4497,17 @@ function BulkMoveModal({
               color: "#000000",
               fontSize: "0.78rem",
               fontWeight: 500,
-              cursor: selected ? "pointer" : "not-allowed",
-              opacity: selected ? 1 : 0.5,
+              cursor: !selected || moving ? "not-allowed" : "pointer",
+              opacity: !selected || moving ? 0.5 : 1,
             }}
           >
-            Pindahkan
+            {moving ? (
+              <>
+                <Spinner size={13} /> Memindahkan...
+              </>
+            ) : (
+              "Pindahkan"
+            )}
           </button>
         </div>
       </div>

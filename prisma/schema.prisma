@@ -33,6 +33,12 @@ enum TCStatus {
   DEPRECATED
 }
 
+/// Jenis test case: skenario positif (happy path) atau negatif (error handling).
+enum TCType {
+  POSITIVE
+  NEGATIVE
+}
+
 /// Status sebuah TestRun.
 /// - PENDING      : run sudah dibuat, testing belum dimulai
 /// - IN_PROGRESS  : sedang dieksekusi
@@ -173,6 +179,9 @@ model TestCase {
   expectedResult String?
   priority    TCPriority @default(MEDIUM)
   status      TCStatus   @default(DRAFT)
+  /** Jenis skenario: POSITIVE (happy path) / NEGATIVE (error handling).
+   *  Nullable & tanpa default — null = belum dipilih QA. */
+  type        TCType?
   order       Int        @default(0)
   createdById String?
   createdAt   DateTime   @default(now())

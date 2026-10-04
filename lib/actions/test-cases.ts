@@ -19,6 +19,8 @@ export type TestCaseActionState = {
     expectedResult: string | null;
     priority: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
     status: "DRAFT" | "ACTIVE" | "DEPRECATED";
+    /** Null = belum dipilih. */
+    type: "POSITIVE" | "NEGATIVE" | null;
     sectionId: string | null;
     createdAt: string;
     createdBy?: { name: string | null } | null;
@@ -81,6 +83,12 @@ async function buildTcId(suiteId: string, override?: string): Promise<string> {
 
 /* ------------------------- Test Case ------------------------- */
 
+/** Baca Type dari FormData; kosong/tak dikenal -> null (belum dipilih). */
+function parseTcType(value: FormDataEntryValue | null): "POSITIVE" | "NEGATIVE" | null {
+  const v = String(value ?? "").trim();
+  return v === "POSITIVE" || v === "NEGATIVE" ? v : null;
+}
+
 export async function createTestCase(
   formData: FormData
 ): Promise<TestCaseActionState> {
@@ -116,6 +124,7 @@ export async function createTestCase(
           | "DRAFT"
           | "ACTIVE"
           | "DEPRECATED"),
+        type: parseTcType(formData.get("type")),
         createdById: user.id,
       },
       select: {
@@ -129,6 +138,7 @@ export async function createTestCase(
         expectedResult: true,
         priority: true,
         status: true,
+        type: true,
         sectionId: true,
         createdAt: true,
         createdBy: { select: { name: true } },
@@ -184,6 +194,7 @@ export async function updateTestCase(
           | "HIGH"
           | "CRITICAL"),
         status: newStatus,
+        type: parseTcType(formData.get("type")),
       },
       select: {
         id: true,
@@ -196,6 +207,7 @@ export async function updateTestCase(
         expectedResult: true,
         priority: true,
         status: true,
+        type: true,
         sectionId: true,
         createdAt: true,
         createdBy: { select: { name: true } },
@@ -236,12 +248,14 @@ export async function deleteTestCase(formData: FormData): Promise<void> {
   }
 }
 
-/** Quick update priority/status langsung dari tabel (tanpa modal). */
+/** Quick update priority/status/type langsung dari tabel (tanpa modal). */
 export async function quickUpdateTestCase(
   id: string,
   data: {
     priority?: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
     status?: "DRAFT" | "ACTIVE" | "DEPRECATED";
+    /** `null` = kosongkan (belum dipilih); `undefined` = tidak diubah. */
+    type?: "POSITIVE" | "NEGATIVE" | null;
   }
 ): Promise<TestCaseActionState> {
   const user = await requireRole("QA");
@@ -254,6 +268,8 @@ export async function quickUpdateTestCase(
       data: {
         priority: data.priority ?? tc.priority,
         status: data.status ?? tc.status,
+        // `undefined` berarti tidak diubah; `null` berarti dikosongkan.
+        ...(data.type !== undefined ? { type: data.type } : {}),
       },
     });
 
@@ -261,6 +277,13 @@ export async function quickUpdateTestCase(
       await logActivity(id, "STATUS_CHANGED", `Status berubah: ${tc.status} → ${data.status}`, user.id);
     } else if (data.priority && data.priority !== tc.priority) {
       await logActivity(id, "UPDATED", `Priority berubah: ${tc.priority} → ${data.priority}`, user.id);
+    } else if (data.type !== undefined && data.type !== tc.type) {
+      await logActivity(
+        id,
+        "UPDATED",
+        `Type berubah: ${tc.type ?? "—"} → ${data.type ?? "—"}`,
+        user.id
+      );
     }
 
     revalidatePath(`/suites/${tc.suiteId}`);
@@ -274,14 +297,16 @@ export async function quickUpdateTestCase(
 
 /**
  * Satu baris siap-impor hasil mapping kolom file.
- * `testData` & `status` dipertahankan (opsional) supaya file lama yang masih
- * memakainya tidak kehilangan data — template baru tidak lagi memuat keduanya.
+ * `type`, `testData` & `status` opsional — semuanya ikut di template/export,
+ * tapi file lama yang tidak memuatnya tetap bisa diimpor (pakai default).
  */
 export type ImportTestCaseRow = {
   /** Nama section target (opsional). Kosong = Tanpa Section. */
   section?: string;
   tcId?: string;
   title: string;
+  /** POSITIVE / NEGATIVE; kosong/tak dikenal = belum dipilih (null). */
+  type?: string;
   priority?: string;
   scenario?: string;
   precondition?: string;
@@ -404,6 +429,7 @@ export async function importTestCases(
             expectedResult: (row.expectedResult ?? "").trim() || null,
             priority: normalizePriority(row.priority),
             status: normalizeStatus(row.status),
+            type: parseTcType(row.type ?? null),
             createdById: user.id,
           },
           select: { id: true },

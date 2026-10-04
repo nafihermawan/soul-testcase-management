@@ -308,6 +308,8 @@ export type SuiteDetailTestCase = {
   expectedResult: string | null;
   priority: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
   status: "DRAFT" | "ACTIVE" | "DEPRECATED";
+  /** Jenis skenario: POSITIVE / NEGATIVE; null = belum dipilih QA. */
+  type: "POSITIVE" | "NEGATIVE" | null;
   sectionId: string | null;
   createdAt: string;
   createdBy: { name: string | null } | null;

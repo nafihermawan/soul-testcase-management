@@ -42,11 +42,16 @@ export async function uploadAttachmentFile(
       xhr.upload.onprogress = (e) => {
         if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100));
       };
-      xhr.onload = () =>
-        xhr.status >= 200 && xhr.status < 300
-          ? resolve()
-          : reject(new Error(`Upload gagal (HTTP ${xhr.status}).`));
-      xhr.onerror = () => reject(new Error("Upload gagal — periksa koneksi."));
+      xhr.onload = () => {
+        if (xhr.status === 413) {
+          reject(new Error("Ukuran lampiran terlalu besar (maks 100 MB)."));
+          return;
+        }
+        if (xhr.status >= 200 && xhr.status < 300) resolve();
+        else reject(new Error(`Upload gagal (HTTP ${xhr.status}).`));
+      };
+      // Kegagalan di level jaringan (server tak terjangkau / offline).
+      xhr.onerror = () => reject(new Error("Koneksi internet terputus. Periksa jaringan Anda."));
       xhr.send(file);
     });
   } catch (e) {

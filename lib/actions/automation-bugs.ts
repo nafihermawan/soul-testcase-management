@@ -4,17 +4,28 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/permissions";
 import { copyObject } from "@/lib/storage/r2";
+import { ENVIRONMENT_OPTIONS } from "@/lib/qa-metrics";
+import { normalizeUrl } from "@/lib/validation";
+import type { BugErrorField } from "@/types/api";
 
 export type AutomationBugActionState = {
   error?: string;
+  /** Field form yang memicu error validasi — dipakai klien untuk inline error. */
+  field?: BugErrorField;
   success?: boolean;
   /** Id bug yang baru dibuat — dipakai pemanggil untuk update daftar lokal. */
   bugId?: string;
 };
 
+/**
+ * Error tak terduga di server (mis. DB down / query gagal). Pesannya sengaja
+ * spesifik supaya user tahu ini gangguan sistem, bukan salah input.
+ */
 function handleError(error: unknown): AutomationBugActionState {
   console.error(error);
-  return { error: "Terjadi kesalahan. Coba lagi." };
+  return {
+    error: "Gagal menyimpan perubahan karena gangguan server. Silakan coba beberapa saat lagi.",
+  };
 }
 
 /* ============ Automation Link ============ */
@@ -82,11 +93,14 @@ export async function createBug(data: {
   testRunResultId?: string | null;
   /** Suite/modul tempat temuan ad-hoc berada. */
   suiteId?: string | null;
+  /** Tempat bug ditemukan (DEV/STG/PRE-PROD/PROD). Untuk bug eksekusi nilai ini
+   *  DIABAIKAN — server menurunkannya dari environment TestRun. */
+  environment?: string | null;
 }): Promise<AutomationBugActionState> {
   const user = await requireRole("DEVELOPER");
   const title = data.title.trim();
   if (!title) {
-    return { error: "Judul bug wajib diisi." };
+    return { error: "Judul bug wajib diisi.", field: "title" };
   }
 
   try {
@@ -129,8 +143,29 @@ export async function createBug(data: {
         where: { id: linkedSuiteId },
         select: { projectId: true },
       });
-      if (!suite) return { error: "Suite tidak ditemukan." };
+      if (!suite) return { error: "Suite / Module tidak valid.", field: "suiteId" };
       linkedProjectId = suite.projectId;
+    }
+
+    /**
+     * Environment juga ditentukan DI SERVER:
+     * - bug dari eksekusi mewarisi environment dari TestRun hasilnya (nilai
+     *   kiriman klien diabaikan supaya tidak bisa dipalsukan);
+     * - bug ad-hoc memakai pilihan QA, divalidasi terhadap daftar opsi resmi.
+     */
+    let linkedEnvironment: string | null = null;
+    if (data.testRunResultId) {
+      const result = await prisma.testRunResult.findUnique({
+        where: { id: data.testRunResultId },
+        select: { run: { select: { environment: true } } },
+      });
+      linkedEnvironment = result?.run?.environment ?? null;
+    } else {
+      const env = data.environment?.trim() || null;
+      if (env && !(ENVIRONMENT_OPTIONS as readonly string[]).includes(env)) {
+        return { error: "Environment tidak valid.", field: "environment" };
+      }
+      linkedEnvironment = env;
     }
 
     const bug = await prisma.bug.create({
@@ -139,7 +174,9 @@ export async function createBug(data: {
         description: data.description?.trim() || null,
         expectedResult: data.expectedResult?.trim() || null,
         severity: data.severity?.trim() || null,
-        externalLink: data.externalLink?.trim() || null,
+        environment: linkedEnvironment,
+        // Link eksternal opsional; skema https:// ditambahkan otomatis.
+        externalLink: normalizeUrl(data.externalLink ?? "") || null,
         testCaseId: linkedTestCaseId,
         testRunResultId: data.testRunResultId || null,
         suiteId: linkedSuiteId,
@@ -208,29 +245,55 @@ export async function linkBugToTestCase(
   }
 }
 
-/** Edit konten bug (judul, deskripsi, severity, link eksternal).
- *  Status sengaja TIDAK diubah di sini — itu jalur updateBugStatus. */
+/** Edit konten bug (judul, deskripsi, severity, expected result, environment,
+ *  suite, link eksternal). Status sengaja TIDAK diubah di sini — itu jalur
+ *  updateBugStatus. */
 export async function updateBug(data: {
   bugId: string;
   title: string;
   description?: string;
   severity?: string;
+  expectedResult?: string;
   externalLink?: string;
+  environment?: string | null;
+  /** Suite terpilih — project diturunkan dari sini supaya tidak bertentangan. */
+  suiteId?: string | null;
 }): Promise<AutomationBugActionState> {
   await requireRole("DEVELOPER");
   const title = data.title.trim();
   if (!title) {
-    return { error: "Judul bug wajib diisi." };
+    return { error: "Judul bug wajib diisi.", field: "title" };
+  }
+
+  const env = data.environment?.trim() || null;
+  if (env && !(ENVIRONMENT_OPTIONS as readonly string[]).includes(env)) {
+    return { error: "Environment tidak valid.", field: "environment" };
   }
 
   try {
+    const linkedSuiteId = data.suiteId?.trim() || null;
+    let linkedProjectId: string | null = null;
+    if (linkedSuiteId) {
+      const suite = await prisma.suite.findUnique({
+        where: { id: linkedSuiteId },
+        select: { projectId: true },
+      });
+      if (!suite) return { error: "Suite / Module tidak valid.", field: "suiteId" };
+      linkedProjectId = suite.projectId;
+    }
+
     const bug = await prisma.bug.update({
       where: { id: data.bugId },
       data: {
         title,
         description: data.description?.trim() || null,
         severity: data.severity?.trim() || null,
-        externalLink: data.externalLink?.trim() || null,
+        expectedResult: data.expectedResult?.trim() || null,
+        // Link eksternal opsional; skema https:// ditambahkan otomatis.
+        externalLink: normalizeUrl(data.externalLink ?? "") || null,
+        environment: env,
+        suiteId: linkedSuiteId,
+        projectId: linkedProjectId,
       },
       select: { id: true, testCaseId: true },
     });

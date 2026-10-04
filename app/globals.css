@@ -442,6 +442,65 @@ button,
   }
 }
 
+/* Tabel Bugs: sel beku (kolom ID & Title) wajib opaque supaya isi tabel yang
+   ter-scroll mendatar tidak tembus; warnanya ikut hover baris. */
+.bug-sticky-cell {
+  background: #ffffff;
+}
+
+.bugs-table tbody tr:hover {
+  background: #f8fafc;
+}
+
+.bugs-table tbody tr:hover .bug-sticky-cell {
+  background: #f8fafc;
+}
+
+/* Tooltip info sederhana (ikon ℹ️) — bubble muncul saat hover/focus. */
+.bug-info-tip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  color: #94a3b8;
+  cursor: help;
+}
+
+.bug-info-tip:hover,
+.bug-info-tip:focus-visible {
+  color: #475569;
+}
+
+.bug-info-tip__bubble {
+  position: absolute;
+  /* Di bawah ikon (bukan di atas) supaya tidak terpotong tepi atas modal;
+     rata kiri dengan ikon agar tidak keluar dari sisi kiri kartu. */
+  left: 0;
+  top: calc(100% + 6px);
+  width: max-content;
+  max-width: 260px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: #0f172a;
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 500;
+  line-height: 1.5;
+  text-align: left;
+  white-space: normal;
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.18);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.15s ease;
+  pointer-events: none;
+  z-index: 60;
+}
+
+.bug-info-tip:hover .bug-info-tip__bubble,
+.bug-info-tip:focus-visible .bug-info-tip__bubble {
+  opacity: 1;
+  visibility: visible;
+}
+
 /* Kartu metrik dashboard: 1 kolom (mobile) -> 2 (tablet) -> 3 (laptop) -> 6 (desktop) */
 .metric-grid {
   display: grid;

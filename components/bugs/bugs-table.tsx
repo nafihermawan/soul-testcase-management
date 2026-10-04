@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ExternalLink, Plus, Search, Trash2 } from "lucide-react";
 import { deleteBug, updateBugStatus } from "@/lib/actions/automation-bugs";
@@ -13,6 +13,7 @@ import { BugDetailModal } from "@/components/bugs/bug-detail-modal";
 import { ReportGeneralBugModal } from "@/components/bugs/report-general-bug-modal";
 import { HistoryPagination } from "@/components/test-runs/history-pagination";
 import { entityCode } from "@/lib/format";
+import { ENVIRONMENT_OPTIONS } from "@/lib/qa-metrics";
 import type { AttachmentItem, BugSourceType } from "@/types/api";
 
 export type BugRow = {
@@ -21,11 +22,14 @@ export type BugRow = {
   description: string | null;
   status: "OPEN" | "IN_PROGRESS" | "RESOLVED" | "CLOSED";
   severity: string | null;
+  /** Tempat bug ditemukan (DEV/STG/PRE-PROD/PROD); null = belum diketahui. */
+  environment?: string | null;
   externalLink: string | null;
   createdAt: string;
   testCase: { id: string; tcId: string; title: string } | null;
-  /** Test Run tempat bug ditemukan; null untuk temuan ad-hoc. */
-  run?: { id: string; name: string } | null;
+  /** Test Run tempat bug ditemukan; null untuk temuan ad-hoc.
+   *  `environment` run dipakai sebagai fallback bila bug.environment kosong. */
+  run?: { id: string; name: string; environment?: string | null } | null;
   createdBy: { name: string | null } | null;
   attachments?: AttachmentItem[];
   /**
@@ -39,6 +43,21 @@ type BugTab = "ALL" | BugSourceType;
 
 /** Jumlah baris per halaman; sengaja tetap (tanpa opsi ubah dari UI). */
 const BUGS_PER_PAGE = 25;
+
+/**
+ * Lebar kolom beku ID (px) — sekaligus offset `left` kolom "Title & Linked TC"
+ * yang ikut di-sticky. Dipakai di <colgroup> supaya lebarnya presisi.
+ */
+const STICKY_ID_WIDTH = 130;
+
+/** Batas lebar kolom "Title & Linked TC" yang bisa ditarik (px). */
+const TITLE_DEFAULT_WIDTH = 260;
+const TITLE_MIN_WIDTH = 160;
+const TITLE_MAX_WIDTH = 600;
+
+/** Total lebar kolom SELAIN Title (ID + kolom tetap) — dasar minWidth tabel. */
+const FIXED_COLUMNS_WIDTH =
+  STICKY_ID_WIDTH + 190 + 110 + 100 + 140 + 140 + 140 + 70;
 
 /**
  * Klasifikasi sumber bug. Field `sourceType` dari API dipakai kalau ada, tapi
@@ -98,19 +117,57 @@ export function BugsPageClient({
   // Filter yang sudah DITERAPKAN (committed).
   const [sevFilter, setSevFilter] = useState<string>("");
   const [statusFilter, setStatusFilter] = useState<string>("");
+  const [envFilter, setEnvFilter] = useState<string>("");
   /** Periode laporan "YYYY-MM" (filter bulan pembuatan bug); "" = semua. */
   const [monthFilter, setMonthFilter] = useState<string>("");
   // Draft filter: baru berlaku setelah tombol Terapkan di modal filter diklik.
   const [draftSev, setDraftSev] = useState("");
   const [draftStatus, setDraftStatus] = useState("");
+  const [draftEnv, setDraftEnv] = useState("");
   const [draftMonth, setDraftMonth] = useState("");
 
   // Sinkronkan draft bila filter yang berlaku berubah dari luar (mis. reset).
   useEffect(() => {
     setDraftSev(sevFilter);
     setDraftStatus(statusFilter);
+    setDraftEnv(envFilter);
     setDraftMonth(monthFilter);
-  }, [sevFilter, statusFilter, monthFilter]);
+  }, [sevFilter, statusFilter, envFilter, monthFilter]);
+
+  /**
+   * Lebar kolom "Title & Linked TC" (px) — bisa ditarik lewat resizer di border
+   * kanannya. Lebar ini menggerakkan <colgroup> sekaligus minWidth tabel, jadi
+   * saat kolom dilebarkan teks judul tampil penuh (ellipsis otomatis hilang).
+   */
+  const [titleWidth, setTitleWidth] = useState(TITLE_DEFAULT_WIDTH);
+  const [resizingTitle, setResizingTitle] = useState(false);
+  const [hoverTitleResizer, setHoverTitleResizer] = useState(false);
+  const titleResizeStart = useRef<{ x: number; width: number } | null>(null);
+
+  // Pantau geseran mouse selama drag; lepas saat mouseup (dan kunci kursor).
+  useEffect(() => {
+    if (!resizingTitle) return;
+    const onMove = (e: MouseEvent) => {
+      const s = titleResizeStart.current;
+      if (!s) return;
+      setTitleWidth(
+        Math.min(TITLE_MAX_WIDTH, Math.max(TITLE_MIN_WIDTH, s.width + (e.clientX - s.x)))
+      );
+    };
+    const onUp = () => setResizingTitle(false);
+    const prevCursor = document.body.style.cursor;
+    const prevSelect = document.body.style.userSelect;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      document.body.style.cursor = prevCursor;
+      document.body.style.userSelect = prevSelect;
+    };
+  }, [resizingTitle]);
 
   /** Kunci bulan lokal dari createdAt, mis. "2026-09". */
   const monthKeyOf = (iso: string): string => {
@@ -123,6 +180,7 @@ export function BugsPageClient({
     if (tab !== "ALL" && sourceTypeOf(b) !== tab) return false;
     if (sevFilter && b.severity !== sevFilter) return false;
     if (statusFilter && b.status !== statusFilter) return false;
+    if (envFilter && (b.environment ?? b.run?.environment ?? "") !== envFilter) return false;
     if (monthFilter && monthKeyOf(b.createdAt) !== monthFilter) return false;
     if (!q) return true;
     const hay = `${b.title} ${b.description ?? ""} ${b.testCase?.tcId ?? ""} ${b.testCase?.title ?? ""} ${b.createdBy?.name ?? ""}`.toLowerCase();
@@ -140,7 +198,7 @@ export function BugsPageClient({
   // mendarat di halaman yang sudah kosong.
   useEffect(() => {
     setPage(1);
-  }, [tab, query, sevFilter, statusFilter, monthFilter]);
+  }, [tab, query, sevFilter, statusFilter, envFilter, monthFilter]);
 
   // `page` bisa tertinggal di halaman yang sudah tidak ada (mis. bug terakhir di
   // halaman terakhir dihapus) -> pakai halaman efektif yang di-clamp.
@@ -293,16 +351,21 @@ export function BugsPageClient({
           <FilterModal
             title="Filter Bugs"
             activeCount={
-              (sevFilter ? 1 : 0) + (statusFilter ? 1 : 0) + (monthFilter ? 1 : 0)
+              (sevFilter ? 1 : 0) +
+              (statusFilter ? 1 : 0) +
+              (envFilter ? 1 : 0) +
+              (monthFilter ? 1 : 0)
             }
             onReset={() => {
               setDraftSev("");
               setDraftStatus("");
+              setDraftEnv("");
               setDraftMonth("");
             }}
             onApply={() => {
               setSevFilter(draftSev);
               setStatusFilter(draftStatus);
+              setEnvFilter(draftEnv);
               setMonthFilter(draftMonth);
             }}
           >
@@ -334,6 +397,19 @@ export function BugsPageClient({
                   { value: "IN_PROGRESS", label: "In Progress" },
                   { value: "RESOLVED", label: "Resolved" },
                   { value: "CLOSED", label: "Closed" },
+                ]}
+              />
+            </div>
+
+            <div>
+              <span style={filterLabelStyle}>Environment</span>
+              <CustomSelect
+                ariaLabel="Filter environment"
+                value={draftEnv}
+                onChange={setDraftEnv}
+                options={[
+                  { value: "", label: "Semua Environment" },
+                  ...ENVIRONMENT_OPTIONS.map((env) => ({ value: env, label: env })),
                 ]}
               />
             </div>
@@ -407,32 +483,131 @@ export function BugsPageClient({
           }}
         >
           <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
+            <table
+              className="bugs-table"
+              style={{
+                width: "100%",
+                // Lebar minimum tumbuh mengikuti titleWidth supaya saat kolom
+                // Title dilebarkan tabel ikut melebar, bukan menekan kolom lain.
+                minWidth: Math.max(1280, FIXED_COLUMNS_WIDTH + titleWidth),
+                borderCollapse: "collapse",
+                fontSize: "0.85rem",
+                tableLayout: "fixed",
+              }}
+            >
+              {/* Lebar kolom tetap supaya offset `left` kolom beku presisi.
+                  Kolom Title diambil dari state (bisa di-resize). */}
+              <colgroup>
+                <col style={{ width: STICKY_ID_WIDTH }} />
+                <col style={{ width: titleWidth }} />
+                <col style={{ width: 190 }} />
+                <col style={{ width: 110 }} />
+                <col style={{ width: 100 }} />
+                <col style={{ width: 140 }} />
+                <col style={{ width: 140 }} />
+                <col style={{ width: 140 }} />
+                <col style={{ width: 70 }} />
+              </colgroup>
               <thead>
-                <tr style={{ color: "var(--text-muted)", textAlign: "left", background: "#F8FAFC", borderBottom: "1px solid #E5E7EB" }}>
-                  <th style={{ padding: "0.6rem 1.25rem", fontWeight: 600 }}>ID</th>
-                  <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600 }}>Title & Linked TC</th>
-                  <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600 }}>Test Run</th>
-                  <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600 }}>Severity</th>
-                  <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600 }}>Status</th>
-                  <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600 }}>Created By</th>
-                  <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600 }}>Created Date</th>
-                  <th style={{ padding: "0.6rem 1.25rem", fontWeight: 600, textAlign: "right" }}></th>
+                <tr style={{ color: "var(--text-muted)", textAlign: "left", background: "#F8FAFC", borderBottom: "1px solid #E5E7EB", whiteSpace: "nowrap" }}>
+                  <th
+                    style={{
+                      padding: "0.6rem 1.25rem",
+                      fontWeight: 600,
+                      position: "sticky",
+                      left: 0,
+                      zIndex: 20,
+                      background: "#F8FAFC",
+                    }}
+                  >
+                    ID
+                  </th>
+                  <th
+                    style={{
+                      padding: "0.6rem 0.5rem",
+                      fontWeight: 600,
+                      position: "sticky",
+                      left: STICKY_ID_WIDTH,
+                      zIndex: 20,
+                      background: "#F8FAFC",
+                      boxShadow: "2px 0 5px -2px rgba(0, 0, 0, 0.1)",
+                    }}
+                  >
+                    Title & Linked TC
+                    {/* Resizer: garis tipis di border kanan kolom Title;
+                        menyala indigo saat hover/drag. `position: absolute`
+                        relatif ke th (sticky = positioned). */}
+                    <span
+                      role="separator"
+                      aria-orientation="vertical"
+                      aria-label="Ubah lebar kolom Title"
+                      title="Tarik untuk mengubah lebar kolom"
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        titleResizeStart.current = { x: e.clientX, width: titleWidth };
+                        setResizingTitle(true);
+                      }}
+                      onMouseEnter={() => setHoverTitleResizer(true)}
+                      onMouseLeave={() => setHoverTitleResizer(false)}
+                      style={{
+                        position: "absolute",
+                        top: 0,
+                        right: -4,
+                        width: 9,
+                        height: "100%",
+                        zIndex: 30,
+                        display: "flex",
+                        justifyContent: "center",
+                        cursor: "col-resize",
+                        userSelect: "none",
+                        touchAction: "none",
+                      }}
+                    >
+                      <span
+                        aria-hidden="true"
+                        style={{
+                          width: 2,
+                          height: "100%",
+                          // Garis default transparan (tak terlihat); muncul amber
+                          // saat area resizer di-hover atau sedang di-drag.
+                          background:
+                            resizingTitle || hoverTitleResizer ? "#F59E0B" : "transparent",
+                          transition: "background-color 200ms ease",
+                        }}
+                      />
+                    </span>
+                  </th>
+                  <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600, textAlign: "center" }}>Test Run</th>
+                  <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600, textAlign: "center" }}>Environment</th>
+                  <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600, textAlign: "center" }}>Severity</th>
+                  <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600, textAlign: "center" }}>Status</th>
+                  <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600, textAlign: "center" }}>Created By</th>
+                  <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600, textAlign: "center" }}>Created Date</th>
+                  <th style={{ padding: "0.6rem 1.25rem", fontWeight: 600, textAlign: "center" }}></th>
                 </tr>
               </thead>
               <tbody>
                 {pagedBugs.map((b) => {
                   const st = statusStyle[b.status];
                   const sev = b.severity ? (severityStyle[b.severity] ?? severityStyle.LOW) : null;
+                  // Environment bug; fallback ke environment Test Run terkait.
+                  const env = b.environment ?? b.run?.environment ?? null;
                   return (
                     <tr
                       key={b.id}
                       onClick={() => setDetailBugId(b.id)}
-                      onMouseEnter={(e) => (e.currentTarget.style.background = "#F8FAFC")}
-                      onMouseLeave={(e) => (e.currentTarget.style.background = "")}
-                      style={{ borderTop: "1px solid var(--border)", cursor: "pointer" }}
+                      style={{ borderTop: "1px solid var(--border)", cursor: "pointer", whiteSpace: "nowrap" }}
                     >
-                      <td style={{ padding: "0.6rem 1.25rem" }}>
+                      <td
+                        className="bug-sticky-cell"
+                        style={{
+                          padding: "0.6rem 1.25rem",
+                          position: "sticky",
+                          left: 0,
+                          zIndex: 10,
+                        }}
+                      >
                         <span
                           style={{
                             fontFamily: "var(--font-mono, monospace)",
@@ -445,9 +620,31 @@ export function BugsPageClient({
                           {entityCode("BUG", b.id)}
                         </span>
                       </td>
-                      <td style={{ padding: "0.6rem 0.5rem" }}>
+                      <td
+                        className="bug-sticky-cell"
+                        style={{
+                          padding: "0.6rem 0.5rem",
+                          position: "sticky",
+                          left: STICKY_ID_WIDTH,
+                          zIndex: 10,
+                          boxShadow: "2px 0 5px -2px rgba(0, 0, 0, 0.1)",
+                          overflow: "hidden",
+                        }}
+                      >
                         <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", minWidth: 0 }}>
-                          <span style={{ fontWeight: 600, fontSize: "0.85rem", color: "#0F172A", lineHeight: 1.4 }}>
+                          <span
+                            title={b.title}
+                            style={{
+                              fontWeight: 600,
+                              fontSize: "0.85rem",
+                              color: "#0F172A",
+                              lineHeight: 1.4,
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                              minWidth: 0,
+                            }}
+                          >
                             {b.title}
                           </span>
                           {b.externalLink && (
@@ -464,7 +661,7 @@ export function BugsPageClient({
                           )}
                         </div>
                       </td>
-                      <td style={{ padding: "0.6rem 0.5rem" }}>
+                      <td style={{ padding: "0.6rem 0.5rem", textAlign: "center", overflow: "hidden" }}>
                         {b.run ? (
                           <Link
                             href={`/test-runs/${b.run.id}`}
@@ -476,7 +673,7 @@ export function BugsPageClient({
                               fontWeight: 600,
                               color: "#2563EB",
                               textDecoration: "none",
-                              maxWidth: 200,
+                              maxWidth: "100%",
                               overflow: "hidden",
                               textOverflow: "ellipsis",
                               whiteSpace: "nowrap",
@@ -491,7 +688,16 @@ export function BugsPageClient({
                           <span style={{ color: "#94A3B8" }}>-</span>
                         )}
                       </td>
-                      <td style={{ padding: "0.6rem 0.5rem" }}>
+                      <td style={{ padding: "0.6rem 0.5rem", textAlign: "center", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {env ? (
+                          <span style={{ fontSize: "0.78rem", fontWeight: 600, color: "#334155", whiteSpace: "nowrap" }}>
+                            {env}
+                          </span>
+                        ) : (
+                          <span style={{ color: "#94A3B8" }}>—</span>
+                        )}
+                      </td>
+                      <td style={{ padding: "0.6rem 0.5rem", textAlign: "center" }}>
                         {sev ? (
                           <span style={{ display: "inline-block", padding: "0.1rem 0.5rem", borderRadius: 999, fontSize: "0.72rem", fontWeight: 700, background: sev.bg, color: sev.color }}>
                             {b.severity}
@@ -500,7 +706,7 @@ export function BugsPageClient({
                           "—"
                         )}
                       </td>
-                      <td style={{ padding: "0.6rem 0.5rem" }}>
+                      <td style={{ padding: "0.6rem 0.5rem", textAlign: "center" }}>
                         <span onClick={(e) => e.stopPropagation()} style={{ display: "inline-flex", maxWidth: 130 }}>
                           <Select
                             size="sm"
@@ -516,13 +722,13 @@ export function BugsPageClient({
                           </Select>
                         </span>
                       </td>
-                      <td style={{ padding: "0.6rem 0.5rem", color: "var(--text-secondary)" }}>
+                      <td style={{ padding: "0.6rem 0.5rem", textAlign: "center", color: "var(--text-secondary)", overflow: "hidden", textOverflow: "ellipsis" }}>
                         {b.createdBy?.name ?? "—"}
                       </td>
-                      <td style={{ padding: "0.6rem 0.5rem", color: "var(--text-muted)", whiteSpace: "nowrap" }}>
+                      <td style={{ padding: "0.6rem 0.5rem", textAlign: "center", color: "var(--text-muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                         {new Date(b.createdAt).toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" })}
                       </td>
-                      <td style={{ padding: "0.6rem 1.25rem", textAlign: "right" }}>
+                      <td style={{ padding: "0.6rem 1.25rem", textAlign: "center" }}>
                         <button
                           type="button"
                           onClick={(e) => {
@@ -573,7 +779,6 @@ export function BugsPageClient({
         <BugDetailModal
           bugId={detailBugId}
           onClose={() => setDetailBugId(null)}
-          onDeleted={(bugId: string) => setLocalBugs((prev) => prev.filter((b) => b.id !== bugId))}
           onUpdated={patchBug}
         />
       )}

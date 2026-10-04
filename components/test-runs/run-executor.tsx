@@ -277,13 +277,6 @@ export function RunExecutor({
     setModalItem((prev) => (prev ? fn(prev) : prev));
   };
 
-  /** Buang satu bug dari semua cermin lokal setelah dihapus. */
-  const removeBug = (bugId: string) => {
-    mapResults((r) =>
-      r.bugs?.some((b) => b.id === bugId) ? { ...r, bugs: r.bugs.filter((b) => b.id !== bugId) } : r
-    );
-  };
-
   /**
    * Patch satu bug setelah Edit Bug sukses: badge bug di baris TC (`mapResults`)
    * plus daftar "Linked Bugs" milik ExecutionModal, yang di-patch lewat sinyal
@@ -1045,6 +1038,7 @@ export function RunExecutor({
         <ExecutionModal
           item={modalItem}
           canEdit={canEdit}
+          environment={environment ?? null}
           onClose={() => setModalItem(null)}
           onAttachmentsChange={(list) => patchResult(modalItem.id, { attachments: list })}
           onOpenBugDetail={setBugDetailId}
@@ -1106,7 +1100,6 @@ export function RunExecutor({
         <BugDetailModal
           bugId={bugDetailId}
           onClose={() => setBugDetailId(null)}
-          onDeleted={removeBug}
           onUpdated={patchBug}
         />
       )}
@@ -1119,6 +1112,7 @@ export function RunExecutor({
           description={bugDesc}
           expectedResult={bugExpectedResult}
           severity={bugSeverity}
+          environment={environment ?? null}
           error={bugError}
           pending={bugPending}
           onTitleChange={setBugTitle}
@@ -1910,6 +1904,7 @@ function BugModal({
   description,
   expectedResult,
   severity,
+  environment,
   error,
   pending,
   onTitleChange,
@@ -1924,6 +1919,8 @@ function BugModal({
   description: string;
   expectedResult: string;
   severity: string;
+  /** Environment run — read-only, ikut Test Run (diturunkan di server). */
+  environment: string | null;
   error: string | null;
   pending: boolean;
   onTitleChange: (v: string) => void;
@@ -2218,6 +2215,21 @@ function BugModal({
             </div>
           </div>
 
+          {/* Environment — read-only: bug dari eksekusi mewarisi env run ini. */}
+          <div>
+            <label style={{ ...labelBase, marginBottom: 6 }}>
+              Environment <span style={{ fontWeight: 500, color: "#9CA3AF" }}>(dari Test Run)</span>
+            </label>
+            <input
+              type="text"
+              value={environment ?? "—"}
+              readOnly
+              disabled
+              title="Environment mengikuti Test Run terkait."
+              style={{ ...inputBase, background: "#F9FAFB", color: "#6B7280" }}
+            />
+          </div>
+
           {/* Expected Result (auto-fill dari Test Case, editable) */}
           <div>
             <label style={{ ...labelBase, marginBottom: 6 }}>
@@ -2357,6 +2369,7 @@ const clampSplit = (pct: number) => Math.min(SPLIT_MAX_PCT, Math.max(SPLIT_MIN_P
 function ExecutionModal({
   item,
   canEdit,
+  environment,
   onClose,
   onAttachmentsChange,
   onOpenBugDetail,
@@ -2365,6 +2378,8 @@ function ExecutionModal({
 }: {
   item: RunResultItem;
   canEdit: boolean;
+  /** Environment run — read-only, ditampilkan di form bug mode Fail. */
+  environment: string | null;
   onClose: () => void;
   /** Teruskan daftar attachment terbaru ke parent (update in-place). */
   onAttachmentsChange?: (list: AttachmentItem[]) => void;
@@ -3099,6 +3114,28 @@ function ExecutionModal({
                           </option>
                         ))}
                       </Select>
+                    </div>
+
+                    <div>
+                      <label style={bugLabelStyle}>
+                        Environment{" "}
+                        <span style={{ fontWeight: 500, color: "#9CA3AF" }}>
+                          (dari Test Run)
+                        </span>
+                      </label>
+                      <input
+                        type="text"
+                        value={environment ?? "—"}
+                        readOnly
+                        disabled
+                        title="Environment mengikuti Test Run terkait."
+                        style={{
+                          ...bugFieldStyle,
+                          height: 36,
+                          background: "#F9FAFB",
+                          color: "#6B7280",
+                        }}
+                      />
                     </div>
                   </>
                 )}

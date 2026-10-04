@@ -76,6 +76,7 @@ export function AttachmentsPanel({
   onChange,
   compact = false,
   plain = false,
+  thumbnailOnly = false,
   deferred = false,
   handleRef,
 }: {
@@ -91,6 +92,9 @@ export function AttachmentsPanel({
    *  thumbnail & detail file tampil langsung. Default `false` supaya panel
    *  lain (modal Bug, tab Attachments) tidak berubah. */
   plain?: boolean;
+  /** Hanya thumbnail: tanpa kontainer kartu, tanpa nama file/ukuran.
+   *  Dipakai section Evidence read-only di modal Detail Bug. */
+  thumbnailOnly?: boolean;
   /** Tahan perubahan di klien dulu: tambah/hapus file TIDAK memanggil API
    *  apa pun sampai `handleRef.commit()` dipanggil (tombol Simpan). Dipakai
    *  modal eksekusi agar evidence batal tersimpan saat Batal/Close. */
@@ -357,12 +361,16 @@ export function AttachmentsPanel({
 
   useImperativeHandle(handleRef, () => ({ commit: commitStaged, reset: resetStaged }));
 
+  // `thumbnailOnly` = mode paling ringkas: tanpa kartu DAN tanpa caption.
+  const bare = plain || thumbnailOnly;
+
   /** Thumbnail ringkas 64×64 di dalam kartu mini evidence. */
   const thumbMediaStyle: CSSProperties = {
     width: EVIDENCE_THUMB,
     height: EVIDENCE_THUMB,
     borderRadius: 8,
-    border: "1px solid var(--border)",
+    // Tanpa border saat hanya thumbnail agar tampil polos & bersih.
+    border: thumbnailOnly ? "none" : "1px solid var(--border)",
     display: "block",
     objectFit: "cover",
   };
@@ -529,13 +537,13 @@ export function AttachmentsPanel({
                     width: EVIDENCE_ITEM_W,
                     display: "flex",
                     flexDirection: "column",
-                    // Mode `plain`: rata kiri penuh agar sejajar dengan label
-                    // section; mode kartu tetap terpusat.
-                    alignItems: plain ? "flex-start" : "center",
+                    // Mode `plain`/`thumbnailOnly`: rata kiri penuh agar sejajar
+                    // dengan label section; mode kartu tetap terpusat.
+                    alignItems: bare ? "flex-start" : "center",
                     gap: "0.3rem",
-                    // Mode `plain`: tanpa kontainer kartu — thumbnail & detail
-                    // file tampil langsung di atas latar panel.
-                    ...(plain
+                    // Mode `plain`/`thumbnailOnly`: tanpa kontainer kartu —
+                    // thumbnail (dan caption) tampil langsung di atas latar panel.
+                    ...(bare
                       ? null
                       : {
                           padding: "0.5rem 0.5rem 0.55rem",
@@ -584,10 +592,10 @@ export function AttachmentsPanel({
                       style={{
                         position: "absolute",
                         // Kartu: menempel di sudut kanan-atas kartu.
-                        // Plain: menempel di sudut kanan-atas thumbnail (yang
-                        // sudah rata kiri).
-                        top: plain ? 0 : 6,
-                        right: plain ? EVIDENCE_ITEM_W - EVIDENCE_THUMB : 6,
+                        // Plain/thumbnailOnly: menempel di sudut kanan-atas
+                        // thumbnail (yang sudah rata kiri).
+                        top: bare ? 0 : 6,
+                        right: bare ? EVIDENCE_ITEM_W - EVIDENCE_THUMB : 6,
                         width: 24,
                         height: 24,
                         padding: 4,
@@ -606,38 +614,42 @@ export function AttachmentsPanel({
                     </button>
                   )}
 
-                  {/* Nama file + ukuran, di bawah thumbnail kartu */}
-                  <div
-                    title={att.fileName}
-                    style={{
-                      width: "100%",
-                      textAlign: plain ? "left" : "center",
-                      fontSize: "0.72rem",
-                      fontWeight: 600,
-                      color: "#1F2937",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {att.fileName}
-                  </div>
-                  <div style={{ fontSize: "0.66rem", color: "var(--text-muted)" }}>
-                    {humanSize(att.size)}
-                  </div>
-                  {video && openable && (
-                    <a
-                      href={att.url!}
-                      target="_blank"
-                      rel="noreferrer"
-                      style={{
-                        fontSize: "0.7rem",
-                        color: "#2563EB",
-                        textDecoration: "none",
-                      }}
-                    >
-                      Buka video
-                    </a>
+                  {/* Nama file + ukuran — disembunyikan di mode thumbnailOnly. */}
+                  {!thumbnailOnly && (
+                    <>
+                      <div
+                        title={att.fileName}
+                        style={{
+                          width: "100%",
+                          textAlign: bare ? "left" : "center",
+                          fontSize: "0.72rem",
+                          fontWeight: 600,
+                          color: "#1F2937",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {att.fileName}
+                      </div>
+                      <div style={{ fontSize: "0.66rem", color: "var(--text-muted)" }}>
+                        {humanSize(att.size)}
+                      </div>
+                      {video && openable && (
+                        <a
+                          href={att.url!}
+                          target="_blank"
+                          rel="noreferrer"
+                          style={{
+                            fontSize: "0.7rem",
+                            color: "#2563EB",
+                            textDecoration: "none",
+                          }}
+                        >
+                          Buka video
+                        </a>
+                      )}
+                    </>
                   )}
                 </div>
               );

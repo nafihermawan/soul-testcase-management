@@ -16,7 +16,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
       suite: { select: { id: true, name: true } },
       project: { select: { id: true, name: true } },
       testRunResult: {
-        select: { run: { select: { id: true, name: true } } },
+        select: { run: { select: { id: true, name: true, environment: true } } },
       },
       createdBy: { select: { name: true } },
       attachments: {
@@ -33,6 +33,8 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     description: bug.description,
     status: bug.status,
     severity: bug.severity,
+    environment: bug.environment,
+    expectedResult: bug.expectedResult,
     externalLink: bug.externalLink,
     createdAt: bug.createdAt.toISOString(),
     resolvedAt: bug.resolvedAt?.toISOString() ?? null,

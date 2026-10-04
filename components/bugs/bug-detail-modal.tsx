@@ -3,8 +3,7 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import { ExternalLink, Pencil, Trash2, X } from "lucide-react";
-import { deleteBug } from "@/lib/actions/automation-bugs";
+import { ExternalLink, Pencil, X } from "lucide-react";
 import { AttachmentsPanel } from "@/components/attachments/attachments-panel";
 import { EditBugModal } from "@/components/bugs/edit-bug-modal";
 import { Spinner } from "@/components/ui/feedback";
@@ -27,6 +26,36 @@ const bodyTextStyle: React.CSSProperties = {
   whiteSpace: "pre-wrap",
 };
 
+const STATUS_LABEL: Record<string, string> = {
+  OPEN: "Open",
+  IN_PROGRESS: "In Progress",
+  RESOLVED: "Resolved",
+  CLOSED: "Closed",
+};
+
+/** Pasangan label + nilai untuk grid informasi. */
+function InfoPair({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div style={{ minWidth: 0 }}>
+      <div style={{ fontSize: "0.625rem", fontWeight: 700, color: "#94A3B8", marginBottom: 2 }}>
+        {label}
+      </div>
+      <div
+        style={{
+          fontSize: "0.75rem",
+          fontWeight: 600,
+          color: "#334155",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {value}
+      </div>
+    </div>
+  );
+}
+
 /**
  * Modal detail bug: judul, ID, rujukan TC, expected result dari TC, deskripsi,
  * dan evidence read-only. Mengambil datanya sendiri dari /api/bugs/[id] karena
@@ -35,28 +64,20 @@ const bodyTextStyle: React.CSSProperties = {
 export function BugDetailModal({
   bugId,
   onClose,
-  onDeleted,
   onUpdated,
 }: {
   bugId: string;
   onClose: () => void;
-  /** Bug dihapus — parent membuang barisnya dari daftar lokal. */
-  onDeleted?: (bugId: string) => void;
   /** Field bug berubah lewat Edit Bug — parent memakai ini untuk patch lokal. */
   onUpdated?: (bugId: string, patch: BugEditableFields) => void;
 }) {
   const [bug, setBug] = useState<BugRow | null>(null);
   const [canEdit, setCanEdit] = useState(false);
   const [canAttach, setCanAttach] = useState(false);
-  const [canDelete, setCanDelete] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const [deleting, setDeleting] = useState(false);
   /** Edit Bug Modal sedang terbuka di atas modal ini. */
   const [editing, setEditing] = useState(false);
-
-  const busy = deleting;
 
   useEffect(() => {
     let cancelled = false;
@@ -71,7 +92,6 @@ export function BugDetailModal({
         setBug(data.bug);
         setCanEdit(data.canEdit);
         setCanAttach(data.canAttach);
-        setCanDelete(data.canDelete);
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : "Gagal memuat detail bug.");
       } finally {
@@ -87,11 +107,11 @@ export function BugDetailModal({
     const onKeyDown = (e: KeyboardEvent) => {
       // Saat Edit modal terbuka, Escape ditangani modal itu — jangan ikut menutup
       // modal detail di belakangnya.
-      if (e.key === "Escape" && !busy && !editing) onClose();
+      if (e.key === "Escape" && !editing) onClose();
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [onClose, busy, editing]);
+  }, [onClose, editing]);
 
   useEffect(() => {
     const prev = document.body.style.overflow;
@@ -101,21 +121,6 @@ export function BugDetailModal({
     };
   }, []);
 
-  const remove = async () => {
-    if (!bug || deleting || !canDelete) return;
-    setError(null);
-    setDeleting(true);
-    const res = await deleteBug(bug.id);
-    setDeleting(false);
-    if (res.error) {
-      setError(res.error);
-      setConfirmingDelete(false);
-      return;
-    }
-    onDeleted?.(bug.id);
-    onClose();
-  };
-
   /** Simpan Edit Bug: patch modal ini + teruskan ke daftar lokal parent. */
   const handleSaved = (patch: BugEditableFields) => {
     setBug((prev) => (prev ? { ...prev, ...patch } : prev));
@@ -123,15 +128,17 @@ export function BugDetailModal({
     setEditing(false);
   };
 
+  // Expected Result milik bug; kalau kosong, pakai milik Test Case terkait.
+  const expectedText =
+    bug?.expectedResult?.trim() || bug?.testCase?.expectedResult?.trim() || "";
+
   return createPortal(
     <>
       <div
         role="dialog"
         aria-modal="true"
         aria-label="Detail Bug"
-        onClick={() => {
-          if (!busy) onClose();
-        }}
+        onClick={onClose}
         style={{
           position: "fixed",
           inset: 0,
@@ -195,7 +202,6 @@ export function BugDetailModal({
                 type="button"
                 aria-label="Tutup"
                 onClick={onClose}
-                disabled={busy}
                 style={{
                   flexShrink: 0,
                   display: "flex",
@@ -206,7 +212,7 @@ export function BugDetailModal({
                   borderRadius: 8,
                   background: "transparent",
                   color: "#94A3B8",
-                  cursor: busy ? "not-allowed" : "pointer",
+                  cursor: "pointer",
                 }}
                 onMouseEnter={(e) => (e.currentTarget.style.color = "#475569")}
                 onMouseLeave={(e) => (e.currentTarget.style.color = "#94A3B8")}
@@ -219,11 +225,11 @@ export function BugDetailModal({
                 bukan full-bleed ke tepi modal. */}
             <div style={{ borderTop: "1px solid #F1F5F9", marginTop: "0.75rem" }} />
 
-            {/* Sub-header: rujukan TC + link eksternal kalau ada */}
+            {/* Tanpa pill badge: semua atribut jadi teks di grid bawah. */}
             {bug && (
-              <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap", marginTop: "0.75rem" }}>
-                {bug.testCase ? (
-                  <span style={{ fontSize: "0.75rem", color: "#64748B" }}>
+              <>
+                {bug.testCase && (
+                  <div style={{ marginTop: "0.75rem", fontSize: "0.75rem", color: "#64748B" }}>
                     Test Case Ref:{" "}
                     {/* Hanya nilai TC ID yang hyperlink — labelnya netral. */}
                     <Link
@@ -234,52 +240,53 @@ export function BugDetailModal({
                     >
                       {bug.testCase.tcId}
                     </Link>
-                  </span>
-                ) : (
-                  <span
-                    style={{
-                      display: "inline-block",
-                      padding: "0.125rem 0.5rem",
-                      background: "#FAF5FF",
-                      color: "#7E22CE",
-                      border: "1px solid #E9D5FF",
-                      borderRadius: 4,
-                      fontSize: "0.625rem",
-                      fontWeight: 700,
-                    }}
-                  >
-                    Ad-hoc / General
-                  </span>
+                  </div>
                 )}
-                {bug.suite && (
-                  <span style={{ fontSize: "0.75rem", color: "#64748B" }}>
-                    Suite: <strong style={{ color: "#334155", fontWeight: 600 }}>{bug.suite.name}</strong>
-                  </span>
-                )}
-                {bug.project && (
-                  <span style={{ fontSize: "0.75rem", color: "#64748B" }}>
-                    Project: <strong style={{ color: "#334155", fontWeight: 600 }}>{bug.project.name}</strong>
-                  </span>
-                )}
-                {bug.externalLink && (
-                  <a
-                    href={bug.externalLink}
-                    target="_blank"
-                    rel="noreferrer"
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: "0.25rem",
-                      fontSize: "0.75rem",
-                      fontWeight: 500,
-                      color: "#2563EB",
-                      textDecoration: "none",
-                    }}
-                  >
-                    Link eksternal <ExternalLink size={12} />
-                  </a>
-                )}
-              </div>
+
+                {/* Info grid: status, severity, suite/project, environment, dll. */}
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                    gap: "0.6rem 1.25rem",
+                    marginTop: "0.85rem",
+                  }}
+                >
+                  <InfoPair label="Status" value={STATUS_LABEL[bug.status] ?? bug.status} />
+                  <InfoPair label="Severity" value={bug.severity ?? "—"} />
+                  <InfoPair label="Suite / Module" value={bug.suite?.name ?? "—"} />
+                  <InfoPair label="Project" value={bug.project?.name ?? "—"} />
+                  <InfoPair label="Environment" value={bug.environment ?? "—"} />
+                  <InfoPair
+                    label="Tipe"
+                    value={bug.testCase ? "Test Run Bug" : "Ad-hoc / General"}
+                  />
+                  <InfoPair
+                    label="Test Run"
+                    value={
+                      bug.run ? (
+                        <Link
+                          href={`/test-runs/${bug.run.id}`}
+                          style={{ color: "#2563EB", textDecoration: "none" }}
+                          onMouseEnter={(e) => (e.currentTarget.style.textDecoration = "underline")}
+                          onMouseLeave={(e) => (e.currentTarget.style.textDecoration = "none")}
+                        >
+                          {bug.run.name}
+                        </Link>
+                      ) : (
+                        "—"
+                      )
+                    }
+                  />
+                  <InfoPair
+                    label="Dibuat"
+                    value={`${bug.createdBy?.name ?? "—"} · ${new Date(bug.createdAt).toLocaleDateString(
+                      "id-ID",
+                      { day: "2-digit", month: "short", year: "numeric" }
+                    )}`}
+                  />
+                </div>
+              </>
             )}
           </div>
 
@@ -295,37 +302,68 @@ export function BugDetailModal({
               </div>
             ) : (
               <>
-                {/* Expected Result — diambil live dari Test Case yang dirujuk. */}
-                {bug.testCase && (
-                  <div style={{ margin: "1rem 0 1.25rem" }}>
-                    <div style={labelStyle}>Expected Result</div>
-                    {bug.testCase.expectedResult?.trim() ? (
-                      <p style={bodyTextStyle}>{bug.testCase.expectedResult}</p>
-                    ) : (
-                      <p style={{ ...bodyTextStyle, color: "#94A3B8", fontStyle: "italic" }}>
-                        Belum ada expected result di test case ini.
-                      </p>
-                    )}
-                  </div>
-                )}
-
-                {/* Bug Description — plain text, tanpa container ber-border. */}
-                <div style={{ marginBottom: "1.25rem" }}>
-                  <div style={labelStyle}>Bug Description</div>
+                {/* Deskripsi & Hasil Aktual */}
+                <div style={{ margin: "1rem 0 1.25rem" }}>
+                  <div style={labelStyle}>Deskripsi &amp; Hasil Aktual</div>
                   <p style={bodyTextStyle}>
                     {bug.description?.trim() ? bug.description : "Tidak ada deskripsi."}
                   </p>
                 </div>
 
-                {/* Evidence — read-only di modal ini; ubah/hapus hanya dari Edit Bug. */}
+                {/* Expected Result — milik bug, fallback ke Test Case terkait. */}
+                <div style={{ marginBottom: "1.25rem" }}>
+                  <div style={labelStyle}>Expected Result</div>
+                  {expectedText ? (
+                    <p style={bodyTextStyle}>{expectedText}</p>
+                  ) : (
+                    <p style={{ ...bodyTextStyle, color: "#94A3B8", fontStyle: "italic" }}>
+                      Belum ada expected result.
+                    </p>
+                  )}
+                </div>
+
+                {/* Link Eksternal — hanya tampil bila ada nilainya. */}
+                {bug.externalLink && (
+                  <div style={{ marginBottom: "1.25rem" }}>
+                    <div style={labelStyle}>Link Eksternal</div>
+                    <a
+                      href={bug.externalLink}
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "0.3rem",
+                        fontSize: "0.75rem",
+                        fontWeight: 600,
+                        color: "#2563EB",
+                        textDecoration: "none",
+                        wordBreak: "break-all",
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget.style.textDecoration = "underline")}
+                      onMouseLeave={(e) => (e.currentTarget.style.textDecoration = "none")}
+                    >
+                      {bug.externalLink} <ExternalLink size={12} />
+                    </a>
+                  </div>
+                )}
+
+                {/* Evidence (Lampiran) — read-only di modal ini; empty state rapi. */}
                 <div>
                   <div style={labelStyle}>Evidence (Lampiran)</div>
-                  <AttachmentsPanel
-                    owner={{ bugId: bug.id }}
-                    attachments={bug.attachments}
-                    canEdit={false}
-                    compact
-                  />
+                  {bug.attachments.length > 0 ? (
+                    <AttachmentsPanel
+                      owner={{ bugId: bug.id }}
+                      attachments={bug.attachments}
+                      canEdit={false}
+                      compact
+                      thumbnailOnly
+                    />
+                  ) : (
+                    <p style={{ ...bodyTextStyle, color: "#94A3B8", fontStyle: "italic" }}>
+                      Belum ada evidence.
+                    </p>
+                  )}
                 </div>
 
                 {error && (
@@ -338,92 +376,21 @@ export function BugDetailModal({
           {/* Divider inset di atas footer — tidak full-bleed ke tepi modal. */}
           <div style={{ flexShrink: 0, borderTop: "1px solid #F1F5F9", margin: "0 1.5rem" }} />
 
-          {/* Footer */}
+          {/* Footer — tanpa tombol hapus; hanya Edit, rata kanan. */}
           <div
             style={{
               flexShrink: 0,
               display: "flex",
               alignItems: "center",
-              justifyContent: "space-between",
+              justifyContent: "flex-end",
               gap: "0.75rem",
               padding: "1rem 1.5rem",
             }}
           >
-            {bug && canDelete ? (
-              confirmingDelete ? (
-                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
-                  <span style={{ fontSize: "0.75rem", color: "#64748B" }}>Hapus bug ini?</span>
-                  <button
-                    type="button"
-                    onClick={() => setConfirmingDelete(false)}
-                    disabled={deleting}
-                    style={{
-                      padding: "0.375rem 0.75rem",
-                      border: "1px solid #E2E8F0",
-                      borderRadius: 8,
-                      background: "#fff",
-                      color: "#475569",
-                      fontSize: "0.75rem",
-                      fontWeight: 600,
-                      cursor: deleting ? "not-allowed" : "pointer",
-                    }}
-                  >
-                    Batal
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void remove()}
-                    disabled={deleting}
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: "0.35rem",
-                      padding: "0.375rem 0.75rem",
-                      border: "none",
-                      borderRadius: 8,
-                      background: "#E11D48",
-                      color: "#fff",
-                      fontSize: "0.75rem",
-                      fontWeight: 700,
-                      cursor: deleting ? "wait" : "pointer",
-                    }}
-                  >
-                    <Trash2 size={13} /> {deleting ? "Menghapus..." : "Ya, Hapus"}
-                  </button>
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setConfirmingDelete(true)}
-                  disabled={busy}
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "0.375rem",
-                    padding: "0.375rem 0.75rem",
-                    border: "none",
-                    borderRadius: 8,
-                    background: "transparent",
-                    color: "#E11D48",
-                    fontSize: "0.75rem",
-                    fontWeight: 600,
-                    cursor: busy ? "not-allowed" : "pointer",
-                  }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = "#FFF1F2")}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-                >
-                  <Trash2 size={13} /> Hapus Bug
-                </button>
-              )
-            ) : (
-              <span />
-            )}
-
-            {bug && canEdit ? (
+            {bug && canEdit && (
               <button
                 type="button"
                 onClick={() => setEditing(true)}
-                disabled={busy}
                 style={{
                   display: "inline-flex",
                   alignItems: "center",
@@ -435,18 +402,14 @@ export function BugDetailModal({
                   color: "#0F172A",
                   fontSize: "0.75rem",
                   fontWeight: 700,
-                  cursor: busy ? "not-allowed" : "pointer",
+                  cursor: "pointer",
                   transition: "background-color 0.15s ease",
                 }}
-                onMouseEnter={(e) => {
-                  if (!busy) e.currentTarget.style.background = "#F59E0B";
-                }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = "#F59E0B")}
                 onMouseLeave={(e) => (e.currentTarget.style.background = "#FBBF24")}
               >
                 <Pencil size={13} /> Edit
               </button>
-            ) : (
-              <span />
             )}
           </div>
         </div>

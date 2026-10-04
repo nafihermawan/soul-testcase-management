@@ -108,6 +108,10 @@ export type BugRow = {
   description: string | null;
   status: BugStatus;
   severity: string | null;
+  /** Tempat bug ditemukan: DEV | STG | PRE-PROD | PROD; null = belum diketahui. */
+  environment: string | null;
+  /** Hasil yang diharapkan (diisi reporter; beda dari expectedResult TestCase). */
+  expectedResult: string | null;
   externalLink: string | null;
   createdAt: string;
   /** Diisi saat bug RESOLVED/CLOSED — dipakai sebagai data riwayat. */
@@ -118,8 +122,9 @@ export type BugRow = {
   suite: { id: string; name: string } | null;
   /** Project pemilik suite di atas — dasar agregasi jumlah bug per project. */
   project: { id: string; name: string } | null;
-  /** Test Run tempat bug ditemukan (bug dari eksekusi); null untuk ad-hoc. */
-  run: { id: string; name: string } | null;
+  /** Test Run tempat bug ditemukan (bug dari eksekusi); null untuk ad-hoc.
+   *  `environment` dipakai sebagai fallback tampilan bila `bug.environment` null. */
+  run: { id: string; name: string; environment: string | null } | null;
   createdBy: { name: string | null } | null;
   /** Evidence yang menempel langsung ke bug ini. */
   attachments: AttachmentItem[];
@@ -129,11 +134,20 @@ export type BugRow = {
 
 export type BugsPayload = { bugs: BugRow[]; /** Upload evidence butuh role QA. */ canAttach: boolean };
 
+/** Field form bug yang bisa memicu error validasi (untuk inline error di klien). */
+export type BugErrorField = "title" | "suiteId" | "environment" | "externalLink";
+
 /** Field konten bug yang boleh diubah lewat Edit Bug (dipakai detail & edit modal). */
 export type BugEditableFields = {
   title: string;
   description: string | null;
   severity: string | null;
+  environment?: string | null;
+  /** Suite terpilih (id) — server menurunkan projectId dari sini. */
+  suiteId?: string | null;
+  /** Suite hasil perubahan — dipakai untuk patch tampilan detail/daftar. */
+  suite?: { id: string; name: string } | null;
+  expectedResult?: string | null;
   externalLink: string | null;
 };
 

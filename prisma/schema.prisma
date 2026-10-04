@@ -286,6 +286,9 @@ model Bug {
   expectedResult String?
   status      BugStatus @default(OPEN)
   severity    String?
+  /** Tempat bug ditemukan: DEV | STG | PRE-PROD | PROD. Bug eksekusi mewarisi
+   *  dari TestRun terkait; bug ad-hoc diisi manual. Null = belum diketahui. */
+  environment String?
   externalLink String?
   testCaseId  String?
   testRunResultId String?
@@ -314,6 +317,8 @@ model Bug {
   @@index([projectId])
   // Dipakai daftar Bugs & laporan mingguan (filter status OPEN/IN_PROGRESS).
   @@index([status])
+  // Pengelompokan/agregasi "bug mana paling banyak per environment".
+  @@index([environment])
 }
 
 /// File evidence/reference. Metadata saja — byte disimpan di Cloudflare R2.

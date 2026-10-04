@@ -45,6 +45,8 @@ export function CustomSelect({
   ariaLabel,
   searchable = false,
   placeholder = "Pilih...",
+  badgePosition = "right",
+  invalid = false,
 }: {
   value: string;
   options: CustomSelectOption[];
@@ -52,6 +54,10 @@ export function CustomSelect({
   ariaLabel?: string;
   searchable?: boolean;
   placeholder?: string;
+  /** Posisi badge terhadap label: "right" (default) atau "left" sebagai prefix. */
+  badgePosition?: "left" | "right";
+  /** Tandai field tidak valid — border merah. */
+  invalid?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [hovered, setHovered] = useState(false);
@@ -142,9 +148,13 @@ export function CustomSelect({
           height: 36,
           padding: "0 12px",
           // Token visual disamakan dengan komponen Select (satu bahasa desain).
-          border: `1px solid ${focused ? "#FFC348" : hovered ? "#CBD5E1" : "#E2E8F0"}`,
+          border: `1px solid ${invalid ? "#EF4444" : focused ? "#FFC348" : hovered ? "#CBD5E1" : "#E2E8F0"}`,
           borderRadius: 8,
-          boxShadow: focused ? "0 0 0 3px rgba(255, 195, 72, 0.25)" : "none",
+          boxShadow: invalid
+            ? "0 0 0 3px rgba(239, 68, 68, 0.15)"
+            : focused
+              ? "0 0 0 3px rgba(255, 195, 72, 0.25)"
+              : "none",
           background: "#fff",
           color: "#1E293B",
           fontSize: 12,
@@ -167,10 +177,15 @@ export function CustomSelect({
             overflow: "hidden",
           }}
         >
+          {badgePosition === "left" && selected?.badge && (
+            <span style={badgeStyle}>{selected.badge}</span>
+          )}
           <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {selected?.label ?? placeholder}
           </span>
-          {selected?.badge && <span style={badgeStyle}>{selected.badge}</span>}
+          {badgePosition === "right" && selected?.badge && (
+            <span style={badgeStyle}>{selected.badge}</span>
+          )}
         </span>
         <ChevronDown
           size={14}
@@ -283,10 +298,11 @@ export function CustomSelect({
                     overflow: "hidden",
                   }}
                 >
+                  {badgePosition === "left" && o.badge && <span style={badgeStyle}>{o.badge}</span>}
                   <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {o.label}
                   </span>
-                  {o.badge && <span style={badgeStyle}>{o.badge}</span>}
+                  {badgePosition === "right" && o.badge && <span style={badgeStyle}>{o.badge}</span>}
                 </span>
                 {isSelected && <Check size={13} style={{ color: "#B45309", flexShrink: 0 }} />}
               </button>

@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
       suite: { select: { id: true, name: true } },
       project: { select: { id: true, name: true } },
       testRunResult: {
-        select: { run: { select: { id: true, name: true } } },
+        select: { run: { select: { id: true, name: true, environment: true } } },
       },
       createdBy: { select: { name: true } },
       attachments: {
@@ -48,6 +48,8 @@ export async function GET(req: NextRequest) {
       description: b.description,
       status: b.status,
       severity: b.severity,
+      environment: b.environment,
+      expectedResult: b.expectedResult,
       externalLink: b.externalLink,
       createdAt: b.createdAt.toISOString(),
       resolvedAt: b.resolvedAt?.toISOString() ?? null,

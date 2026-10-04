@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { AlertTriangle, CheckCircle2, Loader2, X, XCircle } from "lucide-react";
 
@@ -20,13 +20,23 @@ export function useToast() {
   const [toast, setToast] = useState<ToastData>({ show: false, message: "", type: "success" });
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const showToast = (message: string, type: "success" | "error" = "success") => {
-    if (timer.current) clearTimeout(timer.current);
-    setToast({ show: true, message, type });
-    timer.current = setTimeout(() => {
-      setToast((prev) => ({ ...prev, show: false }));
-    }, 4000);
-  };
+  const showToast = useCallback(
+    (
+      message: string,
+      type: "success" | "error" = "success",
+      /** Lama tampil (ms); default 4 detik. */
+      durationMs = 4000
+    ) => {
+      if (timer.current) clearTimeout(timer.current);
+      setToast({ show: true, message, type });
+      timer.current = setTimeout(() => {
+        setToast((prev) => ({ ...prev, show: false }));
+      }, durationMs);
+    },
+    []
+  );
+
+  const dismissToast = useCallback(() => setToast((t) => ({ ...t, show: false })), []);
 
   useEffect(() => {
     return () => {
@@ -34,7 +44,7 @@ export function useToast() {
     };
   }, []);
 
-  return { toast, showToast, dismissToast: () => setToast((t) => ({ ...t, show: false })) };
+  return { toast, showToast, dismissToast };
 }
 
 export function Toast({
@@ -53,25 +63,28 @@ export function Toast({
         position: "fixed",
         top: "1.25rem",
         right: "1.25rem",
-        zIndex: 300,
+        // Harus di atas backdrop modal (overlay modal pakai z-300/320).
+        zIndex: 9999,
         display: "flex",
         alignItems: "center",
         gap: "0.6rem",
-        background: "#fff",
-        border: `1px solid ${isSuccess ? "#A7F3D0" : "#FECACA"}`,
+        // Latar SOLID supaya tetap kontras walau di belakangnya ada overlay gelap.
+        background: isSuccess ? "#059669" : "#DC2626",
+        border: `1px solid ${isSuccess ? "#047857" : "#B91C1C"}`,
         borderRadius: 10,
-        boxShadow: "0 10px 30px rgba(17, 24, 39, 0.12)",
+        boxShadow: "0 12px 32px rgba(15, 23, 42, 0.28)",
         padding: "0.7rem 1rem",
         maxWidth: 360,
+        color: "#fff",
         animation: "modalIn 0.18s ease-out",
       }}
     >
       {isSuccess ? (
-        <CheckCircle2 size={18} style={{ color: "#10B981", flexShrink: 0 }} />
+        <CheckCircle2 size={18} style={{ color: "#fff", flexShrink: 0 }} />
       ) : (
-        <XCircle size={18} style={{ color: "#EF4444", flexShrink: 0 }} />
+        <XCircle size={18} style={{ color: "#fff", flexShrink: 0 }} />
       )}
-      <span style={{ fontSize: "0.82rem", fontWeight: 500, color: "#1F2937", lineHeight: 1.4 }}>
+      <span style={{ fontSize: "0.82rem", fontWeight: 500, color: "#fff", lineHeight: 1.4 }}>
         {toast.message}
       </span>
       <button
@@ -81,7 +94,7 @@ export function Toast({
         style={{
           border: "none",
           background: "transparent",
-          color: "#9CA3AF",
+          color: "rgba(255, 255, 255, 0.85)",
           cursor: "pointer",
           display: "flex",
           alignItems: "center",

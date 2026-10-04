@@ -5,10 +5,14 @@ import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { updateBug } from "@/lib/actions/automation-bugs";
 import { AttachmentsPanel } from "@/components/attachments/attachments-panel";
+import { CustomSelect } from "@/components/ui/custom-select";
 import { Select } from "@/components/ui/select";
-import { Spinner } from "@/components/ui/feedback";
+import { FieldError } from "@/components/ui/field-error";
+import { Spinner, Toast, useToast } from "@/components/ui/feedback";
 import { entityCode } from "@/lib/format";
-import type { AttachmentItem, BugEditableFields, BugRow } from "@/types/api";
+import { urlFormatError, normalizeUrl } from "@/lib/validation";
+import { ENVIRONMENT_OPTIONS } from "@/lib/qa-metrics";
+import type { AttachmentItem, BugEditableFields, BugRow, SuiteOption, SuitesPayload } from "@/types/api";
 
 const SEVERITY_OPTIONS = [
   { value: "", label: "— Tidak ada —" },
@@ -17,6 +21,14 @@ const SEVERITY_OPTIONS = [
   { value: "HIGH", label: "High" },
   { value: "CRITICAL", label: "Critical" },
 ];
+
+/** Label platform project untuk badge di combobox Suite. */
+const PLATFORM_LABEL: Record<string, string> = {
+  WEB: "Web",
+  MOBILE: "Mobile",
+  HARDWARE: "Hardware",
+  API: "API",
+};
 
 const labelStyle: React.CSSProperties = {
   display: "block",
@@ -38,10 +50,19 @@ const fieldStyle: React.CSSProperties = {
   boxSizing: "border-box",
 };
 
+/** Error validasi per field (ditampilkan tepat di bawah field terkait). */
+type FieldErrors = {
+  title?: string;
+  suiteId?: string;
+  environment?: string;
+  description?: string;
+  expectedResult?: string;
+  externalLink?: string;
+};
+
 /**
- * Form edit bug: field konten (judul, severity, deskripsi) + kelola evidence.
- * Status sengaja tidak di sini — status lewat baris tabel Bugs.
- * Link eksternal juga tidak di sini (nilai lama dipertahankan apa adanya).
+ * Form edit bug — struktur field & aturan validasi diselaraskan dengan modal
+ * "Laporkan Bug". Status sengaja tidak di sini (lewat baris tabel Bugs).
  */
 export function EditBugModal({
   bug,
@@ -61,9 +82,17 @@ export function EditBugModal({
 }) {
   const [title, setTitle] = useState(bug.title);
   const [severity, setSeverity] = useState(bug.severity ?? "");
+  const [environment, setEnvironment] = useState(bug.environment ?? "");
+  const [suiteId, setSuiteId] = useState(bug.suite?.id ?? "");
   const [description, setDescription] = useState(bug.description ?? "");
+  const [expectedResult, setExpectedResult] = useState(bug.expectedResult ?? "");
+  const [externalLink, setExternalLink] = useState(bug.externalLink ?? "");
+  const [suites, setSuites] = useState<SuiteOption[]>([]);
+  const [suitesLoading, setSuitesLoading] = useState(true);
   const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  // Error sistem/server tampil sebagai toast kanan-atas, bukan banner di modal.
+  const { toast, showToast, dismissToast } = useToast();
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -81,35 +110,89 @@ export function EditBugModal({
     };
   }, []);
 
+  // Opsi Suite / Module: daftar flat lintas project dari /api/suites.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/suites", { cache: "no-store" });
+        if (!res.ok) throw new Error();
+        const data = (await res.json()) as SuitesPayload;
+        if (!cancelled) setSuites(data.suites);
+      } catch {
+        if (!cancelled) showToast("Gagal memuat daftar suite.", "error", 5000);
+      } finally {
+        if (!cancelled) setSuitesLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [showToast]);
+
+  const clearFieldError = (key: keyof FieldErrors) =>
+    setFieldErrors((prev) => (prev[key] ? { ...prev, [key]: undefined } : prev));
+
   const submit = async () => {
     if (pending) return;
-    setError(null);
-    const trimmedTitle = title.trim();
-    if (!trimmedTitle) {
-      setError("Judul bug wajib diisi.");
-      return;
-    }
+    const fieldErrs: FieldErrors = {};
+    if (!title.trim()) fieldErrs.title = "Judul bug wajib diisi.";
+    if (!environment) fieldErrs.environment = "Environment wajib dipilih.";
+    if (!suiteId) fieldErrs.suiteId = "Suite / Module wajib dipilih.";
+    if (!description.trim()) fieldErrs.description = "Deskripsi & Hasil Aktual wajib diisi.";
+    if (!expectedResult.trim()) fieldErrs.expectedResult = "Expected Result wajib diisi.";
+    // Link eksternal OPSIONAL; format hanya diperiksa bila diisi.
+    const linkErr = urlFormatError(externalLink);
+    if (linkErr) fieldErrs.externalLink = linkErr;
+    setFieldErrors(fieldErrs);
+    if (Object.keys(fieldErrs).length > 0) return;
 
+    const selectedSuite = suites.find((s) => s.id === suiteId);
     const patch: BugEditableFields = {
-      title: trimmedTitle,
-      description: description.trim() || null,
+      title: title.trim(),
+      description: description.trim(),
       severity: severity.trim() || null,
-      // Field link eksternal dihapus dari form — nilai lama tetap dibawa supaya
-      // tidak terhapus saat menyimpan.
-      externalLink: bug.externalLink,
+      environment: environment.trim() || null,
+      suiteId,
+      // Objek suite dipakai parent untuk patch tampilan tanpa refetch.
+      suite: selectedSuite
+        ? { id: selectedSuite.id, name: selectedSuite.name }
+        : bug.suite,
+      expectedResult: expectedResult.trim(),
+      // Auto-prefix https:// bila skema tidak diketik pengguna.
+      externalLink: normalizeUrl(externalLink),
     };
 
     setPending(true);
-    const res = await updateBug({
-      bugId: bug.id,
-      title: patch.title,
-      description: patch.description ?? undefined,
-      severity: patch.severity ?? undefined,
-      externalLink: patch.externalLink ?? undefined,
-    });
+    let res: Awaited<ReturnType<typeof updateBug>>;
+    try {
+      res = await updateBug({
+        bugId: bug.id,
+        title: patch.title,
+        description: patch.description ?? undefined,
+        severity: patch.severity ?? undefined,
+        expectedResult: patch.expectedResult ?? undefined,
+        externalLink: patch.externalLink ?? undefined,
+        environment: patch.environment ?? null,
+        suiteId: patch.suiteId ?? null,
+      });
+    } catch {
+      // Server action gagal di level jaringan (offline / server tak terjangkau).
+      setPending(false);
+      showToast("Koneksi internet terputus. Periksa jaringan Anda.", "error", 5000);
+      return;
+    }
     setPending(false);
+    if (res.field) {
+      // Error validasi dari server -> tampilkan inline di field terkait.
+      const field = res.field;
+      const message = res.error ?? "Nilai tidak valid.";
+      setFieldErrors((prev) => ({ ...prev, [field]: message }));
+      return;
+    }
     if (res.error) {
-      setError(res.error);
+      // Error sistem/server -> toast kanan-atas, bukan banner di dalam modal.
+      showToast(res.error, "error", 5000);
       return;
     }
     onSaved(patch);
@@ -152,6 +235,11 @@ export function EditBugModal({
           animation: "modalIn 0.18s ease-out",
         }}
       >
+        {/* Toast error sistem/server — floating kanan-atas (portal ke body).
+            Ditaruh di dalam kartu agar klik tombol tutupnya tidak
+            membubbling ke overlay dan menutup modal. */}
+        <Toast toast={toast} onDismiss={dismissToast} />
+
         {/* Header */}
         <div style={{ flexShrink: 0, padding: "1.25rem 1.5rem 0" }}>
           <div
@@ -218,53 +306,168 @@ export function EditBugModal({
             padding: "1rem 1.5rem 1.25rem",
           }}
         >
+          {/* 1. Judul Bug (mandatory) */}
           <div>
             <label htmlFor="edit-bug-title" style={labelStyle}>
-              Judul Bug <span style={{ color: "#EF4444" }}>*</span>
+              Judul Bug <span style={{ color: "#E11D48" }}>*</span>
             </label>
             <input
               id="edit-bug-title"
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="mis. Tombol simpan tidak merespon"
-              style={fieldStyle}
-            />
-          </div>
-
-          <div>
-            <label htmlFor="edit-bug-severity" style={labelStyle}>
-              Severity
-            </label>
-            <Select
-              id="edit-bug-severity"
-              value={severity}
-              ariaLabel="Severity"
+              onChange={(e) => {
+                setTitle(e.target.value);
+                clearFieldError("title");
+              }}
               disabled={pending}
-              onChange={(e) => setSeverity(e.target.value)}
-            >
-              {SEVERITY_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </Select>
+              placeholder="Contoh: Tombol simpan tidak merespons"
+              style={fieldErrors.title ? { ...fieldStyle, borderColor: "#EF4444" } : fieldStyle}
+            />
+            <FieldError message={fieldErrors.title} />
           </div>
 
+          {/* 2. Severity (opsional) + Environment (mandatory) */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "1rem" }}>
+            <div>
+              <label htmlFor="edit-bug-severity" style={labelStyle}>
+                Severity
+              </label>
+              <Select
+                id="edit-bug-severity"
+                value={severity}
+                ariaLabel="Severity"
+                disabled={pending}
+                onChange={(e) => setSeverity(e.target.value)}
+              >
+                {SEVERITY_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </Select>
+            </div>
+
+            <div>
+              <label htmlFor="edit-bug-environment" style={labelStyle}>
+                Environment <span style={{ color: "#E11D48" }}>*</span>
+              </label>
+              <Select
+                id="edit-bug-environment"
+                value={environment}
+                ariaLabel="Environment"
+                disabled={pending}
+                onChange={(e) => {
+                  setEnvironment(e.target.value);
+                  clearFieldError("environment");
+                }}
+                style={fieldErrors.environment ? { borderColor: "#EF4444" } : undefined}
+              >
+                <option value="">Pilih Environment</option>
+                {ENVIRONMENT_OPTIONS.map((env) => (
+                  <option key={env} value={env}>
+                    {env}
+                  </option>
+                ))}
+              </Select>
+              <FieldError message={fieldErrors.environment} />
+            </div>
+          </div>
+
+          {/* 3. Suite / Module (mandatory) */}
+          <div>
+            <span style={labelStyle}>
+              Suite / Module <span style={{ color: "#E11D48" }}>*</span>
+            </span>
+            <CustomSelect
+              ariaLabel="Suite / Module"
+              searchable
+              badgePosition="left"
+              invalid={!!fieldErrors.suiteId}
+              value={suiteId}
+              placeholder={suitesLoading ? "Memuat suite…" : "Pilih suite / modul..."}
+              onChange={(next) => {
+                setSuiteId(next);
+                clearFieldError("suiteId");
+              }}
+              options={suites.map((s) => ({
+                value: s.id,
+                label: `${s.projectName} — ${s.name}`,
+                badge: s.platform ? PLATFORM_LABEL[s.platform] ?? s.platform : undefined,
+              }))}
+            />
+            <FieldError message={fieldErrors.suiteId} />
+          </div>
+
+          {/* 4. Deskripsi & Hasil Aktual (mandatory) */}
           <div>
             <label htmlFor="edit-bug-description" style={labelStyle}>
-              Deskripsi / Hasil Aktual
+              Deskripsi &amp; Hasil Aktual <span style={{ color: "#E11D48" }}>*</span>
             </label>
             <textarea
               id="edit-bug-description"
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              onChange={(e) => {
+                setDescription(e.target.value);
+                clearFieldError("description");
+              }}
+              disabled={pending}
               rows={5}
-              placeholder="Apa yang terjadi saat bug ini ditemukan…"
-              style={{ ...fieldStyle, resize: "vertical", lineHeight: 1.55 }}
+              placeholder="Jelaskan langkah reproduksi dan dampaknya..."
+              style={{
+                ...fieldStyle,
+                resize: "vertical",
+                lineHeight: 1.55,
+                ...(fieldErrors.description ? { borderColor: "#EF4444" } : {}),
+              }}
             />
+            <FieldError message={fieldErrors.description} />
           </div>
 
-          {/* Kelola evidence: hapus yang ada, tambah lewat dropzone/paste. */}
+          {/* 5. Expected Result (mandatory) */}
+          <div>
+            <label htmlFor="edit-bug-expected" style={labelStyle}>
+              Expected Result <span style={{ color: "#E11D48" }}>*</span>
+            </label>
+            <textarea
+              id="edit-bug-expected"
+              value={expectedResult}
+              onChange={(e) => {
+                setExpectedResult(e.target.value);
+                clearFieldError("expectedResult");
+              }}
+              disabled={pending}
+              rows={3}
+              placeholder="Jelaskan hasil yang diharapkan..."
+              style={{
+                ...fieldStyle,
+                resize: "vertical",
+                lineHeight: 1.55,
+                ...(fieldErrors.expectedResult ? { borderColor: "#EF4444" } : {}),
+              }}
+            />
+            <FieldError message={fieldErrors.expectedResult} />
+          </div>
+
+          {/* 6. Link Eksternal (opsional) */}
+          <div>
+            <label htmlFor="edit-bug-link" style={labelStyle}>
+              Link Eksternal
+            </label>
+            <input
+              id="edit-bug-link"
+              type="url"
+              value={externalLink}
+              onChange={(e) => {
+                setExternalLink(e.target.value);
+                clearFieldError("externalLink");
+              }}
+              disabled={pending}
+              placeholder="Masukkan URL (Jira, GitHub, Drive, dll.)"
+              style={fieldErrors.externalLink ? { ...fieldStyle, borderColor: "#EF4444" } : fieldStyle}
+            />
+            <FieldError message={fieldErrors.externalLink} />
+          </div>
+
+          {/* 7. Evidence (Lampiran) — opsional */}
           <div>
             <label style={labelStyle}>Evidence (Lampiran)</label>
             <AttachmentsPanel
@@ -275,8 +478,6 @@ export function EditBugModal({
               compact
             />
           </div>
-
-          {error && <div style={{ fontSize: "0.75rem", color: "#B91C1C" }}>{error}</div>}
         </div>
 
         {/* Divider inset + footer */}
@@ -321,7 +522,7 @@ export function EditBugModal({
               alignItems: "center",
               justifyContent: "center",
               gap: "0.4rem",
-              minWidth: 110,
+              minWidth: 140,
               padding: "0.5rem 1rem",
               border: "none",
               borderRadius: 8,

@@ -7,6 +7,7 @@ import { createTestRun, updateTestRun } from "@/lib/actions/test-runs";
 import { getJSON, invalidateApiCache } from "@/lib/client/use-api";
 import { Select } from "@/components/ui/select";
 import { Toast, useToast } from "@/components/ui/feedback";
+import { ENVIRONMENT_OPTIONS } from "@/lib/qa-metrics";
 import type { PlatformCode, RunOptionsPayload } from "@/types/api";
 
 type SuiteOption = {
@@ -73,8 +74,6 @@ const ACTIVITY_OPTIONS = [
   "Bug Fix",
   "Regression",
 ];
-
-const ENVIRONMENT_OPTIONS = ["DEV", "STG", "PRE-PROD", "PROD"];
 
 const PLATFORM_OPTIONS = ["Web", "Mobile", "Hardware", "API"];
 

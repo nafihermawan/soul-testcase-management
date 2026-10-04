@@ -72,27 +72,30 @@ const statusTone = (s: TestCase["status"]) =>
 const typeTone = (t: TestCase["type"]) =>
   t === "NEGATIVE" ? "rose" : t === "POSITIVE" ? "emerald" : "neutral";
 
-const badgeStyle = (tone: string): React.CSSProperties => ({
-  display: "inline-block",
-  padding: "0.15rem 0.5rem",
-  borderRadius: 999,
-  fontSize: "0.72rem",
+/** Warna teks per tone — dipakai dropdown teks polos (tanpa pill). */
+const TONE_TEXT: Record<string, string> = {
+  danger: "var(--danger)",
+  warning: "#B45309",
+  info: "var(--info)",
+  success: "var(--success)",
+  neutral: "var(--text-secondary)",
+  emerald: "#059669",
+  rose: "#E11D48",
+};
+
+/**
+ * Dropdown inline TANPA pill: teks polos berwarna + chevron tipis bawaan
+ * komponen Select. Background, border, dan padding pill dihapus supaya baris
+ * tabel tetap bersih; selnya masih bisa diklik untuk ubah nilai inline.
+ */
+const plainSelectStyle = (tone: string): React.CSSProperties => ({
+  background: "transparent",
+  border: "none",
+  borderRadius: 0,
+  padding: 0,
+  fontSize: "0.78rem",
   fontWeight: 600,
-  ...(tone === "danger" && { background: "var(--danger-bg)", color: "var(--danger)" }),
-  ...(tone === "warning" && { background: "var(--warning-bg)", color: "#B45309" }),
-  ...(tone === "info" && { background: "var(--info-bg)", color: "var(--info)" }),
-  ...(tone === "success" && { background: "var(--success-bg)", color: "var(--success)" }),
-  ...(tone === "neutral" && { background: "var(--surface-muted)", color: "var(--text-secondary)" }),
-  ...(tone === "emerald" && {
-    background: "#ECFDF5",
-    color: "#059669",
-    border: "1px solid #A7F3D0",
-  }),
-  ...(tone === "rose" && {
-    background: "#FFF1F2",
-    color: "#E11D48",
-    border: "1px solid #FECDD3",
-  }),
+  color: TONE_TEXT[tone] ?? "var(--text-secondary)",
 });
 
 const inputStyle: React.CSSProperties = {
@@ -1076,7 +1079,7 @@ function TestCaseTable({
                   disabled={!canEdit}
                   ariaLabel="Ubah type TC"
                   style={{
-                    ...badgeStyle(typeTone(t.type)),
+                    ...plainSelectStyle(typeTone(t.type)),
                     maxWidth: "100%",
                     // Menyusut ke konten agar bisa muncul rata tengah di sel.
                     width: "auto",
@@ -1101,8 +1104,7 @@ function TestCaseTable({
                   disabled={!canEdit}
                   ariaLabel="Ubah priority TC"
                   style={{
-                    ...badgeStyle(priorityTone(t.priority)),
-                    border: "none",
+                    ...plainSelectStyle(priorityTone(t.priority)),
                     maxWidth: "100%",
                     // Menyusut ke konten agar bisa muncul rata tengah di sel.
                     width: "auto",
@@ -1126,8 +1128,7 @@ function TestCaseTable({
                   disabled={!canEdit}
                   ariaLabel="Ubah status TC"
                   style={{
-                    ...badgeStyle(statusTone(t.status)),
-                    border: "none",
+                    ...plainSelectStyle(statusTone(t.status)),
                     maxWidth: "100%",
                     // Menyusut ke konten agar bisa muncul rata tengah di sel.
                     width: "auto",

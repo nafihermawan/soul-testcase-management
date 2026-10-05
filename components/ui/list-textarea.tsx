@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 
 /**
  * Marker list yang dikenali di awal baris: bullet "•" atau angka "1.".
@@ -30,6 +30,7 @@ export function ListTextarea({
   placeholder,
   ariaLabel,
   style,
+  fill = false,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -42,6 +43,11 @@ export function ListTextarea({
   ariaLabel?: string;
   /** Override tampilan agar cocok dengan field di sekitarnya (mis. modal eksekusi). */
   style?: React.CSSProperties;
+  /**
+   * Isi penuh tinggi container (bukan auto-grow) — dipakai agar batas bawah dua
+   * kolom jatuh di garis yang sama; textarea ini boleh scroll sendiri.
+   */
+  fill?: boolean;
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
   // Posisi caret yang dipulihkan setelah nilai berubah; tanpa ini caret
@@ -52,7 +58,9 @@ export function ListTextarea({
    * Auto-grow: tinggi textarea mengikuti isi (jumlah baris/list), tanpa
    * scrollbar sendiri — overflow-nya diserahkan ke area scroll modal.
    */
-  const autoGrow = () => {
+  const autoGrow = useCallback(() => {
+    // Mode fill: tinggi diatur flex container, bukan oleh isi.
+    if (fill) return;
     const el = ref.current;
     if (!el) return;
     el.style.height = "auto";
@@ -60,18 +68,19 @@ export function ListTextarea({
     // selisih ini harus ditambahkan agar baris terakhir tidak terpotong.
     const borderY = el.offsetHeight - el.clientHeight;
     el.style.height = `${el.scrollHeight + borderY}px`;
-  };
+  }, [fill]);
 
   // useLayoutEffect supaya tinggi sudah benar sebelum frame pertama dilukis
   // (termasuk saat modal edit dibuka dengan isi yang sudah ada).
   useLayoutEffect(() => {
     autoGrow();
-  }, [value]);
+  }, [autoGrow, value]);
 
   useEffect(() => {
+    if (fill) return;
     window.addEventListener("resize", autoGrow);
     return () => window.removeEventListener("resize", autoGrow);
-  }, []);
+  }, [autoGrow, fill]);
 
   useEffect(() => {
     const el = ref.current;
@@ -149,9 +158,10 @@ export function ListTextarea({
         color: "var(--text)",
         background: "#fff",
         boxSizing: "border-box",
-        // Tinggi diatur autoGrow; tanpa scrollbar & handle resize sendiri.
-        overflowY: "hidden",
+        // Tinggi diatur autoGrow (atau flex container bila `fill`); tanpa handle resize.
+        overflowY: fill ? "auto" : "hidden",
         resize: "none",
+        ...(fill ? { height: "100%" } : {}),
         ...style,
       }}
     />

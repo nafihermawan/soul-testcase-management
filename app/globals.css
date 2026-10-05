@@ -565,3 +565,10 @@ button,
 .login-eye-btn:hover {
   color: #334155;
 }
+
+/* Form Test Case: anak kolom tidak menyusut agar field (termasuk textarea
+   auto-grow) tidak terpotong — hanya field terakhir yang fleksibel mengisi
+   sisa tinggi supaya batas bawah kedua kolom sejajar. */
+.tc-form-col > * {
+  flex-shrink: 0;
+}

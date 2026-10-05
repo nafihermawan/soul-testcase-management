@@ -264,7 +264,11 @@ function TestCaseForm({
       <div
         style={{
           width: "100%",
-          maxWidth: 720,
+          // Diperlebar (max-w-5xl) agar layout 2 kolom muat tanpa scroll vertikal.
+          maxWidth: 1024,
+          // Tinggi tetap supaya kedua kolom punya tinggi definit → batas bawah
+          // field terakhir kiri & kanan jatuh di garis yang sama.
+          height: "85vh",
           maxHeight: "85vh",
           display: "flex",
           flexDirection: "column",
@@ -348,8 +352,57 @@ function TestCaseForm({
               gap: "0.75rem",
             }}
           >
-            {/* Row 1: TC ID | Type */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+            {/* Layout 2 kolom (50:50), mengisi tinggi sampai divider footer */}
+            <div style={{ flex: "1 1 auto", minHeight: 0, display: "flex", gap: "1.25rem" }}>
+              {/* Kolom kiri — General Information */}
+              <div
+                className="tc-form-col"
+                style={{
+                  flex: "1 1 0",
+                  minWidth: 0,
+                  minHeight: 0,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "0.75rem",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: "0.82rem",
+                    fontWeight: 700,
+                    color: "var(--text-secondary)",
+                  }}
+                >
+                  General Information
+                </div>
+                {/* Title — field pertama supaya user mengisi judul lebih dulu */}
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
+                  <label
+                    style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)" }}
+                  >
+                    Title <span style={{ color: "#F43F5E" }}>*</span>
+                  </label>
+                  <input
+                    ref={titleRef}
+                    name="title"
+                    placeholder="Judul test case"
+                    value={titleValue}
+                    required
+                    style={fieldErrors.title ? { ...inputStyle, ...errorBorder } : inputStyle}
+                    onChange={(e) => {
+                      setTitleValue(e.target.value);
+                      if (fieldErrors.title) setFieldErrors((prev) => ({ ...prev, title: undefined }));
+                    }}
+                  />
+                  {fieldErrors.title && (
+                    <p style={{ color: "#EF4444", fontSize: "0.8rem", margin: 0 }}>
+                      {fieldErrors.title}
+                    </p>
+                  )}
+                </div>
+
+                {/* Row 1: TC ID | Type */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
               <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
                 <label
                   style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)" }}
@@ -418,44 +471,27 @@ function TestCaseForm({
               </div>
             </div>
 
-            {/* Row 2: Title (full width) */}
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
+            {/* Row 3: Detail Skenario — field terakhir, mengisi sisa tinggi kolom */}
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: "0.3rem",
+                flex: "1 1 auto",
+                minHeight: 0,
+              }}
+            >
               <label
                 style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)" }}
               >
-                Title <span style={{ color: "#EF4444" }}>*</span>
-              </label>
-              <input
-                ref={titleRef}
-                name="title"
-                placeholder="Judul test case"
-                value={titleValue}
-                required
-                style={fieldErrors.title ? { ...inputStyle, ...errorBorder } : inputStyle}
-                onChange={(e) => {
-                  setTitleValue(e.target.value);
-                  if (fieldErrors.title) setFieldErrors((prev) => ({ ...prev, title: undefined }));
-                }}
-              />
-              {fieldErrors.title && (
-                <p style={{ color: "#EF4444", fontSize: "0.8rem", margin: 0 }}>
-                  {fieldErrors.title}
-                </p>
-              )}
-            </div>
-
-            {/* Row 3: Detail Skenario (full width) */}
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
-              <label
-                style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)" }}
-              >
-                Detail Skenario <span style={{ color: "#EF4444" }}>*</span>
+                Detail Skenario <span style={{ color: "#F43F5E" }}>*</span>
               </label>
               <ListTextarea
                 name="scenario"
                 rows={2}
-                required
+                fill
                 ariaLabel="Detail Skenario"
+                style={{ flex: "1 1 auto", minHeight: 0 }}
                 hasError={Boolean(fieldErrors.scenario)}
                 value={scenarioValue}
                 onChange={(v) => {
@@ -470,22 +506,29 @@ function TestCaseForm({
                 </p>
               )}
             </div>
-
-            {/* Execution Details: grouped shaded block */}
-            <div
-              style={{
-                background: "var(--surface-muted)",
-                border: "1px solid var(--border)",
-                borderRadius: 10,
-                padding: "0.85rem 0.9rem",
-                display: "flex",
-                flexDirection: "column",
-                gap: "0.7rem",
-              }}
-            >
-              <div style={{ fontSize: "0.82rem", fontWeight: 700, color: "var(--text-secondary)" }}>
-                Execution Details
               </div>
+
+              {/* Kolom kanan — Execution Details (area fokus utama) */}
+              <div
+                className="tc-form-col"
+                style={{
+                  flex: "1 1 0",
+                  minWidth: 0,
+                  minHeight: 0,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "0.75rem",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: "0.82rem",
+                    fontWeight: 700,
+                    color: "var(--text-secondary)",
+                  }}
+                >
+                  Execution Details
+                </div>
               <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
                 <label
                   style={{ fontSize: "0.78rem", fontWeight: 600, color: "var(--text-secondary)" }}
@@ -528,7 +571,15 @@ function TestCaseForm({
                   onChange={setTestDataValue}
                 />
               </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "0.3rem",
+                  flex: "1 1 auto",
+                  minHeight: 0,
+                }}
+              >
                 <label
                   style={{ fontSize: "0.78rem", fontWeight: 600, color: "var(--text-secondary)" }}
                 >
@@ -537,14 +588,21 @@ function TestCaseForm({
                 <ListTextarea
                   name="expectedResult"
                   rows={3}
+                  fill
                   ariaLabel="Expected Result"
+                  style={{ flex: "1 1 auto", minHeight: 0 }}
                   value={expectedResultValue}
                   onChange={setExpectedResultValue}
                 />
               </div>
+              </div>
             </div>
 
-            {error && <p style={{ color: "#b91c1c", fontSize: "0.85rem", margin: 0 }}>{error}</p>}
+            {error && (
+              <p style={{ flexShrink: 0, color: "#b91c1c", fontSize: "0.85rem", margin: 0 }}>
+                {error}
+              </p>
+            )}
           </div>
 
           {/* Footer sticky: di luar area scroll supaya garis & tombol tidak

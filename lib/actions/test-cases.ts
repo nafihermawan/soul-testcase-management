@@ -83,9 +83,9 @@ async function buildTcId(suiteId: string, override?: string): Promise<string> {
 
 /* ------------------------- Test Case ------------------------- */
 
-/** Baca Type dari FormData; kosong/tak dikenal -> null (belum dipilih). */
+/** Baca Type dari FormData; case-insensitive. Kosong/tak dikenal -> null. */
 function parseTcType(value: FormDataEntryValue | null): "POSITIVE" | "NEGATIVE" | null {
-  const v = String(value ?? "").trim();
+  const v = String(value ?? "").trim().toUpperCase();
   return v === "POSITIVE" || v === "NEGATIVE" ? v : null;
 }
 
@@ -341,6 +341,22 @@ function normalizeStatus(value?: string): (typeof STATUS_VALUES)[number] {
 }
 
 /**
+ * Normalisasi nilai Type dari file impor (case-insensitive):
+ * - "positive" -> POSITIVE, "negative" -> NEGATIVE
+ * - kosong -> null (belum dipilih)
+ * - nilai lain -> tidak valid (baris ditolak & dilaporkan lewat failedIndexes)
+ */
+function normalizeImportType(
+  value?: string
+): { ok: true; value: "POSITIVE" | "NEGATIVE" | null } | { ok: false } {
+  const v = (value ?? "").trim().toLowerCase();
+  if (!v) return { ok: true, value: null };
+  if (v === "positive") return { ok: true, value: "POSITIVE" };
+  if (v === "negative") return { ok: true, value: "NEGATIVE" };
+  return { ok: false };
+}
+
+/**
  * Cari section berdasarkan nama DI DALAM suite (case-insensitive) dan buat kalau
  * belum ada. `cache` dipegang per pemanggilan impor supaya satu nama section
  * tidak di-query/dibuat berulang kali untuk baris-baris berikutnya.
@@ -409,6 +425,13 @@ export async function importTestCases(
         continue;
       }
 
+      // Type dinormalisasi case-insensitive; nilai tak dikenal = baris gagal.
+      const importType = normalizeImportType(row.type);
+      if (!importType.ok) {
+        failedIndexes.push(i);
+        continue;
+      }
+
       try {
         const sectionName = (row.section ?? "").trim();
         const sectionId = sectionName
@@ -429,7 +452,7 @@ export async function importTestCases(
             expectedResult: (row.expectedResult ?? "").trim() || null,
             priority: normalizePriority(row.priority),
             status: normalizeStatus(row.status),
-            type: parseTcType(row.type ?? null),
+            type: importType.value,
             createdById: user.id,
           },
           select: { id: true },

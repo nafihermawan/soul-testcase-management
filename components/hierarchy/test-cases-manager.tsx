@@ -68,9 +68,24 @@ const priorityTone = (p: TestCase["priority"]) =>
   p === "CRITICAL" ? "danger" : p === "HIGH" ? "warning" : p === "MEDIUM" ? "info" : "neutral";
 const statusTone = (s: TestCase["status"]) =>
   s === "ACTIVE" ? "success" : s === "DEPRECATED" ? "neutral" : "warning";
-/** POSITIVE hijau muda, NEGATIVE merah muda, belum dipilih netral. */
-const typeTone = (t: TestCase["type"]) =>
-  t === "NEGATIVE" ? "rose" : t === "POSITIVE" ? "emerald" : "neutral";
+/** Badge Type pada tabel: Positive hijau lembut, Negative merah lembut. */
+const TYPE_BADGE: Record<
+  "POSITIVE" | "NEGATIVE",
+  { label: string; bg: string; color: string; border: string }
+> = {
+  POSITIVE: {
+    label: "Positive",
+    bg: "#ECFDF5",
+    color: "#047857",
+    border: "rgba(167, 243, 208, 0.6)",
+  },
+  NEGATIVE: {
+    label: "Negative",
+    bg: "#FFF1F2",
+    color: "#BE123C",
+    border: "rgba(254, 205, 211, 0.6)",
+  },
+};
 
 /** Warna teks per tone — dipakai dropdown teks polos (tanpa pill). */
 const TONE_TEXT: Record<string, string> = {
@@ -1073,29 +1088,26 @@ function TestCaseTable({
                 {t.title}
               </td>
               <td style={{ padding: "0.5rem 0.5rem", width: 110, textAlign: "center" }}>
-                <Select
-                  size="sm"
-                  value={t.type ?? ""}
-                  disabled={!canEdit}
-                  ariaLabel="Ubah type TC"
-                  style={{
-                    ...plainSelectStyle(typeTone(t.type)),
-                    maxWidth: "100%",
-                    // Menyusut ke konten agar bisa muncul rata tengah di sel.
-                    width: "auto",
-                    display: "inline-flex",
-                  }}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    onQuickUpdate(t, {
-                      type: val === "POSITIVE" || val === "NEGATIVE" ? val : null,
-                    });
-                  }}
-                >
-                  <option value="">— Belum dipilih —</option>
-                  <option value="POSITIVE">Positive</option>
-                  <option value="NEGATIVE">Negative</option>
-                </Select>
+                {t.type ? (
+                  <span
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      padding: "1px 8px",
+                      borderRadius: 999,
+                      fontSize: "0.72rem",
+                      fontWeight: 500,
+                      background: TYPE_BADGE[t.type].bg,
+                      color: TYPE_BADGE[t.type].color,
+                      border: `1px solid ${TYPE_BADGE[t.type].border}`,
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {TYPE_BADGE[t.type].label}
+                  </span>
+                ) : (
+                  <span style={{ color: "#94A3B8" }}>—</span>
+                )}
               </td>
               <td style={{ padding: "0.5rem 0.5rem", width: 140, textAlign: "center" }}>
                 <Select
@@ -1513,6 +1525,9 @@ export function TestCasesManager({
         section: sectionNameOf(t.sectionId),
         title: t.title,
         tcid: t.tcId,
+        // Type ditulis dalam bentuk tampilan (Positive/Negative) agar konsisten
+        // dengan contoh di template dan mudah dibaca ulang saat impor.
+        type: t.type === "POSITIVE" ? "Positive" : t.type === "NEGATIVE" ? "Negative" : "",
         scenario: t.scenario ?? "",
         precondition: t.precondition ?? "",
         steps: t.steps ?? "",
@@ -1556,6 +1571,7 @@ export function TestCasesManager({
       "Appeal", // section (opsional)
       "Login berhasil dengan kredensial valid", // title
       "", // tcid (kosong = auto-generate)
+      "Positive", // type (hanya "Positive" atau "Negative")
       "User membuka halaman login dan memasukkan email + password yang benar", // scenario
       "User memiliki akun aktif dan koneksi internet", // precondition
       "Buka halaman login\nMasukkan email valid\nKlik tombol Masuk", // steps
@@ -1571,7 +1587,13 @@ export function TestCasesManager({
       }
       return v;
     };
-    const csv = [header.join(","), example.map(escapeCsv).join(",")].join("\n");
+    const csv = [
+      // Baris komentar (diawali '#') sebagai instruksi template — diabaikan
+      // parser saat file-nya di-upload kembali.
+      '# Catatan: kolom "type" hanya menerima nilai "Positive" atau "Negative" (biarkan kosong bila belum dipilih).',
+      header.join(","),
+      example.map(escapeCsv).join(","),
+    ].join("\n");
     const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -1596,8 +1618,13 @@ export function TestCasesManager({
           const text = reader.result as string;
           // Hapus BOM (\uFEFF) dari awal file agar header pertama tidak terkontaminasi
           const cleanText = text.replace(/^\uFEFF/, "");
+          // Buang baris komentar (diawali '#') — mis. catatan dari file template.
+          const dataText = cleanText
+            .split(/\r?\n/)
+            .filter((line) => !line.trimStart().startsWith("#"))
+            .join("\n");
           const Papa = (await import("papaparse")).default;
-          rows = Papa.parse<Record<string, string>>(cleanText, {
+          rows = Papa.parse<Record<string, string>>(dataText, {
             header: true,
             skipEmptyLines: true,
           }).data;
@@ -3416,12 +3443,13 @@ const IMPORT_FIELDS = [
 
 /**
  * Urutan kolom + nama header CSV EXPORT — 100% presisi dengan format template
- * upload terbaru (10 kolom, camelCase). Sumber tunggal supaya tidak melenceng.
+ * upload terbaru (11 kolom, camelCase). Sumber tunggal supaya tidak melenceng.
  */
 const TC_EXPORT_HEADER = [
   "section",
   "title",
   "tcid",
+  "type",
   "scenario",
   "precondition",
   "steps",
@@ -3523,9 +3551,9 @@ function ImportWizardModal({
   const titleHeader = headers.find((h) => mappedField(h) === "title");
   const canImport = !!titleHeader;
 
-  // Sampel 8 baris pertama
-  const previewRows = rows.slice(0, 8);
-  const invalidRows = previewRows
+  // Tampilkan SELURUH baris; panelnya punya scroll sendiri (max-h).
+  const previewRows = rows;
+  const invalidRows = rows
     .map((r, i) => ({ idx: i + 1, title: titleHeader ? (r[titleHeader] ?? "").trim() : "" }))
     .filter((r) => !r.title);
 
@@ -3561,7 +3589,12 @@ function ImportWizardModal({
       <div
         style={{
           width: "100%",
-          maxWidth: 720,
+          // Step 2 butuh layout 2 kolom (mapping + preview) → modal dilebarkan
+          // (setara max-w-6xl); step 1 tetap ringkas.
+          maxWidth: step === 2 ? 1152 : 720,
+          // Step 2 memakai tinggi tetap agar panel mengisi sampai divider
+          // footer (tanpa sisa whitespace); step 1 tetap setinggi kontennya.
+          height: step === 2 ? "90vh" : undefined,
           maxHeight: "90vh",
           display: "flex",
           flexDirection: "column",
@@ -3573,16 +3606,18 @@ function ImportWizardModal({
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            padding: "1rem 1.25rem",
-            borderBottom: "1px solid var(--border)",
-          }}
-        >
+        {/* Header — garis pemisah di-inset selebar padding modal (tidak
+            menembus tepi kiri/kanan). */}
+        <div style={{ padding: "1rem 1.25rem 0", flexShrink: 0 }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              paddingBottom: "1rem",
+              borderBottom: "1px solid var(--border)",
+            }}
+          >
           <div>
             <h3 style={{ fontSize: "1.05rem", fontWeight: 700, margin: 0 }}>
               {step === 1 ? "Upload File" : "Preview & Mapping Import"}
@@ -3610,61 +3645,85 @@ function ImportWizardModal({
           >
             <X size={18} />
           </button>
+          </div>
         </div>
 
         {/* Body */}
         <div
           style={{
+            flex: "1 1 auto",
+            minHeight: 0,
             padding: "1.25rem",
             display: "flex",
             flexDirection: "column",
             gap: "1.25rem",
-            overflowY: "auto",
           }}
         >
-          {/* Stepper */}
+          {/* Baris atas: stepper (kiri) + banner validasi (kanan) */}
           <div
             style={{
+              flexShrink: 0,
               display: "flex",
               alignItems: "center",
-              gap: "0.5rem",
-              fontSize: "0.75rem",
-              fontWeight: 600,
+              justifyContent: "space-between",
+              gap: "1rem",
+              flexWrap: "wrap",
             }}
           >
-            <span
-              style={
-                step === 1
-                  ? {
-                      color: "#111827",
-                      background: "#FFFBEB",
-                      border: "1px solid #FDE68A",
-                      borderRadius: 999,
-                      padding: "0.15rem 0.6rem",
-                    }
-                  : { color: "#059669" }
-              }
+            {/* Stepper — teks polos tanpa pill/background */}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "0.5rem",
+                fontSize: "0.75rem",
+                fontWeight: 600,
+              }}
             >
-              {step > 1 ? "✓ " : ""}1. Upload File
-            </span>
-            <span style={{ color: "var(--text-muted)" }}>—</span>
-            <span
-              style={
-                step === 2
-                  ? {
-                      color: "#111827",
-                      background: "#FFFBEB",
-                      border: "1px solid #FDE68A",
-                      borderRadius: 999,
-                      padding: "0.15rem 0.6rem",
-                    }
-                  : { color: "var(--text-muted)" }
-              }
-            >
-              2. Mapping & Preview
-            </span>
-            <span style={{ color: "var(--text-muted)" }}>—</span>
-            <span style={{ color: "var(--text-muted)" }}>3. Import</span>
+              <span
+                style={{
+                  color: step > 1 ? "#059669" : step === 1 ? "#111827" : "var(--text-muted)",
+                }}
+              >
+                {step > 1 ? "✓ " : ""}Upload File
+              </span>
+              <span style={{ color: "var(--text-muted)" }}>&gt;</span>
+              <span style={{ color: step === 2 ? "#111827" : "var(--text-muted)" }}>
+                Mapping &amp; Preview
+              </span>
+              <span style={{ color: "var(--text-muted)" }}>&gt;</span>
+              <span style={{ color: "var(--text-muted)" }}>Import</span>
+            </div>
+
+            {/* Banner validasi — sejajar dengan stepper (hanya muncul di step 2) */}
+            {step === 2 && (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.4rem",
+                  padding: "0.35rem 0.75rem",
+                  borderRadius: 8,
+                  background: canImport ? "#ECFDF5" : "#FEF2F2",
+                  border: `1px solid ${canImport ? "#A7F3D0" : "#FECACA"}`,
+                  fontSize: "0.78rem",
+                  fontWeight: 600,
+                  color: canImport ? "#047857" : "#DC2626",
+                }}
+              >
+                {canImport ? (
+                  <>
+                    <CheckCircle2 size={15} />
+                    {rows.length} Baris Valid Siap di-Import
+                  </>
+                ) : (
+                  <>
+                    <AlertCircle size={15} />
+                    Petakan kolom Title untuk melanjutkan
+                  </>
+                )}
+              </div>
+            )}
           </div>
 
           {step === 1 && (
@@ -3693,11 +3752,22 @@ function ImportWizardModal({
           )}
 
           {step === 2 && (
-            <>
-              {/* Field Mapping */}
-              <div>
+            <div
+              style={{
+                display: "grid",
+                // Kolom kiri (mapping) ~1/3, kolom kanan (preview) ~2/3.
+                gridTemplateColumns: "minmax(0, 1fr) minmax(0, 2fr)",
+                gap: "1.25rem",
+                // Isi sisa tinggi body (stretch) supaya panel mencapai footer.
+                flex: "1 1 auto",
+                minHeight: 0,
+              }}
+            >
+              {/* Kolom kiri: Field Mapping — judul tetap; daftar mengisi sisa tinggi */}
+              <div style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
                 <h4
                   style={{
+                    flexShrink: 0,
                     fontSize: "0.82rem",
                     fontWeight: 700,
                     color: "var(--text-secondary)",
@@ -3706,83 +3776,109 @@ function ImportWizardModal({
                 >
                   Field Mapping
                 </h4>
-                <div style={{ display: "flex", flexDirection: "column", gap: "0.45rem" }}>
-                  {headers.map((h) => (
-                    <div
-                      key={h}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "0.6rem",
-                        flexWrap: "wrap",
-                      }}
-                    >
-                      <span
-                        style={{
-                          fontFamily: "var(--font-mono)",
-                          fontSize: "0.78rem",
-                          fontWeight: 600,
-                          color: "#374151",
-                          width: 180,
-                          flexShrink: 0,
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                        }}
+                <div
+                  style={{
+                    flex: "1 1 auto",
+                    minHeight: 0,
+                    overflowY: "auto",
+                    paddingRight: "0.25rem",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "0.45rem",
+                  }}
+                >
+                  {headers.map((h) => {
+                    const required =
+                      mappedField(h) === "title" || mappedField(h) === "expectedResult";
+                    return (
+                      <div
+                        key={h}
+                        style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}
                       >
-                        {h}
-                      </span>
-                      <span style={{ color: "var(--text-muted)", fontSize: "0.75rem" }}>→</span>
-                      <Select
-                        value={mappedField(h)}
-                        ariaLabel={`Field tujuan untuk ${h}`}
-                        style={{ flex: 1, minWidth: 180 }}
-                        onChange={(e) => setField(h, e.target.value)}
-                      >
-                        <option value="">— Jangan diimpor —</option>
-                        {IMPORT_FIELDS.map((f) => (
-                          <option key={f.value} value={f.value}>
-                            {f.label}
-                          </option>
-                        ))}
-                      </Select>
-                      {mappedField(h) === "title" && (
-                        <span style={{ fontSize: "0.68rem", fontWeight: 700, color: "#059669" }}>
-                          wajib
+                        {/* Nama kolom file di atas, dropdown tujuan di bawahnya —
+                            pas untuk kolom kiri yang sempit. */}
+                        <span
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "0.35rem",
+                            fontFamily: "var(--font-mono)",
+                            fontSize: "0.75rem",
+                            fontWeight: 600,
+                            color: "#374151",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                          title={h}
+                        >
+                          {h}
+                          {required && (
+                            <span
+                              aria-hidden="true"
+                              style={{
+                                color: "#F43F5E",
+                                fontWeight: 700,
+                                fontSize: "0.85rem",
+                                lineHeight: 1,
+                              }}
+                            >
+                              *
+                            </span>
+                          )}
                         </span>
-                      )}
-                      {mappedField(h) === "expectedResult" && (
-                        <span style={{ fontSize: "0.68rem", fontWeight: 700, color: "#059669" }}>
-                          wajib
-                        </span>
-                      )}
-                    </div>
-                  ))}
+                        <Select
+                          value={mappedField(h)}
+                          ariaLabel={`Field tujuan untuk ${h}`}
+                          // Teks value dropdown dibuat lebih halus & netral
+                          // (bukan semibold) mengikuti gaya body.
+                          style={{ fontWeight: 400, color: "#475569" }}
+                          onChange={(e) => setField(h, e.target.value)}
+                        >
+                          <option value="">— Jangan diimpor —</option>
+                          {IMPORT_FIELDS.map((f) => (
+                            <option key={f.value} value={f.value}>
+                              {f.label}
+                            </option>
+                          ))}
+                        </Select>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 
-              {/* Data Preview */}
-              <div>
+              {/* Kolom kanan: Data Preview — tabel mengisi sisa tinggi kolom */}
+              <div
+                style={{
+                  minWidth: 0,
+                  display: "flex",
+                  flexDirection: "column",
+                  minHeight: 0,
+                }}
+              >
                 <h4
                   style={{
+                    flexShrink: 0,
                     fontSize: "0.82rem",
                     fontWeight: 700,
                     color: "var(--text-secondary)",
                     margin: "0 0 0.6rem",
                   }}
                 >
-                  Data Preview (8 baris pertama)
+                  Data Preview
                 </h4>
                 {invalidRows.length > 0 && (
                   <div
                     style={{
+                      flexShrink: 0,
                       display: "flex",
                       flexDirection: "column",
                       gap: "0.25rem",
                       marginBottom: "0.6rem",
                     }}
                   >
-                    {invalidRows.map((r) => (
+                    {invalidRows.slice(0, 5).map((r) => (
                       <span
                         key={r.idx}
                         style={{ fontSize: "0.75rem", color: "#DC2626", fontWeight: 600 }}
@@ -3790,19 +3886,35 @@ function ImportWizardModal({
                         Baris {r.idx}: Title tidak boleh kosong
                       </span>
                     ))}
+                    {invalidRows.length > 5 && (
+                      <span style={{ fontSize: "0.72rem", color: "#B91C1C" }}>
+                        … dan {invalidRows.length - 5} baris lain tanpa Title
+                      </span>
+                    )}
                   </div>
                 )}
                 <div
-                  style={{ border: "1px solid var(--border)", borderRadius: 8, overflowX: "auto" }}
+                  style={{
+                    border: "1px solid var(--border)",
+                    borderRadius: 8,
+                    // Mengisi sisa tinggi kolom sampai divider footer.
+                    flex: "1 1 auto",
+                    minHeight: 0,
+                    overflow: "auto",
+                  }}
                 >
                   <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.75rem" }}>
                     <thead>
-                      <tr style={{ background: "#F9FAFB", color: "#6B7280", textAlign: "left" }}>
+                      <tr style={{ background: "#F8FAFC", color: "#6B7280", textAlign: "left" }}>
                         <th
                           style={{
+                            position: "sticky",
+                            top: 0,
+                            zIndex: 10,
                             padding: "0.5rem 0.6rem",
                             width: 44,
                             fontWeight: 600,
+                            background: "#F8FAFC",
                             borderRight: "1px solid var(--border)",
                           }}
                         >
@@ -3810,8 +3922,12 @@ function ImportWizardModal({
                         </th>
                         <th
                           style={{
+                            position: "sticky",
+                            top: 0,
+                            zIndex: 10,
                             padding: "0.5rem 0.6rem",
                             fontWeight: 600,
+                            background: "#F8FAFC",
                             borderRight: "1px solid var(--border)",
                           }}
                         >
@@ -3819,8 +3935,12 @@ function ImportWizardModal({
                         </th>
                         <th
                           style={{
+                            position: "sticky",
+                            top: 0,
+                            zIndex: 10,
                             padding: "0.5rem 0.6rem",
                             fontWeight: 600,
+                            background: "#F8FAFC",
                             borderRight: "1px solid var(--border)",
                           }}
                         >
@@ -3828,8 +3948,12 @@ function ImportWizardModal({
                         </th>
                         <th
                           style={{
+                            position: "sticky",
+                            top: 0,
+                            zIndex: 10,
                             padding: "0.5rem 0.6rem",
                             fontWeight: 600,
+                            background: "#F8FAFC",
                             borderRight: "1px solid var(--border)",
                           }}
                         >
@@ -3837,14 +3961,27 @@ function ImportWizardModal({
                         </th>
                         <th
                           style={{
+                            position: "sticky",
+                            top: 0,
+                            zIndex: 10,
                             padding: "0.5rem 0.6rem",
                             fontWeight: 600,
+                            background: "#F8FAFC",
                             borderRight: "1px solid var(--border)",
                           }}
                         >
                           Step Action
                         </th>
-                        <th style={{ padding: "0.5rem 0.6rem", fontWeight: 600 }}>
+                        <th
+                          style={{
+                            position: "sticky",
+                            top: 0,
+                            zIndex: 10,
+                            padding: "0.5rem 0.6rem",
+                            fontWeight: 600,
+                            background: "#F8FAFC",
+                          }}
+                        >
                           Expected Result
                         </th>
                       </tr>
@@ -3946,51 +4083,22 @@ function ImportWizardModal({
                     </tbody>
                   </table>
                 </div>
-
-                {/* Validation badge */}
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "0.4rem",
-                    marginTop: "0.75rem",
-                    padding: "0.5rem 0.75rem",
-                    borderRadius: 8,
-                    background: canImport ? "#ECFDF5" : "#FEF2F2",
-                    border: `1px solid ${canImport ? "#A7F3D0" : "#FECACA"}`,
-                    fontSize: "0.8rem",
-                    fontWeight: 600,
-                    color: canImport ? "#047857" : "#DC2626",
-                  }}
-                >
-                  {canImport ? (
-                    <>
-                      <CheckCircle2 size={15} />
-                      {rows.length} Baris Valid Siap di-Import
-                    </>
-                  ) : (
-                    <>
-                      <AlertCircle size={15} />
-                      Petakan kolom Title untuk melanjutkan
-                    </>
-                  )}
-                </div>
               </div>
-            </>
+            </div>
           )}
         </div>
 
-        {/* Footer */}
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "flex-end",
-            gap: "0.5rem",
-            padding: "1rem 1.25rem",
-            borderTop: "1px solid var(--border)",
-            background: "var(--surface-muted)",
-          }}
-        >
+        {/* Footer — latar disamakan dengan konten (putih) & garis pemisah di-inset. */}
+        <div style={{ padding: "0 1.25rem 1rem", background: "#fff", flexShrink: 0 }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "flex-end",
+              gap: "0.5rem",
+              paddingTop: "1rem",
+              borderTop: "1px solid var(--border)",
+            }}
+          >
           <button
             type="button"
             onClick={onClose}
@@ -4070,6 +4178,7 @@ function ImportWizardModal({
               )}
             </button>
           )}
+          </div>
         </div>
       </div>
     </div>,

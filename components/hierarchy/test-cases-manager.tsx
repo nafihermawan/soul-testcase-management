@@ -108,8 +108,10 @@ const plainSelectStyle = (tone: string): React.CSSProperties => ({
   border: "none",
   borderRadius: 0,
   padding: 0,
-  fontSize: "0.78rem",
+  // Badge teks (Priority/Status): kecil, tebal, sedikit renggang.
+  fontSize: 11,
   fontWeight: 600,
+  letterSpacing: "0.025em",
   color: TONE_TEXT[tone] ?? "var(--text-secondary)",
 });
 
@@ -1115,9 +1117,9 @@ function TestCaseTable({
                   title={`${t.tcId} — Lihat detail test case`}
                   style={{
                     fontFamily: "var(--font-mono)",
-                    fontSize: "0.78rem",
-                    fontWeight: 500,
-                    color: "#1E293B",
+                    fontSize: 11,
+                    fontWeight: 400,
+                    color: "#94A3B8",
                     background: "none",
                     border: "none",
                     padding: 0,
@@ -1132,9 +1134,9 @@ function TestCaseTable({
                 style={{
                   padding: "0.5rem 0.5rem",
                   width: "auto",
-                  fontWeight: 600,
-                  color: "var(--text)",
-                  fontSize: "0.85rem",
+                  fontWeight: 500,
+                  color: "#334155",
+                  fontSize: 12,
                   userSelect: "text",
                   cursor: "default",
                   overflow: "hidden",

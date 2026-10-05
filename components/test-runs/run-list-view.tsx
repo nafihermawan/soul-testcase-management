@@ -244,9 +244,10 @@ export function RunListView({ searchParams }: { searchParams: ActiveRunsSearchPa
       >
         <h1
           style={{
-            fontSize: 18,
+            fontSize: 20,
             fontWeight: 700,
-            color: "#0F172A",
+            color: "#1E293B",
+            letterSpacing: "-0.025em",
             margin: 0,
             lineHeight: 1.2,
           }}

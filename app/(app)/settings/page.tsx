@@ -40,8 +40,8 @@ export default function SettingsPage() {
         </>
       ) : (
         <>
-          <h1 style={{ fontSize: "1.4rem", fontWeight: 800, margin: "0 0 0.25rem" }}>Settings</h1>
-          <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginBottom: "1.5rem" }}>
+          <h1 style={{ fontSize: 20, fontWeight: 700, margin: "0 0 0.25rem", color: "#1E293B", letterSpacing: "-0.025em" }}>Settings</h1>
+          <p style={{ fontSize: 12, fontWeight: 400, color: "#64748B", marginBottom: "1.5rem" }}>
             Kelola project aplikasi dan hak akses user di sini.
           </p>
           <SettingsView projects={data.projects} users={data.users} reload={reload} />

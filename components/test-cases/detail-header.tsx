@@ -86,10 +86,11 @@ export function TestCasePageHeader({
         <div style={{ minWidth: 0, flex: 1 }}>
           <h1
             style={{
-              fontSize: "1.4rem",
-              fontWeight: 800,
+              fontSize: 20,
+              fontWeight: 700,
               margin: 0,
-              color: "#111827",
+              color: "#1E293B",
+              letterSpacing: "-0.025em",
               display: "flex",
               alignItems: "center",
               gap: "0.6rem",

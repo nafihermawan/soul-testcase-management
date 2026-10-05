@@ -132,11 +132,11 @@ export function SuiteDetailView({
         >
           <h1
             style={{
-              fontSize: "1.5rem",
+              fontSize: 20,
               fontWeight: 700,
               margin: 0,
-              color: "#0F172A",
-              letterSpacing: "-0.02em",
+              color: "#1E293B",
+              letterSpacing: "-0.025em",
             }}
           >
             {suite.name}

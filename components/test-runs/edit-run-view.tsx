@@ -123,9 +123,10 @@ export function EditRunView({ runId }: { runId: string }) {
       >
         <h1
           style={{
-            fontSize: 22,
+            fontSize: 20,
             fontWeight: 700,
-            color: "#0F172A",
+            color: "#1E293B",
+            letterSpacing: "-0.025em",
             margin: 0,
             lineHeight: 1.2,
             minWidth: 0,

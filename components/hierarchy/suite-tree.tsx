@@ -180,9 +180,9 @@ function SuiteRow({
           <span
             style={{
               fontFamily: "var(--font-mono, monospace)",
-              fontSize: 14,
+              fontSize: 11,
               fontWeight: 400,
-              color: "#4B5563",
+              color: "#94A3B8",
             }}
           >
             {suite.code}
@@ -195,9 +195,9 @@ function SuiteRow({
             // memicu push kedua.
             onClick={(e) => e.stopPropagation()}
             style={{
-              // Netral & tebal: interaksi ditandai oleh hover background baris,
-              // bukan warna link atau underline.
-              fontWeight: 700,
+              // Netral & bobot medium (bukan bold); interaksi ditandai hover baris.
+              fontWeight: 500,
+              fontSize: 12,
               color: "#1E293B",
               textDecoration: "none",
               display: "inline-block",
@@ -210,8 +210,8 @@ function SuiteRow({
         <td
           style={{
             padding: "0.6rem 0.5rem",
-            color: "#6B7280",
-            fontSize: "0.82rem",
+            color: "#64748B",
+            fontSize: 12,
             fontWeight: 400,
           }}
         >
@@ -220,8 +220,8 @@ function SuiteRow({
         <td
           style={{
             padding: "0.6rem 0.5rem",
-            color: "#6B7280",
-            fontSize: 14,
+            color: "#64748B",
+            fontSize: 12,
             fontWeight: 400,
             whiteSpace: "nowrap",
           }}
@@ -390,8 +390,9 @@ export function SuiteTree({
               display: "inline-flex",
               alignItems: "center",
               gap: "0.35rem",
-              height: 38,
-              padding: "8px 14px",
+              // Ringkas: h-8 (32px) sejajar dengan kontrol lain di header.
+              height: 32,
+              padding: "0 14px",
               borderRadius: 8,
               border: "none",
               background: "#F59E0B",
@@ -409,17 +410,16 @@ export function SuiteTree({
           headerAnchor
         )}
 
-      {/* Card header */}
+      {/* Card header — tanpa divider bawah */}
       <div
         style={{
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
           padding: "1rem 1.25rem",
-          borderBottom: "1px solid var(--border)",
         }}
       >
-        <h2 style={{ fontSize: "1.05rem", fontWeight: 700, margin: 0 }}>Suites</h2>
+        <h2 style={{ fontSize: 14, fontWeight: 700, margin: 0, color: "#1E293B" }}>Suites</h2>
       </div>
 
       {/* Card body */}

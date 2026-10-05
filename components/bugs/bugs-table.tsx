@@ -51,13 +51,14 @@ const BUGS_PER_PAGE = 25;
 const STICKY_ID_WIDTH = 130;
 
 /** Batas lebar kolom "Title & Linked TC" yang bisa ditarik (px). */
-const TITLE_DEFAULT_WIDTH = 260;
-const TITLE_MIN_WIDTH = 160;
+const TITLE_DEFAULT_WIDTH = 320;
+const TITLE_MIN_WIDTH = 280;
 const TITLE_MAX_WIDTH = 600;
 
-/** Total lebar kolom SELAIN Title (ID + kolom tetap) — dasar minWidth tabel. */
+/** Total lebar kolom SELAIN Title (ID + kolom tetap) — dasar minWidth tabel.
+ *  Kolom Created Date dipatok 112px (w-28) agar tidak terpotong tepi kanan. */
 const FIXED_COLUMNS_WIDTH =
-  STICKY_ID_WIDTH + 190 + 110 + 100 + 140 + 140 + 140 + 70;
+  STICKY_ID_WIDTH + 190 + 110 + 100 + 140 + 140 + 112 + 70;
 
 /**
  * Klasifikasi sumber bug. Field `sourceType` dari API dipakai kalau ada, tapi
@@ -68,18 +69,20 @@ const FIXED_COLUMNS_WIDTH =
 const sourceTypeOf = (b: BugRow): BugSourceType =>
   b.sourceType ?? (b.testCase ? "EXECUTION" : "GENERAL_FINDING");
 
-const statusStyle: Record<BugRow["status"], { bg: string; color: string }> = {
-  OPEN: { bg: "var(--danger-bg)", color: "var(--danger)" },
-  IN_PROGRESS: { bg: "var(--warning-bg)", color: "#B45309" },
-  RESOLVED: { bg: "var(--success-bg)", color: "var(--success)" },
-  CLOSED: { bg: "var(--surface-muted)", color: "var(--text-secondary)" },
+/** Warna teks status bug (teks polos, tanpa pill/box). */
+const statusColor: Record<BugRow["status"], string> = {
+  OPEN: "#E11D48", // rose-600
+  IN_PROGRESS: "#D97706", // amber-600
+  RESOLVED: "#059669", // emerald-600
+  CLOSED: "#059669", // emerald-600
 };
 
-const severityStyle: Record<string, { bg: string; color: string }> = {
-  CRITICAL: { bg: "var(--danger-bg)", color: "var(--danger)" },
-  HIGH: { bg: "var(--warning-bg)", color: "#B45309" },
-  MEDIUM: { bg: "var(--info-bg)", color: "#1D4ED8" },
-  LOW: { bg: "var(--surface-muted)", color: "var(--text-secondary)" },
+/** Warna teks severity bug (teks polos, tanpa pill/box). */
+const severityColor: Record<string, string> = {
+  CRITICAL: "#DC2626", // red-600
+  HIGH: "#D97706", // amber-600
+  MEDIUM: "#2563EB", // blue-600
+  LOW: "#64748B", // slate-500
 };
 
 export function BugsPageClient({
@@ -251,9 +254,10 @@ export function BugsPageClient({
         <div style={{ minWidth: 0 }}>
           <h1
             style={{
-              fontSize: 22,
+              fontSize: 20,
               fontWeight: 700,
-              color: "#0F172A",
+              color: "#1E293B",
+              letterSpacing: "-0.025em",
               margin: 0,
               lineHeight: 1.2,
             }}
@@ -262,7 +266,8 @@ export function BugsPageClient({
           </h1>
           <p
             style={{
-              fontSize: 13,
+              fontSize: 12,
+              fontWeight: 400,
               color: "#64748B",
               margin: "4px 0 0",
             }}
@@ -334,7 +339,10 @@ export function BugsPageClient({
               display: "flex",
               alignItems: "center",
               gap: "0.4rem",
-              padding: "0.4rem 0.7rem",
+              // Tinggi dikunci 32px (h-8) + padding horizontal saja, agar sejajar
+              // dengan tombol Filter & Laporkan Bug di sebelahnya.
+              height: 32,
+              padding: "0 0.7rem",
               borderRadius: 8,
               border: "1px solid #D1D5DB",
               background: "#fff",
@@ -432,7 +440,8 @@ export function BugsPageClient({
                 display: "inline-flex",
                 alignItems: "center",
                 gap: "0.5rem",
-                height: 36,
+                // Samakan tinggi dengan search bar & tombol Filter (h-8).
+                height: 32,
                 padding: "0 1rem",
                 borderRadius: 8,
                 border: "none",
@@ -505,7 +514,7 @@ export function BugsPageClient({
                 <col style={{ width: 100 }} />
                 <col style={{ width: 140 }} />
                 <col style={{ width: 140 }} />
-                <col style={{ width: 140 }} />
+                <col style={{ width: 112 }} />
                 <col style={{ width: 70 }} />
               </colgroup>
               <thead>
@@ -584,13 +593,13 @@ export function BugsPageClient({
                   <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600, textAlign: "center" }}>Status</th>
                   <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600, textAlign: "center" }}>Created By</th>
                   <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600, textAlign: "center" }}>Created Date</th>
-                  <th style={{ padding: "0.6rem 1.25rem", fontWeight: 600, textAlign: "center" }}></th>
+                  <th style={{ padding: "0.6rem 1.25rem", fontWeight: 600, textAlign: "center" }}>Aksi</th>
                 </tr>
               </thead>
               <tbody>
                 {pagedBugs.map((b) => {
-                  const st = statusStyle[b.status];
-                  const sev = b.severity ? (severityStyle[b.severity] ?? severityStyle.LOW) : null;
+                  const st = statusColor[b.status];
+                  const sev = b.severity ? (severityColor[b.severity] ?? severityColor.LOW) : null;
                   // Environment bug; fallback ke environment Test Run terkait.
                   const env = b.environment ?? b.run?.environment ?? null;
                   return (
@@ -611,9 +620,9 @@ export function BugsPageClient({
                         <span
                           style={{
                             fontFamily: "var(--font-mono, monospace)",
-                            color: "#1E293B",
-                            fontWeight: 700,
-                            fontSize: "0.75rem",
+                            color: "#94A3B8",
+                            fontWeight: 400,
+                            fontSize: 11,
                             whiteSpace: "nowrap",
                           }}
                         >
@@ -635,9 +644,9 @@ export function BugsPageClient({
                           <span
                             title={b.title}
                             style={{
-                              fontWeight: 600,
-                              fontSize: "0.85rem",
-                              color: "#0F172A",
+                              fontWeight: 500,
+                              fontSize: 12,
+                              color: "#1E293B",
                               lineHeight: 1.4,
                               overflow: "hidden",
                               textOverflow: "ellipsis",
@@ -662,7 +671,7 @@ export function BugsPageClient({
                         </div>
                       </td>
                       <td style={{ padding: "0.6rem 0.5rem", textAlign: "center", overflow: "hidden" }}>
-                        {b.run ? (
+                        {b.run && b.run.name ? (
                           <Link
                             href={`/test-runs/${b.run.id}`}
                             onClick={(e) => e.stopPropagation()}
@@ -685,12 +694,16 @@ export function BugsPageClient({
                             {b.run.name}
                           </Link>
                         ) : (
-                          <span style={{ color: "#94A3B8" }}>-</span>
+                          // Temuan ad-hoc (tanpa Test Run) — label muted, bukan "-"
+                          // yang terkesan data kosong.
+                          <span style={{ fontSize: 12, fontWeight: 400, color: "#94A3B8" }}>
+                            Ad-hoc / General
+                          </span>
                         )}
                       </td>
                       <td style={{ padding: "0.6rem 0.5rem", textAlign: "center", overflow: "hidden", textOverflow: "ellipsis" }}>
                         {env ? (
-                          <span style={{ fontSize: "0.78rem", fontWeight: 600, color: "#334155", whiteSpace: "nowrap" }}>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: "#475569", whiteSpace: "nowrap" }}>
                             {env}
                           </span>
                         ) : (
@@ -699,7 +712,7 @@ export function BugsPageClient({
                       </td>
                       <td style={{ padding: "0.6rem 0.5rem", textAlign: "center" }}>
                         {sev ? (
-                          <span style={{ display: "inline-block", padding: "0.1rem 0.5rem", borderRadius: 999, fontSize: "0.72rem", fontWeight: 700, background: sev.bg, color: sev.color }}>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: sev }}>
                             {b.severity}
                           </span>
                         ) : (
@@ -712,7 +725,14 @@ export function BugsPageClient({
                             size="sm"
                             value={b.status}
                             ariaLabel="Ubah status bug"
-                            style={{ background: st.bg, color: st.color }}
+                            style={{
+                              background: "transparent",
+                              border: "none",
+                              padding: 0,
+                              fontSize: 12,
+                              fontWeight: 600,
+                              color: st,
+                            }}
                             onChange={(e) => changeStatus(b.id, e.target.value as BugRow["status"])}
                           >
                             <option value="OPEN">Open</option>
@@ -736,9 +756,24 @@ export function BugsPageClient({
                             setDeleteTarget(b);
                           }}
                           title="Hapus bug"
-                          style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 30, height: 30, borderRadius: 8, border: "none", background: "var(--danger-bg)", color: "var(--danger)", cursor: "pointer" }}
+                          aria-label="Hapus bug"
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            width: 30,
+                            height: 30,
+                            borderRadius: 8,
+                            border: "none",
+                            background: "transparent",
+                            color: "#94A3B8",
+                            cursor: "pointer",
+                            transition: "color 0.15s ease",
+                          }}
+                          onMouseEnter={(e) => (e.currentTarget.style.color = "#E11D48")}
+                          onMouseLeave={(e) => (e.currentTarget.style.color = "#94A3B8")}
                         >
-                          <Trash2 size={14} />
+                          <Trash2 size={15} />
                         </button>
                       </td>
                     </tr>

@@ -117,8 +117,8 @@ export function ReportsView() {
           }}
         >
           <div>
-            <h1 style={{ fontSize: "1.4rem", fontWeight: 800, margin: 0 }}>Reports</h1>
-            <p style={{ margin: "0.25rem 0 0", fontSize: "0.85rem", color: "var(--text-muted)" }}>
+            <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0, color: "#1E293B", letterSpacing: "-0.025em" }}>Reports</h1>
+            <p style={{ margin: "0.25rem 0 0", fontSize: 12, fontWeight: 400, color: "#64748B" }}>
               Inventaris test case &amp; celah coverage repository.
             </p>
           </div>

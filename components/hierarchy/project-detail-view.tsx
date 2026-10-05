@@ -76,27 +76,15 @@ export function ProjectDetailView({ projectId }: { projectId: string }) {
           <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
             <h1
               style={{
-                fontSize: 24,
-                fontWeight: 600,
+                fontSize: 20,
+                fontWeight: 700,
                 margin: 0,
-                color: "#111827",
-                letterSpacing: "-0.01em",
+                color: "#1E293B",
+                letterSpacing: "-0.025em",
               }}
             >
               {data.project.name}
             </h1>
-            <span
-              style={{
-                background: "#E5E7EB",
-                color: "#1F2937",
-                fontSize: "0.75rem",
-                fontWeight: 600,
-                padding: "0.15rem 0.5rem",
-                borderRadius: 999,
-              }}
-            >
-              {data.project.code}
-            </span>
           </div>
 
           {/* Anchor untuk tombol "Tambah Suite" dari SuiteTree */}

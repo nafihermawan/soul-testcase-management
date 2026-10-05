@@ -186,10 +186,10 @@ export function Dashboard({
         }}
       >
         <div>
-          <h1 style={{ fontSize: "1.4rem", fontWeight: 800, margin: 0 }}>
+          <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0, color: "#1E293B", letterSpacing: "-0.025em" }}>
             Good afternoon, {firstName}
           </h1>
-          <p style={{ margin: "0.25rem 0 0", color: "var(--text-secondary)", fontSize: "0.92rem" }}>
+          <p style={{ margin: "0.25rem 0 0", color: "#64748B", fontSize: 12, fontWeight: 400 }}>
             Here&apos;s your QA testing overview.
           </p>
         </div>

@@ -229,9 +229,10 @@ export function HistoryView({ searchParams }: { searchParams: HistorySearchParam
         <div>
           <h1
             style={{
-              fontSize: 22,
+              fontSize: 20,
               fontWeight: 700,
-              color: "#0F172A",
+              color: "#1E293B",
+              letterSpacing: "-0.025em",
               margin: 0,
               lineHeight: 1.2,
             }}
@@ -240,7 +241,8 @@ export function HistoryView({ searchParams }: { searchParams: HistorySearchParam
           </h1>
           <p
             style={{
-              fontSize: 13,
+              fontSize: 12,
+              fontWeight: 400,
               color: "#64748B",
               margin: "4px 0 0",
             }}

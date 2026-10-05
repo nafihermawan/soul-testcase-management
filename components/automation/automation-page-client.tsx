@@ -447,10 +447,10 @@ export function AutomationPageClient({
         }}
       >
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 700, color: "#0F172A", margin: 0 }}>
+          <h1 style={{ fontSize: 20, fontWeight: 700, color: "#1E293B", margin: 0, letterSpacing: "-0.025em" }}>
             Automation Coverage &amp; Health
           </h1>
-          <p style={{ margin: "6px 0 0", fontSize: "0.85rem", color: "#6B7280" }}>
+          <p style={{ margin: "6px 0 0", fontSize: 12, fontWeight: 400, color: "#64748B" }}>
             Pantau otomatisasi test case, status hasil CI, dan cakupan per project.
           </p>
         </div>

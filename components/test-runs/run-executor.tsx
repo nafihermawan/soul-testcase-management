@@ -922,9 +922,7 @@ export function RunExecutor({
               <div style={{ overflow: "hidden", minHeight: 0 }}>
                 <div
                   style={{
-                    margin: "0.75rem 0.75rem 0.75rem 1rem",
-                    paddingLeft: "0.9rem",
-                    borderLeft: "2px solid #E2E8F0",
+                    padding: "0.5rem 0.75rem 0.75rem",
                     display: "flex",
                     flexDirection: "column",
                   }}
@@ -951,31 +949,30 @@ export function RunExecutor({
                             display: "flex",
                             alignItems: "center",
                             gap: 8,
-                            padding: "8px 4px",
-                            marginTop: 16,
-                            marginBottom: 8,
-                            borderBottom: "1px solid #F1F5F9",
+                            padding: "8px 10px",
+                            marginTop: 8,
+                            // Folder parent: latar slate-50 tipis + teks tegas.
+                            background: "rgba(248, 250, 252, 0.8)",
+                            borderRadius: 6,
                             cursor: "pointer",
                             userSelect: "none",
                           }}
                         >
                           <ChevronRight
-                            size={12}
+                            size={13}
                             style={{
-                              color: "#94A3B8",
+                              color: "#64748B",
                               flexShrink: 0,
                               transform: secOpen ? "rotate(90deg)" : "rotate(0deg)",
                               transition: "transform 300ms ease-in-out",
                             }}
                           />
-                          <FolderOpen size={12} style={{ color: "#94A3B8", flexShrink: 0 }} />
+                          <FolderOpen size={13} style={{ color: "#64748B", flexShrink: 0 }} />
                           <span
                             style={{
-                              fontSize: 12,
-                              fontWeight: 700,
-                              color: "#334155",
-                              textTransform: "none",
-                              letterSpacing: "0.05em",
+                              fontSize: 13,
+                              fontWeight: 600,
+                              color: "#1E293B",
                             }}
                           >
                             {sec.name}
@@ -994,13 +991,7 @@ export function RunExecutor({
                           }}
                         >
                           <div style={{ overflow: "hidden", minHeight: 0 }}>
-                            <div
-                              style={{
-                                display: "flex",
-                                flexDirection: "column",
-                                gap: "0.6rem",
-                              }}
-                            >
+                            <div style={{ display: "flex", flexDirection: "column" }}>
                               {sec.items.map((item) => (
                                 <RunItemCard
                                   key={item.id}
@@ -1365,7 +1356,7 @@ export function RunExecutor({
   );
 }
 
-/* Card item test case dalam accordion project/suite */
+/* Baris item test case (flat list) dalam accordion project/suite */
 function RunItemCard({
   item,
   isCompleted,
@@ -1454,32 +1445,42 @@ function RunItemCard({
   return (
     <div
       onClick={onOpenDetail}
-      onMouseEnter={(e) => (e.currentTarget.style.borderColor = "#CBD5E1")}
-      onMouseLeave={(e) => (e.currentTarget.style.borderColor = "#E2E8F0")}
+      onMouseEnter={(e) => (e.currentTarget.style.background = "#F8FAFC")}
+      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
       style={{
         display: "flex",
         flexDirection: "column",
-        // Ringkas: jarak & padding dirapatkan supaya daftar TC lebih padat.
-        gap: "0.5rem",
-        padding: "0.75rem 1rem",
-        borderRadius: 12,
-        border: "1px solid #E2E8F0",
-        background: "#fff",
+        gap: "0.4rem",
+        // Flat list: tanpa border/card individual — cukup garis pemisah tipis.
+        // Indentasi kiri 2.5rem (pl-10) menegaskan TC ini anak dari folder di atas.
+        padding: "0.7rem 0.75rem 0.7rem 2.5rem",
+        borderBottom: "1px solid #F1F5F9",
+        background: "transparent",
         cursor: "pointer",
-        transition: "border-color 0.15s ease",
+        transition: "background-color 0.15s ease",
       }}
     >
       {/* Blok 1 — judul (kiri) | indikator evidence + badge status pasif (kanan) */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "1rem" }}>
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontWeight: 600, fontSize: "0.875rem", color: "#1E293B", lineHeight: 1.375 }}>
+          <div style={{ fontWeight: 500, fontSize: "0.85rem", color: "#334155", lineHeight: 1.4 }}>
             {item.testCase?.tcId && (
-              <>
-                <span style={{ fontFamily: "var(--font-mono, monospace)", color: "#64748B", fontWeight: 500 }}>
-                  {item.testCase.tcId}
-                </span>
-                {" - "}
-              </>
+              <span
+                style={{
+                  display: "inline-block",
+                  marginRight: 6,
+                  padding: "1px 6px",
+                  borderRadius: 4,
+                  background: "#F1F5F9",
+                  color: "#64748B",
+                  fontFamily: "var(--font-mono, monospace)",
+                  fontSize: 11,
+                  fontWeight: 500,
+                  verticalAlign: "middle",
+                }}
+              >
+                {item.testCase.tcId}
+              </span>
             )}
             {item.titleSnapshot}
           </div>
@@ -1518,19 +1519,19 @@ function RunItemCard({
             </button>
           )}
 
-          {/* Indikator status pasif: perubahan status hanya lewat modal detail */}
+          {/* Indikator status pasif & subtle: perubahan status hanya lewat modal detail */}
           <span
             style={{
               display: "inline-flex",
               alignItems: "center",
               flexShrink: 0,
-              padding: "0.25rem 0.75rem",
-              borderRadius: 999,
-              background: badge.bg,
-              color: badge.color,
-              border: `1px solid ${badge.border}`,
-              fontSize: "0.75rem",
-              fontWeight: badge.bold ? 700 : 600,
+              padding: "2px 8px",
+              borderRadius: 6,
+              background: "#F8FAFC",
+              color: "#94A3B8",
+              border: "1px solid rgba(226, 232, 240, 0.6)",
+              fontSize: 11,
+              fontWeight: 600,
               whiteSpace: "nowrap",
             }}
           >

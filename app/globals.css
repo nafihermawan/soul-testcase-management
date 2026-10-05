@@ -501,7 +501,7 @@ button,
   visibility: visible;
 }
 
-/* Kartu metrik dashboard: 1 kolom (mobile) -> 2 (tablet) -> 3 (laptop) -> 6 (desktop) */
+/* Kartu metrik dashboard: 1 kolom (mobile) -> 2 (tablet) -> 4 (desktop) */
 .metric-grid {
   display: grid;
   gap: 1rem;
@@ -514,15 +514,9 @@ button,
   }
 }
 
-@media (min-width: 1024px) {
-  .metric-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
-
 @media (min-width: 1280px) {
   .metric-grid {
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
 
@@ -535,8 +529,9 @@ button,
 }
 
 @media (min-width: 1024px) {
-  .dash-split-5-7 {
-    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  /* Dashboard: main content (kiri) vs sidebar widget (kanan). */
+  .dash-split-2-1 {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
   }
   .dash-split-7-5 {
     grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);

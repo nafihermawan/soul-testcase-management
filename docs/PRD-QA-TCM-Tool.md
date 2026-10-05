@@ -174,6 +174,24 @@ Poin desain penting:
 - Persentase hanya ditampilkan bila penyebut > 0; selain itu "—" (bukan 0%)
 - Konvensi ini terpusat di `lib/qa-metrics.ts`
 
+**Rumus tiap metrik (sesuai implementasi saat ini):**
+
+| Metrik | Rumus | Sumber |
+| --- | --- | --- |
+| **Test Coverage** (KPI Dashboard) | `round(executed / total × 100)` | `components/dashboard/dashboard.tsx` → `app/api/dashboard/route.ts` |
+| **Coverage per Suite** | `round(executed_suite / total_suite × 100)` | CTE `latest` + `per_suite` di `app/api/dashboard/route.ts` |
+| **Pass Rate** | `round(passed / executed × 100)` — `executed` = PASS+FAIL+BLOCKED+SKIPPED | `passRateOf()` di `lib/qa-metrics.ts` |
+| **Coverage Gap (Reports)** | `tested / total`, `untested = total − tested`, `untestedPct = round(untested / inSuite × 100)` | `app/api/reports/route.ts` |
+| **Automation Coverage** | `(AUTOMATED + FAILING + UNSTABLE) / total TC` | `app/api/automation/route.ts` |
+
+Keterangan variabel:
+
+- `total` = jumlah **semua** TestCase di suite terpilih — `COUNT(tc.id)`, **tanpa** memfilter `TestCase.status` (DRAFT/DEPRECATED ikut terhitung).
+- `executed` (Dashboard) = jumlah TC **unik** yang **hasil terakhirnya** (per `updatedAt`) ≠ `NOT_RUN`, dihitung **hanya** dari run `COMPLETED`/`RE_OPEN` (CTE `DISTINCT ON ("testCaseId") ... ORDER BY "updatedAt" DESC`).
+- `tested` (Reports) = `COUNT(DISTINCT r."testCaseId")` yang **pernah** punya hasil ≠ `NOT_RUN` pada run `COMPLETED`/`RE_OPEN` — kumulatif, bukan hasil terakhir.
+
+> **Catatan selisih definisi:** dua permukaan memakai semantik berbeda untuk angka "coverage" yang sama — Dashboard memakai *hasil terakhir per TC* (point-in-time), Reports memakai *pernah dieksekusi* (kumulatif). Keduanya sama pada kasus umum, tapi bisa berbeda bila TC pernah PASS lalu di run `COMPLETED` berikutnya dibiarkan `NOT_RUN` (Dashboard tidak menghitungnya, Reports tetap menghitung) — sehingga angka Dashboard ≤ Reports. Selain itu penyebut kedua permukaan masih mencakup TC non-ACTIVE.
+
 **Reports** (`/reports`):
 
 - Filter Platform & Project

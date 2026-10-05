@@ -2,17 +2,12 @@
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { HistoryRunRow } from "@/components/test-runs/history-run-row";
-import {
-  STICKY_ID_WIDTH,
-  STICKY_RUN_NAME_WIDTH,
-} from "@/components/test-runs/run-list-columns";
+import { STICKY_RUN_NAME_WIDTH } from "@/components/test-runs/run-list-columns";
 import { HistoryControls } from "@/components/test-runs/history-controls";
 import { HistoryPagination } from "@/components/test-runs/history-pagination";
 import { RunRowActions } from "@/components/test-runs/run-row-actions";
 import { ErrorBlock, TableCardSkeleton } from "@/components/ui/data-states";
-import { Toast, useToast } from "@/components/ui/feedback";
 import { useApi } from "@/lib/client/use-api";
-import { setRunStatus } from "@/lib/actions/test-runs";
 import type { HistoryPayload } from "@/types/api";
 
 /**
@@ -24,19 +19,18 @@ import type { HistoryPayload } from "@/types/api";
 const HISTORY_COLUMNS: {
   label: string;
   width: string;
-  align?: "left" | "right";
+  align?: "left" | "center" | "right";
   /** Kolom BEKU: menempel di kiri saat tabel digeser mendatar. */
-  sticky?: "id" | "name";
+  sticky?: "name";
 }[] = [
-  { label: "ID", width: `${STICKY_ID_WIDTH}px`, sticky: "id" },
-  { label: "Run Name", width: `${STICKY_RUN_NAME_WIDTH}px`, sticky: "name" },
-  { label: "Projects Covered", width: "180px" },
-  { label: "Suites Included", width: "140px" },
-  { label: "Platform", width: "100px" },
-  { label: "Status", width: "130px" },
-  { label: "Sprint", width: "80px" },
-  { label: "QA", width: "120px" },
-  { label: "Execution Date", width: "130px" },
+  { label: "Run name", width: `${STICKY_RUN_NAME_WIDTH}px`, sticky: "name" },
+  { label: "Projects covered", width: "180px", align: "center" },
+  { label: "Suites included", width: "140px", align: "center" },
+  { label: "Platform", width: "100px", align: "center" },
+  { label: "Status", width: "130px", align: "center" },
+  { label: "Sprint", width: "80px", align: "center" },
+  { label: "QA", width: "120px", align: "center" },
+  { label: "Execution date", width: "130px", align: "center" },
   { label: "Aksi", width: "140px", align: "right" },
 ];
 
@@ -44,11 +38,10 @@ const HISTORY_COLUMNS: {
 const RUN_NAME_MIN_W = 120;
 const RUN_NAME_MAX_W = 420;
 
-/** Gaya dasar <th> — teks kecil uppercase, senada dengan tabel Active Runs. */
+/** Gaya dasar <th> — teks kecil sentence case, slate-500 (bukan uppercase lagi). */
 const HEADER_TH: CSSProperties = {
-  fontSize: 11,
-  fontWeight: 700,
-  textTransform: "uppercase",
+  fontSize: 13,
+  fontWeight: 600,
   letterSpacing: "0.05em",
   color: "#64748B",
   padding: "14px 16px",
@@ -59,19 +52,17 @@ const HEADER_TH: CSSProperties = {
 };
 
 /** Gaya <th> untuk kolom beku — background WAJIB opaque agar isi tabel yang
- *  digeser lewat di belakangnya tidak tembus pandang. */
-const stickyHeaderStyle = (which?: "id" | "name"): CSSProperties =>
-  which === "id"
-    ? { position: "sticky", left: 0, zIndex: 20, background: "#F8FAFC" }
-    : which === "name"
-      ? {
-          position: "sticky",
-          left: STICKY_ID_WIDTH,
-          zIndex: 20,
-          background: "#F8FAFC",
-          boxShadow: "2px 0 5px -2px rgba(0, 0, 0, 0.1)",
-        }
-      : {};
+ *  digeser lewat di belakangnya tidak tembus pandang. Hanya Run name yang beku. */
+const stickyHeaderStyle = (which?: "name"): CSSProperties =>
+  which === "name"
+    ? {
+        position: "sticky",
+        left: 0,
+        zIndex: 20,
+        background: "#F8FAFC",
+        boxShadow: "2px 0 5px -2px rgba(0, 0, 0, 0.1)",
+      }
+    : {};
 
 export type HistorySearchParams = {
   project?: string;
@@ -108,8 +99,6 @@ export function HistoryView({ searchParams }: { searchParams: HistorySearchParam
   }, [searchParams]);
 
   const { data, error, loading, reload } = useApi<HistoryPayload>(apiPath);
-  const [pendingStatusId, setPendingStatusId] = useState<string | null>(null);
-  const { toast, showToast, dismissToast } = useToast();
 
   /**
    * Lebar kolom Run Name (px) — bisa ditarik lewat resizer di border kanannya.
@@ -119,6 +108,8 @@ export function HistoryView({ searchParams }: { searchParams: HistorySearchParam
   const [runNameWidth, setRunNameWidth] = useState(STICKY_RUN_NAME_WIDTH);
   const [resizingName, setResizingName] = useState(false);
   const [hoverResizer, setHoverResizer] = useState(false);
+  /** Hover di baris header — memunculkan garis resizer (group-hover). */
+  const [hoverHeaderRow, setHoverHeaderRow] = useState(false);
   const resizeStart = useRef<{ x: number; width: number } | null>(null);
 
   // Pantau geseran mouse selama drag; lepas saat mouseup (dan kunci kursor).
@@ -171,36 +162,6 @@ export function HistoryView({ searchParams }: { searchParams: HistorySearchParam
         : { source: null, runs: [], total: 0 }
     );
   }
-
-  /**
-   * Ubah status run dari baris History — terutama untuk membuka lagi (RE_OPEN)
-   * run yang sudah selesai.
-   *
-   * Sengaja TIDAK memanggil reload(): reload menyalakan `loading`, sehingga
-   * seluruh halaman sempat tertukar ke skeleton (terasa seperti refresh total).
-   * Cukup barisnya dipindah/dibuang di daftar lokal — server tetap menulis
-   * statusnya. Bila gagal, daftar dikembalikan ke kondisi semula.
-   */
-  const changeStatus = async (runId: string, status: string) => {
-    const snapshot = list;
-    const nextRuns =
-      status === "COMPLETED"
-        ? list.runs.map((r) => (r.id === runId ? { ...r, status } : r))
-        : list.runs.filter((r) => r.id !== runId);
-    const removed = list.runs.length - nextRuns.length;
-
-    setPendingStatusId(runId);
-    setList({ ...list, runs: nextRuns, total: Math.max(0, list.total - removed) });
-
-    const res = await setRunStatus(runId, status as Parameters<typeof setRunStatus>[1]);
-    setPendingStatusId(null);
-    if (res.error) {
-      setList(snapshot);
-      showToast(res.error, "error");
-      return;
-    }
-    showToast("Status run diperbarui.", "success");
-  };
 
   /**
    * Buang baris dari daftar lokal setelah run benar-benar terhapus di server.
@@ -339,7 +300,11 @@ export function HistoryView({ searchParams }: { searchParams: HistorySearchParam
                 ))}
               </colgroup>
               <thead>
-                <tr style={{ background: "#F8FAFC" }}>
+                <tr
+                  style={{ background: "#F8FAFC" }}
+                  onMouseEnter={() => setHoverHeaderRow(true)}
+                  onMouseLeave={() => setHoverHeaderRow(false)}
+                >
                   {HISTORY_COLUMNS.map((c) => (
                     <th
                       key={c.label}
@@ -348,14 +313,14 @@ export function HistoryView({ searchParams }: { searchParams: HistorySearchParam
                         ...HEADER_TH,
                         textAlign: c.align ?? "left",
                         background: "#F8FAFC",
-                        borderBottom: "1px solid #E2E8F0",
                         ...stickyHeaderStyle(c.sticky),
                       }}
                     >
                       {c.label}
-                      {/* Resizer: garis tipis di border kanan kolom Run Name;
-                          menyala indigo saat hover/drag. `position: absolute`
-                          relatif ke th (sticky = positioned). */}
+                      {/* Resizer: garis tipis di border kanan kolom Run name.
+                          Default transparan (tak terlihat); muncul amber saat
+                          baris header / area resizer di-hover atau saat drag.
+                          `position: absolute` relatif ke th (sticky = positioned). */}
                       {c.sticky === "name" && (
                         <span
                           role="separator"
@@ -393,7 +358,9 @@ export function HistoryView({ searchParams }: { searchParams: HistorySearchParam
                               width: 2,
                               height: "100%",
                               background:
-                                resizingName || hoverResizer ? "#4F46E5" : "#E2E8F0",
+                                resizingName || hoverResizer || hoverHeaderRow
+                                  ? "#FBBF24"
+                                  : "transparent",
                               transition: "background-color 0.15s ease",
                             }}
                           />
@@ -408,10 +375,6 @@ export function HistoryView({ searchParams }: { searchParams: HistorySearchParam
                   <HistoryRunRow
                     key={run.id}
                     {...run}
-                    onStatusChange={
-                      canDelete ? (next) => void changeStatus(run.id, next) : undefined
-                    }
-                    statusPending={pendingStatusId === run.id}
                     extraAction={
                       canDelete ? (
                         <RunRowActions
@@ -438,7 +401,6 @@ export function HistoryView({ searchParams }: { searchParams: HistorySearchParam
         />
       </div>
 
-      <Toast toast={toast} onDismiss={dismissToast} />
     </main>
   );
 }

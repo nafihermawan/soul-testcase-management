@@ -3,9 +3,14 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { LoginForm } from "./LoginForm";
+import { Toast, useToast } from "@/components/ui/feedback";
+
+/** Pesan saat diarahkan ke sini oleh auto-logout 6 jam. */
+const TIMEOUT_MESSAGE = "Sesi Anda telah berakhir setelah 6 jam. Silakan login kembali.";
 
 export default function LoginPage() {
   const router = useRouter();
+  const { toast, showToast, dismissToast } = useToast();
 
   // Cek sesi client: user yang sudah login diarahkan ke beranda.
   // Card login langsung tampil (tidak pernah blank); redirect authed berjalan
@@ -23,6 +28,16 @@ export default function LoginPage() {
       cancelled = true;
     };
   }, [router]);
+
+  // Notifikasi sesi berakhir — diarahkan dari auto-logout 6 jam.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("reason") === "timeout") {
+      showToast(TIMEOUT_MESSAGE, "error", 8000);
+      // Bersihkan query agar toast tidak muncul lagi saat halaman di-reload.
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+  }, [showToast]);
 
   return (
     <main
@@ -87,6 +102,8 @@ export default function LoginPage() {
         <p style={{ marginTop: "1.25rem", fontSize: "0.75rem", color: "#e0e0e0" }}>
         </p>
       </div>
+
+      <Toast toast={toast} onDismiss={dismissToast} />
     </main>
   );
 }

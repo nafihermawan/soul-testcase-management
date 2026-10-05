@@ -121,8 +121,9 @@ export function HistoryPagination({
               onClick={() => goto(p)}
               style={{
                 ...selStyle,
-                background: p === page ? "#FFC348" : "transparent",
-                color: p === page ? "#0F172A" : "#475569",
+                // Angka aktif polos (tanpa background/rounded wrapper) —
+                // dibedakan hanya lewat warna amber + tebal.
+                color: p === page ? "#F59E0B" : "#475569",
                 fontWeight: p === page ? 700 : 600,
               }}
             >

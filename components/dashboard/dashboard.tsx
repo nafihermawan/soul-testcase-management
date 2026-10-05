@@ -18,8 +18,8 @@ import {
   type DashboardFilterState,
 } from "@/components/dashboard/dashboard-filters";
 import { KpiCard } from "@/components/ui/kpi-card";
+import { Card, PanelHeader } from "@/components/ui";
 import { TestingHealth } from "@/components/dashboard/testing-health";
-import { ExecutionSummary } from "@/components/dashboard/execution-summary";
 import { ActionRequired, type ActionItem } from "@/components/dashboard/action-required";
 import { CoverageBySuite } from "@/components/dashboard/coverage-by-suite";
 import { RecentRuns } from "@/components/dashboard/recent-runs";
@@ -107,30 +107,18 @@ export function Dashboard({
   );
 
   // --- Agregat dari suite terfilter (platform + module) ---
-  const {
-    totalTC,
-    automated,
-    tested,
-    execCounts,
-    coveragePct,
-    automationPct,
-    passRate,
-  } = useMemo(() => {
+  const { totalTC, tested, execCounts, coveragePct, passRate } = useMemo(() => {
     let total = 0;
-    let auto = 0;
     let counts = emptyCounts();
     for (const s of filteredSuites) {
       total += s.total;
-      auto += s.automated;
       counts = addCounts(counts, s.counts);
     }
     return {
       totalTC: total,
-      automated: auto,
       tested: counts.executed,
       execCounts: counts,
       coveragePct: pct(counts.executed, total),
-      automationPct: pct(auto, total),
       passRate: passRateOf(counts),
     };
   }, [filteredSuites]);
@@ -208,89 +196,93 @@ export function Dashboard({
         <DashboardFilters value={filters} modules={modules} onChange={setFilters} />
       </div>
 
-      {/* Testing health + KPI */}
-      <div style={{ display: "flex", flexDirection: "column", gap: "0.85rem" }}>
-        <TestingHealth health={health} />
-        <div className="metric-grid">
-          <KpiCard
-            label="Total Test Cases"
-            value={totalTC.toLocaleString("id-ID")}
-            sub={
-              filters.platform === ALL && filters.module === ALL
-                ? "Across all active suites"
-                : `Across ${filteredSuites.length} filtered suite${filteredSuites.length === 1 ? "" : "s"}`
-            }
-            tone="brand"
-          />
-          <KpiCard
-            label="Test Coverage"
-            value={formatPct(coveragePct)}
-            sub={
-              totalTC === 0
-                ? "Belum ada test case"
-                : `${tested} / ${totalTC} tested`
-            }
-            tone="info"
-          />
-          <KpiCard
-            label="Pass Rate"
-            value={formatPct(passRate)}
-            sub={
-              passRate === null
-                ? "No execution yet"
-                : `${execCounts.passed} / ${execCounts.executed} executed`
-            }
-            tone={
-              passRate === null ? "neutral" : passRate < 70 ? "danger" : passRate < 85 ? "warning" : "success"
-            }
-          />
-          <KpiCard
-            label="Failed Tests"
-            value={String(execCounts.failed)}
-            sub={execCounts.failed > 0 ? "Needs Attention" : "Tidak ada kegagalan"}
-            tone={execCounts.failed > 0 ? "danger" : "neutral"}
-          />
-          <KpiCard
-            label="Open Bugs"
-            value={String(openBugs.length)}
-            sub={`${criticalHighBugs} Critical / High`}
-            tone={criticalHighBugs > 0 ? "danger" : "neutral"}
-          />
-          <KpiCard
-            label="Automation Coverage"
-            value={automated === 0 ? "—" : formatPct(automationPct)}
-            sub={
-              totalTC === 0
-                ? "Belum ada test case"
-                : automated === 0
-                  ? "No automated test cases"
-                  : `${automated} / ${totalTC} automated`
-            }
-            tone={automated === 0 ? "neutral" : "info"}
-          />
-        </div>
-      </div>
+      {/* Layout 2 kolom: main content (kiri) + sidebar widget (kanan) */}
+      <div className="dash-split dash-split-2-1">
+        {/* ===== MAIN CONTENT ===== */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem", minWidth: 0 }}>
+          {/* Baris 1: KPI metrics */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+            <div className="metric-grid">
+              <KpiCard
+                label="Total Test Cases"
+                value={totalTC.toLocaleString("id-ID")}
+                sub={
+                  filters.platform === ALL && filters.module === ALL
+                    ? "Across all active suites"
+                    : `Across ${filteredSuites.length} filtered suite${filteredSuites.length === 1 ? "" : "s"}`
+                }
+                tone="brand"
+              />
+              <KpiCard
+                label="Test Coverage"
+                value={formatPct(coveragePct)}
+                sub={totalTC === 0 ? "Belum ada test case" : `${tested} / ${totalTC} tested`}
+                tone="info"
+              />
+              <KpiCard
+                label="Pass Rate"
+                value={formatPct(passRate)}
+                sub={
+                  passRate === null
+                    ? "No execution yet"
+                    : `${execCounts.passed} / ${execCounts.executed} executed`
+                }
+                tone={
+                  passRate === null
+                    ? "neutral"
+                    : passRate < 70
+                      ? "danger"
+                      : passRate < 85
+                        ? "warning"
+                        : "success"
+                }
+              />
+              <KpiCard
+                label="Open Bugs"
+                value={String(openBugs.length)}
+                sub={`${criticalHighBugs} Critical / High`}
+                tone={criticalHighBugs > 0 ? "danger" : "neutral"}
+              />
+            </div>
 
-      {/* Execution summary + action required */}
-      <div className="dash-split dash-split-5-7">
-        <div style={{ display: "flex", flexDirection: "column" }}>
-          <ExecutionSummary counts={execCounts} totalTC={totalTC} />
+            {/* Rincian eksekusi ringkas — menggantikan widget Execution Summary. */}
+            <div style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>
+              {execCounts.executed.toLocaleString("id-ID")} executed
+              {" · "}
+              {execCounts.blocked.toLocaleString("id-ID")} blocked
+              {" · "}
+              {execCounts.notRun.toLocaleString("id-ID")} not run
+              {execCounts.failed > 0 && (
+                <>{" · "}{execCounts.failed.toLocaleString("id-ID")} failed</>
+              )}
+            </div>
+          </div>
+
+          {/* Baris 2: detail breakdown */}
+          <CoverageBySuite suites={filteredSuites} />
+
+          <div className="dash-split dash-split-7-5">
+            <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+              <RecentRuns runs={filteredRuns} />
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+              <RecentBugs bugs={filteredBugs} />
+            </div>
+          </div>
         </div>
-        <div style={{ display: "flex", flexDirection: "column" }}>
+
+        {/* ===== SIDEBAR ===== */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem", minWidth: 0 }}>
+          {/* Widget 1: Testing Health */}
+          <Card>
+            <PanelHeader title="Testing Health" />
+            <div style={{ padding: "1rem 1.5rem" }}>
+              <TestingHealth health={health} />
+            </div>
+          </Card>
+
+          {/* Widget 2: Action Required */}
           <ActionRequired items={actionItems} />
-        </div>
-      </div>
-
-      {/* Coverage by suite */}
-      <CoverageBySuite suites={filteredSuites} />
-
-      {/* Recent runs + bugs */}
-      <div className="dash-split dash-split-7-5">
-        <div style={{ display: "flex", flexDirection: "column" }}>
-          <RecentRuns runs={filteredRuns} />
-        </div>
-        <div style={{ display: "flex", flexDirection: "column" }}>
-          <RecentBugs bugs={filteredBugs} />
         </div>
       </div>
     </div>

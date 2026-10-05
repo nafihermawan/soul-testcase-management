@@ -6,9 +6,11 @@ import Link from "next/link";
 import { useRefresh } from "@/lib/client/refresh-context";
 import {
   AlertCircle,
+  Check,
   ChevronDown,
   CheckCircle2,
   CirclePlus,
+  Copy,
   Download,
   FolderInput,
   History,
@@ -2743,47 +2745,42 @@ function TestCaseDetailModal({
     };
   }, []);
 
+  // Tombol Copy Test Data: umpan balik ikon ("Tersalin") selama 1.5 detik.
+  const [copied, setCopied] = useState(false);
+  const copyTestData = async () => {
+    try {
+      await navigator.clipboard.writeText(tc.testData ?? "");
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Clipboard bisa diblokir browser — abaikan.
+    }
+  };
+
   // Steps: pisahkan per baris kalau ada, untuk tampilan step-by-step
   const stepsList = (tc.steps ?? "")
     .split("\n")
     .map((st) => st.trim())
     .filter(Boolean);
 
-  // Pill warna untuk priority & status
-  const priorityPill: React.CSSProperties = {
-    display: "inline-block",
-    padding: "0.15rem 0.55rem",
-    borderRadius: 4,
-    fontSize: "0.68rem",
-    fontWeight: 700,
-    letterSpacing: "0.03em",
-    background:
-      tc.priority === "CRITICAL"
-        ? "#FEE2E2"
-        : tc.priority === "HIGH"
-          ? "#FFEDD5"
-          : tc.priority === "MEDIUM"
-            ? "#DBEAFE"
-            : "#F3F4F6",
+  // Teks polos berwarna (tanpa pill/box) untuk priority & status.
+  const priorityText: React.CSSProperties = {
+    fontSize: 12,
+    fontWeight: 600,
     color:
       tc.priority === "CRITICAL"
-        ? "#B91C1C"
+        ? "#DC2626"
         : tc.priority === "HIGH"
-          ? "#C2410C"
+          ? "#D97706"
           : tc.priority === "MEDIUM"
-            ? "#1D4ED8"
-            : "#374151",
+            ? "#2563EB"
+            : "#64748B",
   };
 
-  const statusPill: React.CSSProperties = {
-    display: "inline-block",
-    padding: "0.15rem 0.55rem",
-    borderRadius: 4,
-    fontSize: "0.68rem",
-    fontWeight: 700,
-    letterSpacing: "0.03em",
-    background: tc.status === "ACTIVE" ? "#D1FAE5" : tc.status === "DRAFT" ? "#FEF3C7" : "#FEE2E2",
-    color: tc.status === "ACTIVE" ? "#047857" : tc.status === "DRAFT" ? "#B45309" : "#B91C1C",
+  const statusText: React.CSSProperties = {
+    fontSize: 12,
+    fontWeight: 600,
+    color: tc.status === "ACTIVE" ? "#059669" : tc.status === "DRAFT" ? "#D97706" : "#DC2626",
   };
 
   const sectionLabel: React.CSSProperties = {
@@ -2921,7 +2918,7 @@ function TestCaseDetailModal({
               >
                 Priority
               </span>
-              <span style={priorityPill}>{tc.priority}</span>
+              <span style={priorityText}>{tc.priority}</span>
             </div>
             <div>
               <span
@@ -2935,7 +2932,7 @@ function TestCaseDetailModal({
               >
                 Status
               </span>
-              <span style={statusPill}>{tc.status}</span>
+              <span style={statusText}>{tc.status}</span>
             </div>
             <div>
               <span
@@ -3003,12 +3000,9 @@ function TestCaseDetailModal({
                 style={{
                   margin: 0,
                   paddingLeft: "1.2rem",
-                  background: "rgba(254, 243, 199, 0.4)",
-                  border: "1px solid rgba(252, 211, 77, 0.5)",
-                  borderRadius: 8,
-                  padding: "0.7rem 1rem 0.7rem 1.8rem",
-                  fontSize: "0.85rem",
-                  color: "#374151",
+                  fontSize: 12,
+                  fontWeight: 400,
+                  color: "#334155",
                   lineHeight: 1.6,
                 }}
               >
@@ -3034,25 +3028,61 @@ function TestCaseDetailModal({
             )}
           </div>
 
-          {/* Test Data */}
+          {/* Test Data — teks mono polos + aksi Copy */}
           {tc.testData && (
             <div>
-              <h4 style={sectionLabel}>Test Data</h4>
               <div
                 style={{
-                  background: "#F9FAFB",
-                  border: "1px solid var(--border)",
-                  borderRadius: 8,
-                  padding: "0.65rem 0.8rem",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: "0.5rem",
+                  marginBottom: "0.4rem",
+                }}
+              >
+                <h4 style={{ ...sectionLabel, margin: 0 }}>Test Data</h4>
+                <button
+                  type="button"
+                  onClick={() => void copyTestData()}
+                  title={copied ? "Tersalin" : "Copy Test Data"}
+                  aria-label="Copy Test Data"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "0.3rem",
+                    padding: 0,
+                    border: "none",
+                    background: "transparent",
+                    color: copied ? "#059669" : "#94A3B8",
+                    fontSize: 11,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    transition: "color 0.15s ease",
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!copied) e.currentTarget.style.color = "#475569";
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!copied) e.currentTarget.style.color = "#94A3B8";
+                  }}
+                >
+                  {copied ? <Check size={13} /> : <Copy size={13} />}
+                  {copied ? "Tersalin" : "Copy"}
+                </button>
+              </div>
+              <pre
+                style={{
+                  margin: 0,
                   fontFamily: "var(--font-mono, monospace)",
-                  fontSize: "0.75rem",
-                  color: "#1F2937",
+                  fontSize: 12,
+                  fontWeight: 400,
+                  color: "#334155",
                   whiteSpace: "pre-wrap",
                   lineHeight: 1.6,
                 }}
               >
                 {tc.testData}
-              </div>
+              </pre>
             </div>
           )}
 

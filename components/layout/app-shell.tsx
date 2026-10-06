@@ -55,7 +55,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
         <main
           className="app-main"
-          style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "1.25rem", minWidth: 0 }}
+          // Padding dirapatkan lagi (p-4 -> p-3) agar card mendekati tepi layar.
+          style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "0.75rem", minWidth: 0 }}
         >
           {/* Identitas/role user dibagikan ke halaman lewat context supaya tiap
               halaman tidak perlu fetch /api/me sendiri lagi. */}

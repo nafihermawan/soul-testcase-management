@@ -471,7 +471,11 @@ export function Sidebar({
                               display: "flex",
                               alignItems: "center",
                               gap: "0.4rem",
-                              width: "100%",
+                              // Digeser ke kiri menembus indentasi 36px milik
+                              // `.sidebar-submenu-list`; lebar ditambah agar tepi
+                              // kanan (chevron) tetap rata.
+                              width: "calc(100% + 1rem)",
+                              marginLeft: "-1rem",
                               border: "none",
                               background: "transparent",
                               fontSize: 11,

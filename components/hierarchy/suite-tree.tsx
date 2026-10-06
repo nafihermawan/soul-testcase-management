@@ -1,10 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Pencil, Plus, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowUp, CirclePlus, Pencil, Plus, Trash2, X } from "lucide-react";
 import {
   createSuite,
   deleteSuite,
@@ -60,6 +60,14 @@ function removeSuiteFromTree(nodes: SuiteNode[], id: string): SuiteNode[] {
     .map((n) =>
       n.children?.length ? { ...n, children: removeSuiteFromTree(n.children, id) } : n
     );
+}
+
+/** Urutkan tree suite berdasarkan kode "id Suite" (A-Z / Z-A), rekursif. */
+function sortSuiteTree(nodes: SuiteNode[], dir: "asc" | "desc"): SuiteNode[] {
+  const sign = dir === "asc" ? 1 : -1;
+  return [...nodes]
+    .sort((a, b) => sign * a.code.localeCompare(b.code))
+    .map((n) => (n.children?.length ? { ...n, children: sortSuiteTree(n.children, dir) } : n));
 }
 
 /** Auto-generate kode suite: hilangkan vokal, spasi -> hyphen, buang karakter khusus. */
@@ -351,6 +359,12 @@ export function SuiteTree({
   useEffect(() => {
     setLocalSuites(suites);
   }, [suites]);
+  // Urut berdasarkan "id Suite" (kode): default A-Z; klik header untuk toggle.
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const sortedSuites = useMemo(
+    () => sortSuiteTree(localSuites, sortDir),
+    [localSuites, sortDir]
+  );
   const { toast, showToast, dismissToast } = useToast();
   // Anchor untuk tombol "Tambah Suite" di header halaman (via portal)
   const [headerAnchor, setHeaderAnchor] = useState<HTMLElement | null>(null);
@@ -389,41 +403,46 @@ export function SuiteTree({
             style={{
               display: "inline-flex",
               alignItems: "center",
+              alignSelf: "center",
+              // Diangkat sedikit agar sejajar visual dengan baris judul.
+              marginTop: "-0.25rem",
               gap: "0.35rem",
-              // Ringkas: h-8 (32px) sejajar dengan kontrol lain di header.
-              height: 32,
-              padding: "0 14px",
+              // Ringkas: padding py-1.5 px-3, teks 11px semibold.
+              padding: "0.375rem 0.75rem",
               borderRadius: 8,
               border: "none",
               background: "#F59E0B",
               color: "#111827",
               fontWeight: 600,
-              fontSize: "0.82rem",
+              fontSize: 11,
+              lineHeight: 1.2,
               cursor: "pointer",
               transition: "background-color 0.15s ease",
             }}
             onMouseEnter={(e) => (e.currentTarget.style.background = "#D97706")}
             onMouseLeave={(e) => (e.currentTarget.style.background = "#F59E0B")}
           >
-            <Plus size={16} /> Tambah Suite
+            {/* Plus dalam lingkaran (w-4 h-4 = 16px). */}
+            <CirclePlus size={16} /> Suite
           </button>,
           headerAnchor
         )}
 
-      {/* Card header — tanpa divider bawah */}
+      {/* Card header — tanpa divider bawah; padding bawah dikecilkan agar
+          jarak judul "Suites" ke tabel rapat (mb-3). */}
       <div
         style={{
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          padding: "1rem 1.25rem",
+          padding: "1rem 1rem 0.25rem",
         }}
       >
         <h2 style={{ fontSize: 14, fontWeight: 700, margin: 0, color: "#1E293B" }}>Suites</h2>
       </div>
 
       {/* Card body */}
-      <div style={{ padding: "1.25rem" }}>
+      <div style={{ padding: "0.5rem 1rem 1rem" }}>
         {localSuites.length === 0 ? (
           <div
             style={{
@@ -459,7 +478,34 @@ export function SuiteTree({
                     borderBottom: "1px solid #E5E7EB",
                   }}
                 >
-                  <th style={{ padding: "0.6rem 1.25rem", fontWeight: 600 }}>id Suite</th>
+                  <th style={{ padding: "0.6rem 1.25rem", fontWeight: 600 }}>
+                    {/* Header sortable: klik untuk toggle A-Z / Z-A. */}
+                    <button
+                      type="button"
+                      onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
+                      aria-label={`Urutkan id Suite ${sortDir === "asc" ? "menurun (Z-A)" : "menaik (A-Z)"}`}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 4,
+                        border: "none",
+                        background: "transparent",
+                        padding: 0,
+                        fontSize: "inherit",
+                        fontWeight: "inherit",
+                        color: "inherit",
+                        cursor: "pointer",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      id Suite
+                      {sortDir === "asc" ? (
+                        <ArrowUp size={12} aria-hidden="true" />
+                      ) : (
+                        <ArrowDown size={12} aria-hidden="true" />
+                      )}
+                    </button>
+                  </th>
                   <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600 }}>Nama Suite</th>
                   <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600 }}>Jumlah Test Case</th>
                   <th style={{ padding: "0.6rem 0.5rem", fontWeight: 500, color: "#6B7280" }}>
@@ -480,7 +526,7 @@ export function SuiteTree({
                 </tr>
               </thead>
               <tbody data-suite-list="root">
-                {localSuites.map((s) => (
+                {sortedSuites.map((s) => (
                   <SuiteRow
                     key={s.id}
                     suite={s}

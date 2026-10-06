@@ -42,32 +42,36 @@ export function ProjectDetailView({ projectId }: { projectId: string }) {
       {/* Header block */}
       <div
         style={{
+          // w-full: melebar penuh mengikuti container (tanpa batas max-width).
+          width: "100%",
           background: "#fff",
           border: "1px solid #E5E7EB",
           borderRadius: 12,
           boxShadow: "0px 1px 2px rgba(16, 24, 40, 0.04), 0px 4px 12px rgba(16, 24, 40, 0.06)",
-          padding: 24,
-          marginBottom: "1.5rem",
+          // Padding dirapatkan (p-6 -> p-4) & jarak ke card Suites dirapatkan
+          // lagi ke mb-3 (0.75rem).
+          padding: "1rem",
+          marginBottom: "0.75rem",
         }}
       >
-        {/* Breadcrumb */}
+        {/* Breadcrumb — ukuran diperkecil (text-[11px]) & margin bawah rapat. */}
         <nav
           aria-label="Breadcrumb"
           style={{
             display: "flex",
             alignItems: "center",
             gap: "0.35rem",
-            fontSize: 14,
+            fontSize: 11,
             fontWeight: 400,
             color: "#6B7280",
-            marginBottom: 16,
+            marginBottom: "0.25rem",
             flexWrap: "wrap",
           }}
         >
           <Link href="/" style={{ color: "#6B7280" }}>
             Projects
           </Link>
-          <ChevronRight size={13} style={{ color: "#6B7280", opacity: 0.6 }} />
+          <ChevronRight size={10} style={{ color: "#6B7280", opacity: 0.6 }} />
           <span style={{ color: "#111827", fontWeight: 600 }}>{data.project.name}</span>
         </nav>
 
@@ -87,8 +91,12 @@ export function ProjectDetailView({ projectId }: { projectId: string }) {
             </h1>
           </div>
 
-          {/* Anchor untuk tombol "Tambah Suite" dari SuiteTree */}
-          <div id="project-header-actions" />
+          {/* Anchor untuk tombol "Tambah Suite" dari SuiteTree — flex + center
+              agar tombol tepat di tengah vertikal terhadap judul. */}
+          <div
+            id="project-header-actions"
+            style={{ display: "flex", alignItems: "center" }}
+          />
         </div>
       </div>
 

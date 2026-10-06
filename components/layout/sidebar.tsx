@@ -204,12 +204,20 @@ export function Sidebar({
   const projectsOpen = openMenu === "projects";
   const toggleMenu = (key: string) => setOpenMenu((cur) => (cur === key ? null : key));
   const [logoutHovered, setLogoutHovered] = useState(false);
-  // Accordion per kategori platform di menu Projects. Default: SEMUA ter-expand
-  // (perilaku lama) — klik header untuk collapse.
-  const [closedPlatforms, setClosedPlatforms] = useState<Record<string, boolean>>({});
-  const isPlatformOpen = (key: string) => !closedPlatforms[key];
+  // Kategori platform yang memuat project aktif (null bila bukan di halaman project).
+  const activePlatformKey = (() => {
+    const m = /^\/projects\/([^/]+)/.exec(pathname);
+    if (!m) return null;
+    const p = projects.find((x) => x.id === m[1]);
+    return p ? (p.platform || "Lainnya").toUpperCase() : null;
+  })();
+  // Accordion per kategori platform. Default: TIDAK semua terbuka — hanya
+  // kategori yang memuat project aktif yang dibuka, sisanya collapsed.
+  const [openPlatforms, setOpenPlatforms] = useState<Record<string, boolean>>({});
+  const isPlatformOpen = (key: string) =>
+    key in openPlatforms ? openPlatforms[key] : key === activePlatformKey;
   const togglePlatform = (key: string) =>
-    setClosedPlatforms((prev) => ({ ...prev, [key]: !prev[key] }));
+    setOpenPlatforms((prev) => ({ ...prev, [key]: !isPlatformOpen(key) }));
 
   // Settings hanya untuk QA; Automation tersembunyi untuk PRODUCT.
   const visibleNavItems =
@@ -468,10 +476,12 @@ export function Sidebar({
                               background: "transparent",
                               fontSize: 11,
                               fontWeight: 700,
-                              color: "#9CA3AF",
+                              // Lebih gelap dari slate-400 agar jelas terbaca.
+                              color: "#475569",
                               textTransform: "uppercase",
                               letterSpacing: "0.06em",
-                              padding: "0.25rem 0.5rem",
+                              // Rapat ke kiri (px-0) — digeser ke tepi submenu.
+                              padding: "0.25rem 0",
                               borderRadius: 6,
                               cursor: "pointer",
                               transition: "background-color 0.15s ease, color 0.15s ease",
@@ -482,7 +492,7 @@ export function Sidebar({
                             }}
                             onMouseLeave={(e) => {
                               e.currentTarget.style.background = "transparent";
-                              e.currentTarget.style.color = "#9CA3AF";
+                              e.currentTarget.style.color = "#475569";
                             }}
                           >
                             {groupTitle}

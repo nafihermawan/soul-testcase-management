@@ -15,6 +15,14 @@ const insetDivider: React.CSSProperties = {
   backgroundRepeat: "no-repeat",
 };
 
+/** Urutan: status aktif (Open/In Progress) di atas, selesai (Resolved/Closed) di bawah. */
+const BUG_STATUS_RANK: Record<string, number> = {
+  OPEN: 0,
+  IN_PROGRESS: 1,
+  RESOLVED: 2,
+  CLOSED: 3,
+};
+
 const statusLabel = (s: string) =>
   s === "OPEN"
     ? "Open"
@@ -24,10 +32,15 @@ const statusLabel = (s: string) =>
         ? "Resolved"
         : "Closed";
 
-/** Bug terbaru/kritis — Critical & High diprioritaskan di atas. */
+/** Bug terbaru — status aktif dulu, lalu severity tertinggi. */
 export function RecentBugs({ bugs }: { bugs: DashboardBugItem[] }) {
   const rows = [...bugs]
     .sort((a, b) => {
+      // Status aktif dulu (Open/In Progress), selesai di bawah (Resolved/Closed);
+      // di dalam grup: severity lebih tinggi dulu, lalu yang terbaru.
+      const ra = BUG_STATUS_RANK[a.status] ?? 9;
+      const rb = BUG_STATUS_RANK[b.status] ?? 9;
+      if (ra !== rb) return ra - rb;
       const r = severityRank(a.severity) - severityRank(b.severity);
       if (r !== 0) return r;
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
@@ -51,13 +64,16 @@ export function RecentBugs({ bugs }: { bugs: DashboardBugItem[] }) {
           subtext="Tidak ada bug yang cocok dengan filter saat ini."
         />
       ) : (
-        <div style={{ overflowX: "auto" }}>
+        <div style={{ overflowX: "auto", width: "100%" }}>
           <table
             style={{
               width: "100%",
+              minWidth: 450,
               borderCollapse: "collapse",
               fontSize: "0.8rem",
-              tableLayout: "fixed",
+              // table-auto: kolom mengikuti konten (tidak kolaps) sehingga header
+              // tidak bertumpuk; container overflow-x menangani layar sempit.
+              tableLayout: "auto",
             }}
           >
             <thead>
@@ -68,12 +84,12 @@ export function RecentBugs({ bugs }: { bugs: DashboardBugItem[] }) {
                   ...insetDivider,
                 }}
               >
-                <th style={{ padding: "0.75rem 1.25rem", fontWeight: 600 }}>Bug</th>
-                <th style={{ padding: "0.75rem 0.5rem", fontWeight: 600, width: 88 }}>Severity</th>
-                <th style={{ padding: "0.75rem 0.5rem", fontWeight: 600, width: 118 }}>Module</th>
-                <th style={{ padding: "0.75rem 0.5rem", fontWeight: 600, width: 84 }}>Env</th>
-                <th style={{ padding: "0.75rem 0.5rem", fontWeight: 600, width: 106 }}>Status</th>
-                <th style={{ padding: "0.75rem 1.25rem", fontWeight: 600, width: 92 }}>Age</th>
+                <th style={{ padding: "0.75rem 1.25rem", fontWeight: 600, minWidth: 150, whiteSpace: "nowrap" }}>Bug</th>
+                <th style={{ padding: "0.75rem 0.5rem", fontWeight: 600, width: 88, whiteSpace: "nowrap" }}>Severity</th>
+                <th style={{ padding: "0.75rem 0.5rem", fontWeight: 600, width: 118, whiteSpace: "nowrap" }}>Module</th>
+                <th style={{ padding: "0.75rem 0.5rem", fontWeight: 600, width: 84, whiteSpace: "nowrap" }}>Env</th>
+                <th style={{ padding: "0.75rem 0.5rem", fontWeight: 600, width: 106, whiteSpace: "nowrap" }}>Status</th>
+                <th style={{ padding: "0.75rem 1.25rem", fontWeight: 600, width: 92, whiteSpace: "nowrap" }}>Age</th>
               </tr>
             </thead>
             <tbody>
@@ -84,18 +100,29 @@ export function RecentBugs({ bugs }: { bugs: DashboardBugItem[] }) {
                 const isActive = (ACTIVE_BUG_STATUSES as readonly string[]).includes(b.status);
                 const attention = isCriticalOrHigh || needsRetest;
                 return (
-                  <tr key={b.id} style={insetDivider}>
+                  <tr key={b.id} style={{ ...insetDivider, whiteSpace: "nowrap" }}>
                     <td
                       title={b.title}
                       style={{
                         padding: "0.75rem 1.25rem",
+                        maxWidth: 180,
                         overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
                         fontWeight: attention ? 600 : 400,
                       }}
                     >
-                      {b.title}
+                      {/* Span blok ber-maxWidth: di table-auto, batas lebar harus
+                          ada di elemen blok agar kolom tak melebar penuh. */}
+                      <span
+                        style={{
+                          display: "block",
+                          maxWidth: 180,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {b.title}
+                      </span>
                     </td>
                     <td
                       style={{

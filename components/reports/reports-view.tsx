@@ -20,13 +20,18 @@ export function ReportsView() {
   const { data, error, loading, reload } = useApi<ReportsPayload>("/api/reports");
   const [platform, setPlatform] = useState<string>(ALL);
   const [project, setProject] = useState<string>(ALL);
+  // Field ke-3 (Status): sengaja TAMPIL DULU — belum memfilter data apa pun
+  // (placeholder untuk di-wire menyusul); karena itu tidak masuk activeCount.
+  const [tcStatus, setTcStatus] = useState<string>(ALL);
   // Draft filter untuk popover: baru diterapkan saat tombol Terapkan diklik.
   const [draftPlatform, setDraftPlatform] = useState<string>(ALL);
   const [draftProject, setDraftProject] = useState<string>(ALL);
+  const [draftStatus, setDraftStatus] = useState<string>(ALL);
   useEffect(() => {
     setDraftPlatform(platform);
     setDraftProject(project);
-  }, [platform, project]);
+    setDraftStatus(tcStatus);
+  }, [platform, project, tcStatus]);
 
   const isFiltered = platform !== ALL || project !== ALL;
 
@@ -99,7 +104,8 @@ export function ReportsView() {
         width: "100%",
         display: "flex",
         flexDirection: "column",
-        gap: "1.5rem",
+        // Gap antar card dirapatkan (gap-6 -> gap-4).
+        gap: "1rem",
       }}
     >
       {/* Header + filter — dibungkus kartu standar, sama seperti banner
@@ -113,7 +119,8 @@ export function ReportsView() {
             justifyContent: "space-between",
             gap: "1rem",
             flexWrap: "wrap",
-            padding: "1.25rem 1.5rem",
+            // Padding card dirapatkan (p-6 -> p-4).
+            padding: "1rem",
           }}
         >
           <div>
@@ -128,10 +135,12 @@ export function ReportsView() {
           onReset={() => {
             setDraftPlatform(ALL);
             setDraftProject(ALL);
+            setDraftStatus(ALL);
           }}
           onApply={() => {
             setPlatform(draftPlatform);
             setProject(draftProject);
+            setTcStatus(draftStatus);
           }}
         >
           <div>
@@ -176,6 +185,21 @@ export function ReportsView() {
               ]}
             />
           </div>
+          {/* Field ke-3 — styling identik dengan dua field di atasnya. */}
+          <div>
+            <span style={filterLabelStyle}>Status</span>
+            <CustomSelect
+              ariaLabel="Filter status test case"
+              value={draftStatus}
+              onChange={setDraftStatus}
+              options={[
+                { value: ALL, label: "Semua Status" },
+                { value: "ACTIVE", label: "Active" },
+                { value: "DRAFT", label: "Draft" },
+                { value: "DEPRECATED", label: "Deprecated" },
+              ]}
+            />
+          </div>
         </FilterModal>
         </div>
       </Card>
@@ -202,13 +226,12 @@ export function ReportsView() {
         />
       </div>
 
-      {/* Celah coverage */}
+      {/* Celah coverage — lebar penuh (full width). */}
       <CoverageGapTable suites={view.suites} noExecutionYet={data.noExecutionYet} />
 
       {/* Higienitas repository */}
       <RepositoryHygiene
         suitesWithoutTc={view.suitesWithoutTc}
-        orphanTc={isFiltered ? [] : data.orphanTc}
         automation={data.automation}
       />
     </main>

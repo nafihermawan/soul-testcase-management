@@ -73,13 +73,16 @@ export function RecentRuns({ runs }: { runs: DashboardRunItem[] }) {
           actionHref="/test-runs"
         />
       ) : (
-        <div style={{ overflowX: "auto" }}>
+        <div style={{ overflowX: "auto", width: "100%" }}>
           <table
             style={{
               width: "100%",
+              minWidth: 600,
               borderCollapse: "collapse",
               fontSize: "0.8rem",
-              tableLayout: "fixed",
+              // table-auto: kolom mengikuti konten (tidak kolaps) sehingga header
+              // tidak bertumpuk; container overflow-x menangani layar sempit.
+              tableLayout: "auto",
             }}
           >
             <thead>
@@ -91,15 +94,15 @@ export function RecentRuns({ runs }: { runs: DashboardRunItem[] }) {
                   ...insetDivider,
                 }}
               >
-                <th style={{ padding: "0.75rem 1.25rem", fontWeight: 600 }}>Test Run</th>
-                <th style={{ padding: "0.75rem 0.5rem", fontWeight: 600, width: 116 }}>Project</th>
-                <th style={{ padding: "0.75rem 0.5rem", fontWeight: 600, width: 84 }}>Env</th>
-                <th style={{ padding: "0.75rem 0.5rem", fontWeight: 600, width: 190 }}>Progress</th>
-                <th style={{ padding: "0.75rem 0.5rem", fontWeight: 600, width: 84, textAlign: "right" }}>
+                <th style={{ padding: "0.75rem 1.25rem", fontWeight: 600, minWidth: 160, whiteSpace: "nowrap" }}>Test Run</th>
+                <th style={{ padding: "0.75rem 0.5rem", fontWeight: 600, minWidth: 100, width: 116, whiteSpace: "nowrap" }}>Project</th>
+                <th style={{ padding: "0.75rem 0.5rem", fontWeight: 600, width: 84, whiteSpace: "nowrap" }}>Env</th>
+                <th style={{ padding: "0.75rem 0.5rem", fontWeight: 600, minWidth: 170, width: 190, textAlign: "left", whiteSpace: "nowrap" }}>Progress</th>
+                <th style={{ padding: "0.75rem 0.75rem", fontWeight: 600, width: 84, textAlign: "right", whiteSpace: "nowrap" }}>
                   Pass Rate
                 </th>
-                <th style={{ padding: "0.75rem 0.5rem", fontWeight: 600, width: 96 }}>Status</th>
-                <th style={{ padding: "0.75rem 1.25rem", fontWeight: 600, width: 104 }}>Updated</th>
+                <th style={{ padding: "0.75rem 0.5rem", fontWeight: 600, width: 96, whiteSpace: "nowrap" }}>Status</th>
+                <th style={{ padding: "0.75rem 1.25rem", fontWeight: 600, width: 104, whiteSpace: "nowrap" }}>Updated</th>
               </tr>
             </thead>
             <tbody>
@@ -114,7 +117,7 @@ export function RecentRuns({ runs }: { runs: DashboardRunItem[] }) {
                 return (
                   <tr
                     key={r.id}
-                    style={insetDivider}
+                    style={{ ...insetDivider, whiteSpace: "nowrap" }}
                     onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "var(--surface-muted)")}
                     onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
                   >
@@ -131,6 +134,7 @@ export function RecentRuns({ runs }: { runs: DashboardRunItem[] }) {
                         title={r.name}
                         style={{
                           display: "block",
+                          maxWidth: 180,
                           overflow: "hidden",
                           textOverflow: "ellipsis",
                           whiteSpace: "nowrap",
@@ -156,30 +160,46 @@ export function RecentRuns({ runs }: { runs: DashboardRunItem[] }) {
                     <td style={{ padding: "0.75rem 0.5rem", color: "var(--text-secondary)" }}>
                       {r.environment ?? "—"}
                     </td>
-                    <td style={{ padding: "0.75rem 0.5rem" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                        <span style={{ width: 84, flexShrink: 0 }}>
-                          <ProgressBar value={progress ?? 0} />
-                        </span>
-                        <span style={{ fontWeight: 700, fontSize: "0.76rem" }}>
-                          {formatPct(progress)}
-                        </span>
-                      </div>
+                    <td style={{ padding: "0.75rem 0.5rem", minWidth: 170 }}>
                       <div
                         style={{
-                          marginTop: "0.2rem",
-                          fontSize: "0.7rem",
-                          color: "var(--text-muted)",
-                          whiteSpace: "nowrap",
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "0.25rem",
                         }}
                       >
-                        {r.counts.passed} Passed · {r.counts.failed} Failed · {r.counts.notRun} Not Run
-                        {r.counts.blocked > 0 ? ` · ${r.counts.blocked} Blocked` : ""}
+                        {/* Baris 1: bar (sky-500, h-1.5) + persentase mono */}
+                        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                          <span style={{ flex: 1, maxWidth: 160, minWidth: 0 }}>
+                            <ProgressBar value={progress ?? 0} color="#0EA5E9" height={6} />
+                          </span>
+                          <span
+                            style={{
+                              fontWeight: 700,
+                              fontFamily: "var(--font-mono, monospace)",
+                              fontSize: 11,
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {formatPct(progress)}
+                          </span>
+                        </div>
+                        {/* Baris 2: detail status — tidak boleh patah baris */}
+                        <div
+                          style={{
+                            fontSize: 10,
+                            color: "#94A3B8",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {r.counts.passed} Passed · {r.counts.failed} Failed · {r.counts.notRun} Not Run
+                          {r.counts.blocked > 0 ? ` · ${r.counts.blocked} Blocked` : ""}
+                        </div>
                       </div>
                     </td>
                     <td
                       style={{
-                        padding: "0.75rem 0.5rem",
+                        padding: "0.75rem 0.75rem",
                         textAlign: "right",
                         fontSize: 12,
                         fontWeight: 700,

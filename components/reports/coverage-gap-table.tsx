@@ -32,10 +32,10 @@ export function CoverageGapTable({
           subtext="Tambahkan test case ke suite untuk melihat celah coverage di sini."
         />
       ) : (
-        // Body kartu standar: p-6 — disamakan dengan kartu Reports lainnya.
+        // Body kartu standar: p-4 — disamakan dengan kartu Reports lainnya.
         <div
           style={{
-            padding: "1.5rem",
+            padding: "1rem",
             display: "flex",
             flexDirection: "column",
             gap: "1rem",
@@ -65,7 +65,8 @@ export function CoverageGapTable({
             </div>
           )}
 
-          <div style={{ overflowX: "auto" }}>
+          {/* Tinggi dibatasi + scroll sendiri supaya halaman tidak memanjang. */}
+          <div style={{ overflowX: "auto", maxHeight: 300, overflowY: "auto" }}>
           <table
             style={{
               width: "100%",
@@ -80,19 +81,14 @@ export function CoverageGapTable({
                   color: "var(--text-muted)",
                   textAlign: "left",
                   borderBottom: "1px solid var(--border)",
+                  background: "#F8FAFC",
                 }}
               >
-                <th style={{ padding: "0.55rem 0", fontWeight: 600 }}>Suite</th>
-                <th style={{ padding: "0.55rem 0.5rem", fontWeight: 600, width: 64, textAlign: "right" }}>
-                  TC
-                </th>
-                <th style={{ padding: "0.55rem 0.5rem", fontWeight: 600, width: 76, textAlign: "right" }}>
-                  Tested
-                </th>
-                <th style={{ padding: "0.55rem 0.5rem", fontWeight: 600, width: 76, textAlign: "right" }}>
-                  Belum
-                </th>
-                <th style={{ padding: "0.55rem 0", fontWeight: 600, width: 260 }}>Gap</th>
+                <th style={{ position: "sticky", top: 0, zIndex: 10, background: "#F8FAFC", padding: "0.55rem 0", fontWeight: 600 }}>Suite</th>
+                <th style={{ position: "sticky", top: 0, zIndex: 10, background: "#F8FAFC", padding: "0.55rem 0.5rem", fontWeight: 600, width: 64, textAlign: "right" }}>TC</th>
+                <th style={{ position: "sticky", top: 0, zIndex: 10, background: "#F8FAFC", padding: "0.55rem 0.5rem", fontWeight: 600, width: 76, textAlign: "right" }}>Tested</th>
+                <th style={{ position: "sticky", top: 0, zIndex: 10, background: "#F8FAFC", padding: "0.55rem 0.5rem", fontWeight: 600, width: 76, textAlign: "right" }}>Belum</th>
+                <th style={{ position: "sticky", top: 0, zIndex: 10, background: "#F8FAFC", padding: "0.55rem 0", fontWeight: 600, width: 260 }}>Gap</th>
               </tr>
             </thead>
             <tbody>

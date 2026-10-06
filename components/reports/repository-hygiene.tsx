@@ -3,7 +3,7 @@ import { Card, PanelHeader } from "@/components/ui";
 import { EmptyState } from "@/components/dashboard/empty-state";
 import { formatPct } from "@/lib/qa-metrics";
 import type { ReportsPayload } from "@/types/api";
-import { Layers, Link2Off, Sparkles } from "lucide-react";
+import { Layers, Sparkles } from "lucide-react";
 
 function HygieneBlock({
   icon,
@@ -48,24 +48,15 @@ function HygieneBlock({
 /** Higienitas repository: celah struktural yang tidak terlihat di laporan coverage. */
 export function RepositoryHygiene({
   suitesWithoutTc,
-  orphanTc,
   automation,
 }: {
   suitesWithoutTc: ReportsPayload["suitesWithoutTc"];
-  orphanTc: ReportsPayload["orphanTc"];
   automation: ReportsPayload["automation"];
 }) {
   const hasAutomation = automation.automated > 0;
 
   return (
-    <div
-      style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-        gap: "1.5rem",
-        alignItems: "stretch",
-      }}
-    >
+    <div className="hygiene-grid-2">
       <HygieneBlock
         icon={<Layers size={22} />}
         title="Suite Tanpa Test Case"
@@ -92,47 +83,6 @@ export function RepositoryHygiene({
             </Link>
             <span style={{ marginLeft: "auto", color: "var(--text-muted)", fontSize: "0.74rem" }}>
               {s.projectName}
-            </span>
-          </div>
-        ))}
-      </HygieneBlock>
-
-      <HygieneBlock
-        icon={<Link2Off size={22} />}
-        title="Test Case Tanpa Suite"
-        count={orphanTc.length}
-        emptyText="Semua test case terhubung ke suite."
-      >
-        {orphanTc.map((t) => (
-          <div
-            key={t.id}
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: "0.1rem",
-              padding: "0.45rem 0",
-              borderBottom: "1px solid var(--border)",
-            }}
-          >
-            <span
-              style={{
-                fontFamily: "var(--font-mono, monospace)",
-                fontSize: "0.72rem",
-                color: "#4B5563",
-              }}
-            >
-              {t.tcId}
-            </span>
-            <span
-              style={{
-                fontSize: "0.78rem",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-              }}
-              title={t.title}
-            >
-              {t.title}
             </span>
           </div>
         ))}

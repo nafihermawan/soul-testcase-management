@@ -523,7 +523,7 @@ button,
 /* Baris split dashboard: menumpuk di layar sempit, side-by-side di layar lebar */
 .dash-split {
   display: grid;
-  gap: 1.5rem;
+  gap: 1rem;
   grid-template-columns: minmax(0, 1fr);
   align-items: stretch;
 }
@@ -555,6 +555,36 @@ button,
   }
   .dash-main-12 > .span-4 {
     grid-column: span 4;
+  }
+}
+
+/* Baris bawah dashboard (Recent Runs / Recent Bugs): tetap 1 kolom sampai
+   1280px (xl), baru 7:5 di atasnya — supaya tabel tidak tertekan di laptop
+   resolusi kecil/menengah. */
+.dash-bottom-7-5 {
+  display: grid;
+  gap: 1.5rem;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: stretch;
+}
+
+@media (min-width: 1280px) {
+  .dash-bottom-7-5 {
+    grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+  }
+}
+
+/* Higienitas repository (Reports): 1 kolom di layar sempit, 2 kolom 50:50 di ≥768px. */
+.hygiene-grid-2 {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: stretch;
+}
+
+@media (min-width: 768px) {
+  .hygiene-grid-2 {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }
 }
 

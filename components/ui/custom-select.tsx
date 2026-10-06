@@ -10,7 +10,7 @@ export type CustomSelectOption = { value: string; label: string; /** Tag kecil d
 export const filterLabelStyle: React.CSSProperties = {
   display: "block",
   fontSize: 11,
-  fontWeight: 700,
+  fontWeight: 600,
   color: "#64748B",
   // Title Case — huruf besar di awal kata, bukan kapital semua.
   textTransform: "none",
@@ -158,7 +158,8 @@ export function CustomSelect({
           background: "#fff",
           color: "#1E293B",
           fontSize: 12,
-          fontWeight: 600,
+          // Value dropdown = reguler (tidak bold); label field tetap semibold.
+          fontWeight: 400,
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",

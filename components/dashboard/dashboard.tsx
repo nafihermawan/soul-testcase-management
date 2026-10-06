@@ -413,8 +413,8 @@ export function Dashboard({
         </div>
       </div>
 
-      {/* Baris bawah: Recent Runs / Recent Bugs */}
-      <div className="dash-split dash-split-7-5">
+      {/* Baris bawah: Recent Runs / Recent Bugs — 1 kolom sampai 1280px */}
+      <div className="dash-bottom-7-5">
         <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
           <RecentRuns runs={filteredRuns} />
         </div>

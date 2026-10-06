@@ -73,10 +73,13 @@ export function Badge({
 export function ProgressBar({
   value,
   color = "var(--brand-500)",
+  track = "var(--surface-muted)",
   height = 6,
 }: {
   value: number;
   color?: string;
+  /** Warna track (latar) bar. */
+  track?: string;
   height?: number;
 }) {
   return (
@@ -85,7 +88,7 @@ export function ProgressBar({
         width: "100%",
         height,
         borderRadius: 999,
-        background: "var(--surface-muted)",
+        background: track,
         overflow: "hidden",
       }}
     >

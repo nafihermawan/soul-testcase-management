@@ -538,6 +538,26 @@ button,
   }
 }
 
+/* Dashboard: baris utama grid 12 kolom — Coverage (8) / Health & Action (4).
+   Menumpuk di layar sempit, presisi 8:4 di layar lebar. */
+.dash-main-12 {
+  display: grid;
+  gap: 1.5rem;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@media (min-width: 1024px) {
+  .dash-main-12 {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+  }
+  .dash-main-12 > .span-8 {
+    grid-column: span 8;
+  }
+  .dash-main-12 > .span-4 {
+    grid-column: span 4;
+  }
+}
+
 /* Login: field terang di dalam card gelap — placeholder, autofill, & eye-toggle */
 .login-input {
   color-scheme: light;

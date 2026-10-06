@@ -6,7 +6,7 @@ import { LoginForm } from "./LoginForm";
 import { Toast, useToast } from "@/components/ui/feedback";
 
 /** Pesan saat diarahkan ke sini oleh auto-logout 6 jam. */
-const TIMEOUT_MESSAGE = "Sesi Anda telah berakhir setelah 6 jam. Silakan login kembali.";
+const TIMEOUT_MESSAGE = "Sesi Anda telah berakhir. Silakan login kembali.";
 
 export default function LoginPage() {
   const router = useRouter();

@@ -33,7 +33,7 @@ export function CoverageBySuite({ suites }: { suites: DashboardSuiteCoverageItem
           subtext="Tidak ada suite yang cocok dengan filter saat ini."
         />
       ) : (
-        <div style={{ overflowX: "auto" }}>
+        <div style={{ overflowX: "auto", maxHeight: 380, overflowY: "auto" }}>
           <table
             style={{
               width: "100%",
@@ -48,19 +48,22 @@ export function CoverageBySuite({ suites }: { suites: DashboardSuiteCoverageItem
                   color: "var(--text-muted)",
                   textAlign: "left",
                   borderBottom: "1px solid var(--border)",
+                  background: "#F8FAFC",
                 }}
               >
-                <th style={{ padding: "0.55rem 1.25rem", fontWeight: 600 }}>Suite</th>
-                <th style={{ padding: "0.55rem 0.5rem", fontWeight: 600, width: 64, textAlign: "right" }}>
+                <th style={{ position: "sticky", top: 0, zIndex: 10, background: "#F8FAFC", padding: "0.55rem 1.25rem", fontWeight: 600 }}>
+                  Suite
+                </th>
+                <th style={{ position: "sticky", top: 0, zIndex: 10, background: "#F8FAFC", padding: "0.55rem 0.5rem", fontWeight: 600, width: 64, textAlign: "right" }}>
                   TC
                 </th>
-                <th style={{ padding: "0.55rem 0.5rem", fontWeight: 600, width: 76, textAlign: "right" }}>
+                <th style={{ position: "sticky", top: 0, zIndex: 10, background: "#F8FAFC", padding: "0.55rem 0.5rem", fontWeight: 600, width: 76, textAlign: "right" }}>
                   Tested
                 </th>
-                <th style={{ padding: "0.55rem 0.5rem", fontWeight: 600, width: 68, textAlign: "right" }}>
+                <th style={{ position: "sticky", top: 0, zIndex: 10, background: "#F8FAFC", padding: "0.55rem 0.5rem", fontWeight: 600, width: 68, textAlign: "right" }}>
                   Pass
                 </th>
-                <th style={{ padding: "0.55rem 1.25rem", fontWeight: 600, width: 260 }}>
+                <th style={{ position: "sticky", top: 0, zIndex: 10, background: "#F8FAFC", padding: "0.55rem 1.25rem", fontWeight: 600, width: 260 }}>
                   Coverage
                 </th>
               </tr>
@@ -88,10 +91,14 @@ export function CoverageBySuite({ suites }: { suites: DashboardSuiteCoverageItem
                         href={`/suites/${s.id}`}
                         title={`Buka suite ${s.name}`}
                         style={{
-                          fontWeight: 600,
-                          color: "#2563EB",
+                          fontWeight: 500,
+                          fontSize: 12,
+                          color: "#1E293B",
                           textDecoration: "none",
+                          transition: "color 0.15s ease",
                         }}
+                        onMouseEnter={(e) => (e.currentTarget.style.color = "#D97706")}
+                        onMouseLeave={(e) => (e.currentTarget.style.color = "#1E293B")}
                       >
                         {s.name}
                       </Link>
@@ -136,7 +143,7 @@ export function CoverageBySuite({ suites }: { suites: DashboardSuiteCoverageItem
                               Belum ada TC
                             </span>
                           ) : (
-                            <ProgressBar value={cov} color={coverageColor(cov)} />
+                            <ProgressBar value={cov} color={coverageColor(cov)} track="#F1F5F9" />
                           )}
                         </span>
                         <span
@@ -145,6 +152,8 @@ export function CoverageBySuite({ suites }: { suites: DashboardSuiteCoverageItem
                             width: 44,
                             textAlign: "right",
                             flexShrink: 0,
+                            // Nilai 0% dibuat muted agar tidak menyampah secara visual.
+                            color: cov === 0 ? "#CBD5E1" : undefined,
                           }}
                         >
                           {formatPct(cov)}

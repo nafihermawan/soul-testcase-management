@@ -24,7 +24,7 @@ export function InventorySummary({ inventory }: { inventory: ReportsPayload["inv
             ? `${inventory.inSuite.toLocaleString("id-ID")} di suite · ${orphanCount} tanpa suite`
             : "Semua terhubung ke suite"
         }
-        tone="brand"
+        accent="#2563EB"
       />
       <KpiCard
         label="Suite"
@@ -39,7 +39,7 @@ export function InventorySummary({ inventory }: { inventory: ReportsPayload["inv
             ? "Belum ada test case"
             : `${formatPct(inventory.untestedPct)} dari TC di suite`
         }
-        tone={inventory.untested > 0 ? "warning" : "success"}
+        accent={inventory.untested > 0 ? "#F59E0B" : "#10B981"}
       />
     </div>
   );

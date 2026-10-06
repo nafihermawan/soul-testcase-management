@@ -69,6 +69,14 @@ const FIXED_COLUMNS_WIDTH =
 const sourceTypeOf = (b: BugRow): BugSourceType =>
   b.sourceType ?? (b.testCase ? "EXECUTION" : "GENERAL_FINDING");
 
+/** Urutan tampilan: status aktif di atas, selesai di bawah. */
+const BUG_STATUS_RANK: Record<BugRow["status"], number> = {
+  OPEN: 0,
+  IN_PROGRESS: 1,
+  RESOLVED: 2,
+  CLOSED: 3,
+};
+
 /** Warna teks status bug (teks polos, tanpa pill/box). */
 const statusColor: Record<BugRow["status"], string> = {
   OPEN: "#E11D48", // rose-600
@@ -188,6 +196,15 @@ export function BugsPageClient({
     if (!q) return true;
     const hay = `${b.title} ${b.description ?? ""} ${b.testCase?.tcId ?? ""} ${b.testCase?.title ?? ""} ${b.createdBy?.name ?? ""}`.toLowerCase();
     return hay.includes(q);
+  });
+
+  // Urutkan: status aktif (Open → In Progress) di atas, Resolved → Closed di
+  // bawah; tiebreak tetap bug terbaru lebih dulu.
+  visibleBugs.sort((a, b) => {
+    const ra = BUG_STATUS_RANK[a.status] ?? 9;
+    const rb = BUG_STATUS_RANK[b.status] ?? 9;
+    if (ra !== rb) return ra - rb;
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
   });
 
   // Counter per tab tidak lagi ditampilkan di UI, cukup label teksnya.
@@ -491,7 +508,7 @@ export function BugsPageClient({
             overflow: "hidden",
           }}
         >
-          <div style={{ overflowX: "auto" }}>
+          <div style={{ overflow: "auto", maxHeight: 620 }}>
             <table
               className="bugs-table"
               style={{
@@ -518,13 +535,14 @@ export function BugsPageClient({
                 <col style={{ width: 70 }} />
               </colgroup>
               <thead>
-                <tr style={{ color: "var(--text-muted)", textAlign: "left", background: "#F8FAFC", borderBottom: "1px solid #E5E7EB", whiteSpace: "nowrap" }}>
+                <tr style={{ color: "#64748B", fontSize: 12, textAlign: "left", background: "#F8FAFC", borderBottom: "1px solid #E5E7EB", whiteSpace: "nowrap" }}>
                   <th
                     style={{
                       padding: "0.6rem 1.25rem",
                       fontWeight: 600,
                       position: "sticky",
                       left: 0,
+                      top: 0,
                       zIndex: 20,
                       background: "#F8FAFC",
                     }}
@@ -537,6 +555,7 @@ export function BugsPageClient({
                       fontWeight: 600,
                       position: "sticky",
                       left: STICKY_ID_WIDTH,
+                      top: 0,
                       zIndex: 20,
                       background: "#F8FAFC",
                       boxShadow: "2px 0 5px -2px rgba(0, 0, 0, 0.1)",
@@ -587,13 +606,13 @@ export function BugsPageClient({
                       />
                     </span>
                   </th>
-                  <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600, textAlign: "center" }}>Test Run</th>
-                  <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600, textAlign: "center" }}>Environment</th>
-                  <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600, textAlign: "center" }}>Severity</th>
-                  <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600, textAlign: "center" }}>Status</th>
-                  <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600, textAlign: "center" }}>Created By</th>
-                  <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600, textAlign: "center" }}>Created Date</th>
-                  <th style={{ padding: "0.6rem 1.25rem", fontWeight: 600, textAlign: "center" }}>Aksi</th>
+                  <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600, textAlign: "center", position: "sticky", top: 0, zIndex: 20, background: "#F8FAFC" }}>Test Run</th>
+                  <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600, textAlign: "center", position: "sticky", top: 0, zIndex: 20, background: "#F8FAFC" }}>Environment</th>
+                  <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600, textAlign: "center", position: "sticky", top: 0, zIndex: 20, background: "#F8FAFC" }}>Severity</th>
+                  <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600, textAlign: "center", position: "sticky", top: 0, zIndex: 20, background: "#F8FAFC" }}>Status</th>
+                  <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600, textAlign: "center", position: "sticky", top: 0, zIndex: 20, background: "#F8FAFC" }}>Created By</th>
+                  <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600, textAlign: "center", position: "sticky", top: 0, zIndex: 20, background: "#F8FAFC" }}>Created Date</th>
+                  <th style={{ padding: "0.6rem 1.25rem", fontWeight: 600, textAlign: "center", position: "sticky", top: 0, zIndex: 20, background: "#F8FAFC" }}>Aksi</th>
                 </tr>
               </thead>
               <tbody>

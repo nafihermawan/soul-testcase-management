@@ -1,44 +1,34 @@
 import { Card } from "@/components/ui";
 
-type Tone = "neutral" | "success" | "warning" | "danger" | "info" | "brand";
-
-const toneColor: Record<Tone, string | undefined> = {
-  neutral: undefined,
-  success: "var(--success)",
-  warning: "var(--warning)",
-  danger: "var(--danger)",
-  info: "var(--info)",
-  brand: "var(--brand-600)",
-};
-
 /**
  * Kartu KPI. `value` boleh "—" untuk kondisi tanpa data — sub-label yang
  * menjelaskan alasannya (mis. "No execution yet") wajib diisi di kasus itu.
+ * `accent` = warna garis atas (aksen visual per metrik).
  */
 export function KpiCard({
   label,
   value,
   sub,
-  tone = "neutral",
+  accent = "#E2E8F0",
 }: {
   label: string;
   value: string;
   sub?: React.ReactNode;
-  tone?: Tone;
+  /** Warna aksen top-border kartu (mis. sky untuk Coverage, amber untuk Pass Rate). */
+  accent?: string;
 }) {
   return (
-    <Card style={{ padding: "1.25rem", height: "100%" }}>
+    <Card style={{ padding: "1.25rem", height: "100%", borderTop: `3px solid ${accent}` }}>
       <div style={{ minWidth: 0 }}>
-        <div style={{ fontSize: "0.78rem", color: "var(--text-muted)", fontWeight: 600 }}>
-          {label}
-        </div>
+        <div style={{ fontSize: 12, fontWeight: 500, color: "#64748B" }}>{label}</div>
         <div
           style={{
-            fontSize: "1.7rem",
+            fontSize: "1.5rem",
             fontWeight: 800,
-            marginTop: "0.2rem",
+            letterSpacing: "-0.025em",
+            marginTop: "0.3rem",
             lineHeight: 1.2,
-            color: toneColor[tone],
+            color: "#1E293B",
           }}
         >
           {value}
@@ -46,9 +36,10 @@ export function KpiCard({
         {sub && (
           <div
             style={{
-              fontSize: "0.76rem",
-              color: "var(--text-muted)",
-              marginTop: "0.15rem",
+              fontSize: 12,
+              fontWeight: 400,
+              color: "#64748B",
+              marginTop: "0.25rem",
               lineHeight: 1.4,
             }}
           >

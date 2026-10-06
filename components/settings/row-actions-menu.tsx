@@ -122,6 +122,12 @@ export function RowActionsMenu({ actions }: { actions: RowAction[] }) {
                   <span
                     style={{
                       display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      // Kotak ikon seragam (w-4 h-4) agar semua label sejajar presisi.
+                      width: 16,
+                      height: 16,
+                      flexShrink: 0,
                       color: action.destructive ? "#DC2626" : "var(--text-secondary)",
                     }}
                   >

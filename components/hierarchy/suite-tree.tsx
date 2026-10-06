@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowDown, ArrowUp, CirclePlus, Pencil, Plus, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowUp, CirclePlus, FolderOutput, Pencil, Plus, Trash2, X } from "lucide-react";
 import {
   createSuite,
   deleteSuite,
@@ -248,17 +248,18 @@ function SuiteRow({
                 actions={[
                   {
                     label: "Edit",
-                    icon: <Pencil size={15} />,
+                    icon: <Pencil size={16} />,
                     onClick: () => setEditing(true),
                   },
                   {
                     label: "Pindah ke root",
-                    icon: <Pencil size={15} />,
+                    // Folder + panah keluar — beda jelas dari aksi Edit.
+                    icon: <FolderOutput size={16} />,
                     onClick: () => setConfirmMove(true),
                   },
                   {
                     label: "Hapus",
-                    icon: <Trash2 size={15} />,
+                    icon: <Trash2 size={16} />,
                     onClick: () => setConfirmDelete(true),
                     destructive: true,
                   },

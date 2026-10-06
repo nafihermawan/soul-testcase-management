@@ -70,24 +70,9 @@ const priorityTone = (p: TestCase["priority"]) =>
   p === "CRITICAL" ? "danger" : p === "HIGH" ? "warning" : p === "MEDIUM" ? "info" : "neutral";
 const statusTone = (s: TestCase["status"]) =>
   s === "ACTIVE" ? "success" : s === "DEPRECATED" ? "neutral" : "warning";
-/** Badge Type pada tabel: Positive hijau lembut, Negative merah lembut. */
-const TYPE_BADGE: Record<
-  "POSITIVE" | "NEGATIVE",
-  { label: string; bg: string; color: string; border: string }
-> = {
-  POSITIVE: {
-    label: "Positive",
-    bg: "#ECFDF5",
-    color: "#047857",
-    border: "rgba(167, 243, 208, 0.6)",
-  },
-  NEGATIVE: {
-    label: "Negative",
-    bg: "#FFF1F2",
-    color: "#BE123C",
-    border: "rgba(254, 205, 211, 0.6)",
-  },
-};
+/** Tone teks Type (tanpa pill): Positive hijau, Negative rose, belum dipilih netral. */
+const typeTone = (t: TestCase["type"]) =>
+  t === "NEGATIVE" ? "rose" : t === "POSITIVE" ? "emerald" : "neutral";
 
 /** Warna teks per tone — dipakai dropdown teks polos (tanpa pill). */
 const TONE_TEXT: Record<string, string> = {
@@ -1150,26 +1135,30 @@ function TestCaseTable({
                 {t.title}
               </td>
               <td style={{ padding: "0.5rem 0.5rem", width: 110, textAlign: "center" }}>
-                {t.type ? (
-                  <span
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      padding: "1px 8px",
-                      borderRadius: 999,
-                      fontSize: "0.72rem",
-                      fontWeight: 500,
-                      background: TYPE_BADGE[t.type].bg,
-                      color: TYPE_BADGE[t.type].color,
-                      border: `1px solid ${TYPE_BADGE[t.type].border}`,
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {TYPE_BADGE[t.type].label}
-                  </span>
-                ) : (
-                  <span style={{ color: "#94A3B8" }}>—</span>
-                )}
+                {/* Teks polos berwarna + chevron bawaan Select (sama seperti
+                    dropdown Priority/Status) — bisa diubah langsung. */}
+                <Select
+                  size="sm"
+                  value={t.type ?? ""}
+                  disabled={!canEdit}
+                  ariaLabel="Ubah type TC"
+                  style={{
+                    ...plainSelectStyle(typeTone(t.type)),
+                    maxWidth: "100%",
+                    width: "auto",
+                    display: "inline-flex",
+                  }}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    onQuickUpdate(t, {
+                      type: val === "POSITIVE" || val === "NEGATIVE" ? val : null,
+                    });
+                  }}
+                >
+                  <option value="">— Belum dipilih —</option>
+                  <option value="POSITIVE">Positive</option>
+                  <option value="NEGATIVE">Negative</option>
+                </Select>
               </td>
               <td style={{ padding: "0.5rem 0.5rem", width: 140, textAlign: "center" }}>
                 <Select

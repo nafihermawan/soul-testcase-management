@@ -27,6 +27,8 @@ export type BugRow = {
   externalLink: string | null;
   createdAt: string;
   testCase: { id: string; tcId: string; title: string } | null;
+  /** Suite/Module tempat bug berada; null = tidak diketahui (mis. temuan tanpa suite). */
+  suite?: { id: string; name: string } | null;
   /** Test Run tempat bug ditemukan; null untuk temuan ad-hoc.
    *  `environment` run dipakai sebagai fallback bila bug.environment kosong. */
   run?: { id: string; name: string; environment?: string | null } | null;
@@ -58,7 +60,7 @@ const TITLE_MAX_WIDTH = 600;
 /** Total lebar kolom SELAIN Title (ID + kolom tetap) — dasar minWidth tabel.
  *  Kolom Created Date dipatok 112px (w-28) agar tidak terpotong tepi kanan. */
 const FIXED_COLUMNS_WIDTH =
-  STICKY_ID_WIDTH + 190 + 110 + 100 + 140 + 140 + 112 + 70;
+  STICKY_ID_WIDTH + 190 + 120 + 110 + 100 + 140 + 140 + 112 + 70;
 
 /**
  * Klasifikasi sumber bug. Field `sourceType` dari API dipakai kalau ada, tapi
@@ -527,6 +529,7 @@ export function BugsPageClient({
                 <col style={{ width: STICKY_ID_WIDTH }} />
                 <col style={{ width: titleWidth }} />
                 <col style={{ width: 190 }} />
+                <col style={{ width: 120 }} />
                 <col style={{ width: 110 }} />
                 <col style={{ width: 100 }} />
                 <col style={{ width: 140 }} />
@@ -607,6 +610,7 @@ export function BugsPageClient({
                     </span>
                   </th>
                   <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600, textAlign: "center", position: "sticky", top: 0, zIndex: 20, background: "#F8FAFC" }}>Test Run</th>
+                  <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600, textAlign: "left", minWidth: 120, position: "sticky", top: 0, zIndex: 20, background: "#F8FAFC", whiteSpace: "nowrap" }}>Module</th>
                   <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600, textAlign: "center", position: "sticky", top: 0, zIndex: 20, background: "#F8FAFC" }}>Environment</th>
                   <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600, textAlign: "center", position: "sticky", top: 0, zIndex: 20, background: "#F8FAFC" }}>Severity</th>
                   <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600, textAlign: "center", position: "sticky", top: 0, zIndex: 20, background: "#F8FAFC" }}>Status</th>
@@ -718,6 +722,23 @@ export function BugsPageClient({
                           <span style={{ fontSize: 12, fontWeight: 400, color: "#94A3B8" }}>
                             Ad-hoc / General
                           </span>
+                        )}
+                      </td>
+                      {/* Module / Suite — "—" muted bila bug tidak punya suite. */}
+                      <td
+                        title={b.suite?.name ?? undefined}
+                        style={{
+                          padding: "0.6rem 0.5rem",
+                          textAlign: "left",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          fontSize: 12,
+                          fontWeight: 500,
+                          color: "#475569",
+                        }}
+                      >
+                        {b.suite?.name ?? (
+                          <span style={{ color: "#94A3B8", fontWeight: 400 }}>—</span>
                         )}
                       </td>
                       <td style={{ padding: "0.6rem 0.5rem", textAlign: "center", overflow: "hidden", textOverflow: "ellipsis" }}>

@@ -45,7 +45,7 @@ export function ActionRequiredList({ items }: { items: ActionItem[] }) {
             display: "flex",
             alignItems: "center",
             gap: "0.75rem",
-            padding: "0.8rem 1.5rem",
+            padding: "0.8rem 1rem",
             borderTop: idx === 0 ? "none" : "1px solid var(--border)",
           }}
         >

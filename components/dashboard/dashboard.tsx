@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { Info } from "lucide-react";
 import {
   addCounts,
   emptyCounts,
@@ -161,7 +162,8 @@ export function Dashboard({
         fontFamily: "var(--font-sans, system-ui, sans-serif)",
         display: "flex",
         flexDirection: "column",
-        gap: "1.5rem",
+        // Spacing vertikal utama dirapatkan (space-y-3).
+        gap: "0.75rem",
         background: "#F6F7F9",
         padding: "0.25rem",
       }}
@@ -188,7 +190,7 @@ export function Dashboard({
       </div>
 
       {/* Baris statistik: 4 kartu KPI simetris */}
-      <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
             <div className="metric-grid">
               <KpiCard
                 label="Total Test Cases"
@@ -210,9 +212,25 @@ export function Dashboard({
                 label="Pass Rate"
                 value={formatPct(passRate)}
                 sub={
-                  passRate === null
-                    ? "No execution yet"
-                    : `${execCounts.passed} / ${execCounts.executed} executed`
+                  <>
+                    {passRate === null
+                      ? "No execution yet"
+                      : `${execCounts.passed} / ${execCounts.executed} executed`}
+                    {/* Ringkasan eksekusi (dulu teks menggantung di bawah stat
+                        card) kini jadi tooltip ikon info. */}
+                    <span
+                      title={`${execCounts.executed} executed · ${execCounts.blocked} blocked · ${execCounts.notRun} not run${execCounts.failed > 0 ? ` · ${execCounts.failed} failed` : ""}`}
+                      style={{
+                        display: "inline-flex",
+                        marginLeft: 6,
+                        verticalAlign: "middle",
+                        color: "#94A3B8",
+                        cursor: "help",
+                      }}
+                    >
+                      <Info size={12} />
+                    </span>
+                  </>
                 }
                 accent="#F59E0B"
               />
@@ -222,18 +240,6 @@ export function Dashboard({
                 sub={`${criticalHighBugs} Critical / High`}
                 accent="#F43F5E"
               />
-            </div>
-
-            {/* Rincian eksekusi ringkas — menggantikan widget Execution Summary. */}
-            <div style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>
-              {execCounts.executed.toLocaleString("id-ID")} executed
-              {" · "}
-              {execCounts.blocked.toLocaleString("id-ID")} blocked
-              {" · "}
-              {execCounts.notRun.toLocaleString("id-ID")} not run
-              {execCounts.failed > 0 && (
-                <>{" · "}{execCounts.failed.toLocaleString("id-ID")} failed</>
-              )}
             </div>
           </div>
 
@@ -250,7 +256,7 @@ export function Dashboard({
             <PanelHeader title="Health & Action" />
 
             {/* 1. Ringkasan eksekusi: bar tersegmentasi + kartu badge */}
-            <div style={{ padding: "1rem 1.5rem", borderBottom: "1px solid var(--border)" }}>
+            <div style={{ padding: "1rem", borderBottom: "1px solid var(--border)" }}>
               <div
                 style={{
                   fontSize: 11,
@@ -326,7 +332,7 @@ export function Dashboard({
             </div>
 
             {/* 2. Needs Attention */}
-            <div style={{ padding: "0.85rem 1.5rem 0.15rem" }}>
+            <div style={{ padding: "0.85rem 1rem 0.15rem" }}>
               <div
                 style={{
                   fontSize: 11,
@@ -346,7 +352,7 @@ export function Dashboard({
             <div
               style={{
                 marginTop: "auto",
-                padding: "0.85rem 1.5rem",
+                padding: "0.85rem 1rem",
                 borderTop: "1px solid var(--border)",
                 display: "flex",
                 gap: "0.5rem",

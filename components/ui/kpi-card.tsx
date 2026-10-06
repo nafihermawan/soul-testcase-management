@@ -18,7 +18,7 @@ export function KpiCard({
   accent?: string;
 }) {
   return (
-    <Card style={{ padding: "1.25rem", height: "100%", borderTop: `3px solid ${accent}` }}>
+    <Card style={{ padding: "1rem", height: "100%", borderTop: `3px solid ${accent}` }}>
       <div style={{ minWidth: 0 }}>
         <div style={{ fontSize: 12, fontWeight: 500, color: "#64748B" }}>{label}</div>
         <div

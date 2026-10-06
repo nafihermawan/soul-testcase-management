@@ -6,6 +6,7 @@ import { signOut } from "next-auth/react";
 import {
   BarChart3,
   Bug,
+  ChevronDown,
   FlaskConical,
   Layers,
   LayoutDashboard,
@@ -203,6 +204,12 @@ export function Sidebar({
   const projectsOpen = openMenu === "projects";
   const toggleMenu = (key: string) => setOpenMenu((cur) => (cur === key ? null : key));
   const [logoutHovered, setLogoutHovered] = useState(false);
+  // Accordion per kategori platform di menu Projects. Default: SEMUA ter-expand
+  // (perilaku lama) — klik header untuk collapse.
+  const [closedPlatforms, setClosedPlatforms] = useState<Record<string, boolean>>({});
+  const isPlatformOpen = (key: string) => !closedPlatforms[key];
+  const togglePlatform = (key: string) =>
+    setClosedPlatforms((prev) => ({ ...prev, [key]: !prev[key] }));
 
   // Settings hanya untuk QA; Automation tersembunyi untuk PRODUCT.
   const visibleNavItems =
@@ -442,37 +449,95 @@ export function Sidebar({
                       Belum ada project
                     </span>
                   ) : (
-                    Object.entries(groupProjectsByEnv(projects)).map(([groupTitle, items]) => (
-                      <div key={groupTitle} style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
-                        {/* Sub-header tag (11px / bold / gray-400) */}
-                        <div
-                          style={{
-                            fontSize: 11,
-                            fontWeight: 700,
-                            color: "#9CA3AF",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.06em",
-                            padding: "0.25rem 0.5rem",
-                          }}
-                        >
-                          {groupTitle}
-                        </div>
-                        {items.map((p) => {
-                          const active = pathname === `/projects/${p.id}`;
-                          return (
-                            <SidebarItem
-                              key={p.id}
-                              href={`/projects/${p.id}`}
-                              variant="child"
-                              active={active}
-                              className="sidebar-submenu-item"
+                    Object.entries(groupProjectsByEnv(projects)).map(([groupTitle, items]) => {
+                      const open = isPlatformOpen(groupTitle);
+                      return (
+                        <div key={groupTitle} style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                          {/* Header kategori platform — klik untuk expand/collapse */}
+                          <button
+                            type="button"
+                            onClick={() => togglePlatform(groupTitle)}
+                            aria-expanded={open}
+                            aria-label={`${open ? "Tutup" : "Buka"} kategori ${groupTitle}`}
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "0.4rem",
+                              width: "100%",
+                              border: "none",
+                              background: "transparent",
+                              fontSize: 11,
+                              fontWeight: 700,
+                              color: "#9CA3AF",
+                              textTransform: "uppercase",
+                              letterSpacing: "0.06em",
+                              padding: "0.25rem 0.5rem",
+                              borderRadius: 6,
+                              cursor: "pointer",
+                              transition: "background-color 0.15s ease, color 0.15s ease",
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.background = "#F3F4F6";
+                              e.currentTarget.style.color = "#1E293B";
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.background = "transparent";
+                              e.currentTarget.style.color = "#9CA3AF";
+                            }}
+                          >
+                            {groupTitle}
+                            <ChevronDown
+                              size={12}
+                              aria-hidden="true"
+                              style={{
+                                marginLeft: "auto",
+                                flexShrink: 0,
+                                transform: open ? "rotate(0deg)" : "rotate(-90deg)",
+                                transition: "transform 250ms ease",
+                              }}
+                            />
+                          </button>
+
+                          {/* Daftar project — accordion halus via grid-rows 0fr <-> 1fr */}
+                          <div
+                            style={{
+                              display: "grid",
+                              gridTemplateRows: open ? "1fr" : "0fr",
+                              opacity: open ? 1 : 0,
+                              transition:
+                                "grid-template-rows 280ms ease-in-out, opacity 280ms ease-in-out",
+                            }}
+                          >
+                            <div
+                              style={{
+                                overflow: "hidden",
+                                minHeight: 0,
+                                display: "flex",
+                                flexDirection: "column",
+                                gap: "2px",
+                                // Indentasi ekstra agar item project jelas di bawah kategorinya.
+                                paddingLeft: "0.75rem",
+                              }}
                             >
-                              {p.name}
-                            </SidebarItem>
-                          );
-                        })}
-                      </div>
-                    ))
+                              {items.map((p) => {
+                                const active = pathname === `/projects/${p.id}`;
+                                return (
+                                  <SidebarItem
+                                    key={p.id}
+                                    href={`/projects/${p.id}`}
+                                    variant="child"
+                                    active={active}
+                                    className="sidebar-submenu-item"
+                                  >
+                                    {p.name}
+                                  </SidebarItem>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
                   )}
                 </div>
               </div>

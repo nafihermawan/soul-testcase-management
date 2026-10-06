@@ -35,6 +35,8 @@ export type SidebarProject = {
   name: string;
   code: string;
   platform: string | null;
+  /** ID suite milik project — dipakai sidebar memetakan /suites/<id> ke platform. */
+  suiteIds: string[];
 };
 export type SidebarProjectsPayload = SidebarProject[];
 

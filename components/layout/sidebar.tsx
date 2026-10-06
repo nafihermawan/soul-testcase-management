@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { signOut } from "next-auth/react";
 import {
   BarChart3,
@@ -21,6 +21,8 @@ type ProjectItem = {
   name: string;
   code: string;
   platform: string | null;
+  /** ID suite milik project (untuk memetakan /suites/<id> ke platform). */
+  suiteIds?: string[];
 };
 
 /** Kelompokkan project berdasarkan platform (tag), diurutkan abjad. */
@@ -204,13 +206,29 @@ export function Sidebar({
   const projectsOpen = openMenu === "projects";
   const toggleMenu = (key: string) => setOpenMenu((cur) => (cur === key ? null : key));
   const [logoutHovered, setLogoutHovered] = useState(false);
-  // Kategori platform yang memuat project aktif (null bila bukan di halaman project).
+  // Kategori platform yang memuat project aktif (null bila bukan di halaman
+  // project/suite). Halaman /suites/<id> dipetakan lewat suiteIds project.
   const activePlatformKey = (() => {
-    const m = /^\/projects\/([^/]+)/.exec(pathname);
-    if (!m) return null;
-    const p = projects.find((x) => x.id === m[1]);
-    return p ? (p.platform || "Lainnya").toUpperCase() : null;
+    const projectMatch = /^\/projects\/([^/]+)/.exec(pathname);
+    const suiteMatch = /^\/suites\/([^/]+)/.exec(pathname);
+    let proj: ProjectItem | undefined;
+    if (projectMatch) proj = projects.find((x) => x.id === projectMatch[1]);
+    else if (suiteMatch) proj = projects.find((x) => x.suiteIds?.includes(suiteMatch[1]));
+    return proj ? (proj.platform || "Lainnya").toUpperCase() : null;
   })();
+
+  /**
+   * Item project dianggap AKTIF jika rute sekarang:
+   * - tepat di `/projects/<id>` atau nested di bawahnya (`/projects/<id>/...`), atau
+   * - halaman suite milik project ini (`/suites/<id>` dengan id di `suiteIds`).
+   */
+  const isProjectActive = (p: ProjectItem): boolean => {
+    if (pathname === `/projects/${p.id}` || pathname.startsWith(`/projects/${p.id}/`)) {
+      return true;
+    }
+    const suiteMatch = /^\/suites\/([^/]+)/.exec(pathname);
+    return !!suiteMatch && !!p.suiteIds?.includes(suiteMatch[1]);
+  };
   // Accordion per kategori platform. Default: TIDAK semua terbuka — hanya
   // kategori yang memuat project aktif yang dibuka, sisanya collapsed.
   const [openPlatforms, setOpenPlatforms] = useState<Record<string, boolean>>({});
@@ -218,6 +236,21 @@ export function Sidebar({
     key in openPlatforms ? openPlatforms[key] : key === activePlatformKey;
   const togglePlatform = (key: string) =>
     setOpenPlatforms((prev) => ({ ...prev, [key]: !isPlatformOpen(key) }));
+
+  // Buka menu parent yang sesuai saat rute berubah (mis. masuk ke halaman
+  // detail project) — jangan biarkan menu tertutup saat halamannya diakses.
+  useEffect(() => {
+    if (isProjectsActive) setOpenMenu("projects");
+    else if (isRunsActive) setOpenMenu("runs");
+  }, [isProjectsActive, isRunsActive]);
+
+  // Auto-buka kategori platform tempat project aktif berada (mis. WEB).
+  useEffect(() => {
+    if (!activePlatformKey) return;
+    setOpenPlatforms((prev) =>
+      prev[activePlatformKey] ? prev : { ...prev, [activePlatformKey]: true }
+    );
+  }, [activePlatformKey]);
 
   // Settings hanya untuk QA; Automation tersembunyi untuk PRODUCT.
   const visibleNavItems =
@@ -534,7 +567,9 @@ export function Sidebar({
                               }}
                             >
                               {items.map((p) => {
-                                const active = pathname === `/projects/${p.id}`;
+                                // Aktif juga untuk nested route (/projects/<id>/*)
+                                // dan halaman suite milik project ini.
+                                const active = isProjectActive(p);
                                 return (
                                   <SidebarItem
                                     key={p.id}

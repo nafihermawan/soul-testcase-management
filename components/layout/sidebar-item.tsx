@@ -58,10 +58,13 @@ export function SidebarItem({
     justifyContent: collapsed ? "center" : "flex-start",
     borderRadius: isChild ? 6 : "0 8px 8px 0",
     fontSize: isChild ? 14 : 14,
-    fontWeight: active ? (isChild ? 500 : 600) : isChild ? 400 : 600,
-    color: active ? (isChild ? "#D97706" : "#D97706") : isChild ? "#4B5563" : "#374151",
-    background: active && isChild ? "transparent" : "transparent",
+    fontWeight: active ? 600 : isChild ? 400 : 600,
+    // Child aktif: CUKUP warna amber + semibold (tanpa bg/border).
+    // Child tidak aktif: slate-600 normal.
+    color: active ? "#D97706" : isChild ? "#475569" : "#374151",
+    background: "transparent",
     border: "none",
+    // Indentasi seragam untuk semua child (border hanya untuk item parent aktif).
     borderLeft: isChild || collapsed ? undefined : active
       ? "4px solid #FFC348"
       : "4px solid transparent",

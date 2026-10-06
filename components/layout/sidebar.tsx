@@ -229,13 +229,14 @@ export function Sidebar({
     const suiteMatch = /^\/suites\/([^/]+)/.exec(pathname);
     return !!suiteMatch && !!p.suiteIds?.includes(suiteMatch[1]);
   };
-  // Accordion per kategori platform. Default: TIDAK semua terbuka — hanya
-  // kategori yang memuat project aktif yang dibuka, sisanya collapsed.
-  const [openPlatforms, setOpenPlatforms] = useState<Record<string, boolean>>({});
-  const isPlatformOpen = (key: string) =>
-    key in openPlatforms ? openPlatforms[key] : key === activePlatformKey;
+  // Single accordion: HANYA satu kategori platform yang terbuka pada satu waktu
+  // (state = string | null, bukan peta boolean).
+  const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
+  const isPlatformOpen = (key: string) => expandedCategory === key;
+  // Klik header: tutup sendiri bila sedang terbuka, atau buka kategori ini
+  // sekaligus menutup kategori lain.
   const togglePlatform = (key: string) =>
-    setOpenPlatforms((prev) => ({ ...prev, [key]: !isPlatformOpen(key) }));
+    setExpandedCategory((cur) => (cur === key ? null : key));
 
   // Buka menu parent yang sesuai saat rute berubah (mis. masuk ke halaman
   // detail project) — jangan biarkan menu tertutup saat halamannya diakses.
@@ -244,12 +245,10 @@ export function Sidebar({
     else if (isRunsActive) setOpenMenu("runs");
   }, [isProjectsActive, isRunsActive]);
 
-  // Auto-buka kategori platform tempat project aktif berada (mis. WEB).
+  // Auto-pindah kategori yang terbuka mengikuti rute project aktif (mis. WEB),
+  // sekaligus menutup kategori lain — single accordion.
   useEffect(() => {
-    if (!activePlatformKey) return;
-    setOpenPlatforms((prev) =>
-      prev[activePlatformKey] ? prev : { ...prev, [activePlatformKey]: true }
-    );
+    if (activePlatformKey) setExpandedCategory(activePlatformKey);
   }, [activePlatformKey]);
 
   // Settings hanya untuk QA; Automation tersembunyi untuk PRODUCT.

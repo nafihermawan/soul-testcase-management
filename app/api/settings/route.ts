@@ -25,7 +25,7 @@ export async function GET() {
     }),
     prisma.user.findMany({
       orderBy: { email: "asc" },
-      select: { id: true, name: true, email: true, role: true },
+      select: { id: true, name: true, email: true, role: true, isQaLead: true },
     }),
   ]);
 

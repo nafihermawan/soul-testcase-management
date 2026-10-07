@@ -5,6 +5,7 @@
  */
 import type { Role } from "@/lib/permissions";
 import type { ExecutionCounts } from "@/lib/qa-metrics";
+import type { PeriodMode, PerformanceBadge } from "@/lib/qa-performance";
 
 export type PlatformCode = "WEB" | "MOBILE" | "HARDWARE" | "API";
 
@@ -27,6 +28,8 @@ export type Me = {
   email: string | null;
   image: string | null;
   role: Role;
+  /** Lead QA — boleh membuka QA Performance Analytics. */
+  isQaLead: boolean;
 };
 
 /* ---------- /api/projects (sidebar) ---------- */
@@ -276,9 +279,64 @@ export type SettingsUser = {
   name: string | null;
   email: string;
   role: Role;
+  /** Lead QA — pembeda di dalam role QA. */
+  isQaLead: boolean;
 };
 
 export type SettingsPayload = { projects: SettingsProject[]; users: SettingsUser[] };
+
+/* ---------- /api/qa-performance ---------- */
+
+export type QaPerformancePeriod = {
+  mode: PeriodMode;
+  year: number;
+  quarter: number | null;
+  /** Label siap tampil, mis. "Q4 2026" atau "2026". */
+  label: string;
+};
+
+export type QaPerformanceMember = {
+  id: string;
+  name: string | null;
+  role: Role;
+  /** Label role siap tampil (mis. "QA"). */
+  roleLabel: string;
+  /** Jumlah run aktif yang ditugaskan ke member ini pada periode tsb. */
+  assignedRuns: number;
+  /** Test case yang dieksekusi (status ≠ NOT_RUN) pada periode tsb. */
+  executedCases: number;
+  /** Test case yang DIBUAT pada periode tsb (dimensi authoring). */
+  createdCases: number;
+  /** PASS / (PASS + FAIL); null bila tidak ada PASS/FAIL pada periode tsb. */
+  passRate: number | null;
+  passed: number;
+  failed: number;
+  /** Bug yang dilaporkan member ini pada periode tsb. */
+  bugsFound: number;
+  score: number;
+  badge: PerformanceBadge;
+};
+
+export type QaPerformanceTotals = {
+  executedCases: number;
+  /** Total test case yang dibuat pada periode tsb. */
+  createdCases: number;
+  /** Total test case di sistem (seluruh waktu) — tidak ikut filter periode. */
+  allTimeCreatedCases: number;
+  /** Pass rate agregat periode (weighted), null bila tidak ada PASS/FAIL. */
+  passRate: number | null;
+  bugsReported: number;
+  completedRuns: number;
+  reopenedRuns: number;
+};
+
+export type QaPerformancePayload = {
+  period: QaPerformancePeriod;
+  totals: QaPerformanceTotals;
+  members: QaPerformanceMember[];
+  /** Tahun yang tersedia di data, untuk pilihan filter. */
+  availableYears: number[];
+};
 
 /* ---------- /api/projects/[id] ---------- */
 export type ProjectSuiteNode = {

@@ -14,6 +14,8 @@ export type UserItem = {
   name: string | null;
   email: string;
   role: "QA" | "DEVELOPER" | "PRODUCT";
+  /** Lead QA — boleh membuka QA Performance Analytics. */
+  isQaLead: boolean;
 };
 
 const roleOptions = [
@@ -57,6 +59,7 @@ function UserModal({
   const [name, setName] = useState(initial?.name ?? "");
   const [email, setEmail] = useState(initial?.email ?? "");
   const [role, setRole] = useState<UserItem["role"]>(initial?.role ?? "DEVELOPER");
+  const [isQaLead, setIsQaLead] = useState(initial?.isQaLead ?? false);
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -94,9 +97,11 @@ function UserModal({
       return;
     }
     setPending(true);
+    // Lead hanya bermakna untuk role QA — dikosongkan otomatis kalau bukan QA.
+    const lead = role === "QA" && isQaLead;
     const res = initial
-      ? await updateUser(initial.id, { name, email, role, password: pwd || undefined })
-      : await addUserByEmail({ name, email, role, password: pwd });
+      ? await updateUser(initial.id, { name, email, role, isQaLead: lead, password: pwd || undefined })
+      : await addUserByEmail({ name, email, role, isQaLead: lead, password: pwd });
     setPending(false);
     if (res.error) {
       setError(res.error);
@@ -213,6 +218,27 @@ function UserModal({
               ))}
             </Select>
           </div>
+          {role === "QA" && (
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "0.5rem",
+                fontSize: "0.82rem",
+                fontWeight: 500,
+                color: "var(--text-secondary)",
+                cursor: "pointer",
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={isQaLead}
+                onChange={(e) => setIsQaLead(e.target.checked)}
+                style={{ width: 15, height: 15, accentColor: "#D97706", cursor: "pointer" }}
+              />
+              Lead QA — boleh membuka QA Performance Analytics
+            </label>
+          )}
           <div>
             <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)" }}>
               Password {initial ? "(opsional)" : ""}
@@ -380,6 +406,13 @@ export function UsersManager({ users }: { users: UserItem[] }) {
                 <td style={{ padding: "0.6rem 0.5rem", color: "var(--text-secondary)" }}>{u.email}</td>
                 <td style={{ padding: "0.6rem 0.5rem" }}>
                   <span style={roleBadgeStyle}>{roleLabel(u.role)}</span>
+                  {u.isQaLead && (
+                    <span
+                      style={{ ...roleBadgeStyle, marginLeft: 6, background: "#FFFBEB", color: "#B45309" }}
+                    >
+                      Lead QA
+                    </span>
+                  )}
                 </td>
                 <td style={{ padding: "0.6rem 1.25rem" }}>
                   <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center" }}>

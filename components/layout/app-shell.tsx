@@ -41,7 +41,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     >
       <div className="app-sidebar">
         {shellReady ? (
-          <Sidebar projects={projects} collapsed={collapsed} userRole={user?.role} />
+          <Sidebar
+            projects={projects}
+            collapsed={collapsed}
+            userRole={user?.role}
+            isQaLead={me.data?.isQaLead}
+          />
         ) : (
           <SidebarSkeleton collapsed={collapsed} />
         )}

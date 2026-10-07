@@ -60,6 +60,8 @@ export async function addUserByEmail(data: {
   name?: string;
   email: string;
   role: ManageableRole;
+  /** Lead QA — hanya berlaku bila role QA (selain itu dipaksa false). */
+  isQaLead?: boolean;
   password?: string;
 }): Promise<UserActionState> {
   await requireRole("QA");
@@ -81,6 +83,7 @@ export async function addUserByEmail(data: {
         email: normalized,
         name: data.name?.trim() || null,
         role: data.role,
+        isQaLead: data.role === "QA" && !!data.isQaLead,
         passwordHash,
       },
     });
@@ -99,6 +102,8 @@ export async function updateUser(
     name?: string;
     email: string;
     role: ManageableRole;
+    /** Lead QA — hanya berlaku bila role QA (selain itu dipaksa false). */
+    isQaLead?: boolean;
     password?: string;
   }
 ): Promise<UserActionState> {
@@ -117,6 +122,7 @@ export async function updateUser(
         name: data.name?.trim() || null,
         email: normalized,
         role: data.role,
+        isQaLead: data.role === "QA" && !!data.isQaLead,
         ...(data.password ? { passwordHash: hashPassword(data.password) } : {}),
       },
     });

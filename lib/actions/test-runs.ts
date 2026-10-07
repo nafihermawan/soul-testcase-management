@@ -296,12 +296,14 @@ export async function setRunStatus(
 }
 
 /**
- * Tetapkan / lepas assignee (QA tester) sebuah run. `assigneeId` null = lepas
- * penugasan. Dipakai dropdown inline di tabel Active Runs.
+ * Tetapkan / lepas assignee (QA tester) sebuah run — mendukung lebih dari satu
+ * orang. Daftar kosong = lepas semua penugasan. Dipakai dropdown multi-select
+ * di tabel Active Runs. Kolom tunggal `assigneeId` lama tetap disinkronkan ke
+ * assignee pertama supaya data/permukaan lama tidak ikut kosong.
  */
-export async function setRunAssignee(
+export async function setRunAssignees(
   runId: string,
-  assigneeId: string | null
+  userIds: string[]
 ): Promise<TestRunActionState> {
   await requireRole("QA");
   try {
@@ -311,18 +313,29 @@ export async function setRunAssignee(
     });
     if (!run) return { error: "Test run tidak ditemukan." };
 
-    if (assigneeId) {
-      const user = await prisma.user.findUnique({
-        where: { id: assigneeId },
+    // Buang id kosong + duplikat sebelum divalidasi.
+    const ids = Array.from(new Set(userIds.filter(Boolean)));
+
+    if (ids.length > 0) {
+      const found = await prisma.user.findMany({
+        where: { id: { in: ids } },
         select: { id: true },
       });
-      if (!user) return { error: "User tidak ditemukan." };
+      if (found.length !== ids.length) return { error: "Ada user yang tidak ditemukan." };
     }
 
-    await prisma.testRun.update({
-      where: { id: runId },
-      data: { assigneeId },
-    });
+    // Ganti-set: hapus penugasan lama lalu tulis daftar baru dalam satu transaksi.
+    await prisma.$transaction([
+      prisma.testRunAssignee.deleteMany({ where: { testRunId: runId } }),
+      prisma.testRunAssignee.createMany({
+        data: ids.map((userId) => ({ testRunId: runId, userId })),
+        skipDuplicates: true,
+      }),
+      prisma.testRun.update({
+        where: { id: runId },
+        data: { assigneeId: ids[0] ?? null },
+      }),
+    ]);
 
     revalidatePath("/test-runs");
     revalidatePath(`/test-runs/${runId}`);

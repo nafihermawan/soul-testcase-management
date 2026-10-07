@@ -71,6 +71,8 @@ export async function GET(req: NextRequest) {
         project: { select: { id: true, name: true } },
         createdBy: { select: { name: true } },
         assignee: { select: { id: true, name: true } },
+        // Multi-assignee (join table) — sumber utama kolom Assignee.
+        assignees: { select: { user: { select: { id: true, name: true } } } },
         _count: { select: { results: true } },
         results: {
           select: {
@@ -139,6 +141,10 @@ export async function GET(req: NextRequest) {
       createdByName: run.createdBy?.name ?? null,
       /** Assignee tersimpan (penugasan manual) — null berarti belum ditugaskan. */
       assignee: run.assignee,
+      /** Penugasan multi-orang; urut nama agar tampilan stabil. */
+      assignees: run.assignees
+        .map((a) => a.user)
+        .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? "")),
       // Eksekutor = QA yang meng-update hasil TC di run ini (unik, urut stabil).
       executorNames: Array.from(
         new Set(run.results.map((r) => r.updatedBy?.name).filter((n): n is string => !!n))

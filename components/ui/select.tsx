@@ -3,6 +3,7 @@
 import {
   Children,
   isValidElement,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -73,6 +74,7 @@ export function Select({
   id,
   size = "md",
   style,
+  hideValue,
 }: {
   value: string;
   onChange?: (e: ChangeEvent<HTMLSelectElement>) => void;
@@ -85,6 +87,12 @@ export function Select({
   /** "sm" untuk kontrol rapat di dalam tabel. */
   size?: SelectSize;
   style?: CSSProperties;
+  /**
+   * Sembunyikan teks nilai pada trigger — hanya chevron yang tampil (mis. kolom
+   * Assignee yang sudah punya avatar inisial). Nilai tetap terbaca lewat tooltip
+   * (`title`) dan `ariaLabel`.
+   */
+  hideValue?: boolean;
 }) {
   const options = useMemo(() => parseOptions(children), [children]);
   const current = value;
@@ -102,7 +110,7 @@ export function Select({
   const menuHeight = Math.min(MENU_MAX_HEIGHT, options.length * ITEM_HEIGHT + 12);
 
   /** Hitung posisi menu: di bawah trigger, dibalik ke atas bila ruang kurang. */
-  const place = () => {
+  const place = useCallback(() => {
     const el = triggerRef.current;
     if (!el) return;
     const r = el.getBoundingClientRect();
@@ -112,11 +120,11 @@ export function Select({
       left: r.left,
       width: r.width,
     });
-  };
+  }, [menuHeight]);
 
   useEffect(() => {
     if (open) place();
-  }, [open]);
+  }, [open, place]);
 
   useEffect(() => {
     if (!open) return;
@@ -220,7 +228,7 @@ export function Select({
         style={{
           display: "flex",
           alignItems: "center",
-          justifyContent: "space-between",
+          justifyContent: hideValue ? "center" : "space-between",
           gap: 6,
           height: size === "sm" ? 30 : 36,
           width: "100%",
@@ -242,11 +250,13 @@ export function Select({
           ...style,
         }}
       >
-        <span
-          style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}
-        >
-          {selected?.label ?? "—"}
-        </span>
+        {!hideValue && (
+          <span
+            style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}
+          >
+            {selected?.label ?? "—"}
+          </span>
+        )}
         <ChevronDown
           size={14}
           style={{

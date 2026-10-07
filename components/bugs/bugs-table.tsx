@@ -768,7 +768,10 @@ export function BugsPageClient({
                             style={{
                               background: "transparent",
                               border: "none",
+                              borderRadius: 0,
                               padding: 0,
+                              boxShadow: "none",
+                              width: "auto",
                               fontSize: 12,
                               fontWeight: 600,
                               color: st,

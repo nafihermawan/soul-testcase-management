@@ -16,7 +16,7 @@ import { ErrorBlock, TableCardSkeleton } from "@/components/ui/data-states";
 import { Toast, useToast } from "@/components/ui/feedback";
 import { useApi } from "@/lib/client/use-api";
 import { RUN_STATUS_LABEL, type RunStatusValue } from "@/lib/run-status";
-import { setRunAssignee, setRunStatus } from "@/lib/actions/test-runs";
+import { setRunAssignees, setRunStatus } from "@/lib/actions/test-runs";
 import type { ActiveRunsPayload } from "@/types/api";
 
 /**
@@ -126,30 +126,35 @@ export function RunListView({ searchParams }: { searchParams: ActiveRunsSearchPa
   };
 
   /**
-   * Ubah assignee langsung dari dropdown di baris. Sama seperti changeStatus:
-   * barisnya dipatch di tempat (tanpa reload) lalu dikembalikan bila gagal.
+   * Ubah assignee (multi-orang) langsung dari dropdown di baris. Sama seperti
+   * changeStatus: barisnya dipatch di tempat (tanpa reload) lalu dikembalikan
+   * bila gagal.
    */
-  const changeAssignee = async (runId: string, assigneeId: string | null) => {
+  const changeAssignee = async (runId: string, userIds: string[]) => {
     const snapshot = list;
-    const nextAssignee =
-      assigneeId === null
-        ? null
-        : data?.assigneeOptions.find((o) => o.id === assigneeId) ?? null;
+    // Daftar nama untuk tampilan optimistis diambil dari opsi kandidat.
+    const nextAssignees = userIds.map((id) => {
+      const existing = list.runs.find((r) => r.id === runId)?.assignees.find((a) => a.id === id);
+      return existing ?? data?.assigneeOptions.find((o) => o.id === id) ?? { id, name: null };
+    });
 
     setPendingAssigneeId(runId);
     setList({
       ...list,
-      runs: list.runs.map((r) => (r.id === runId ? { ...r, assignee: nextAssignee } : r)),
+      runs: list.runs.map((r) => (r.id === runId ? { ...r, assignees: nextAssignees } : r)),
     });
 
-    const res = await setRunAssignee(runId, assigneeId);
+    const res = await setRunAssignees(runId, userIds);
     setPendingAssigneeId(null);
     if (res.error) {
       setList(snapshot);
       showToast(res.error, "error");
       return;
     }
-    showToast(assigneeId ? "Assignee diperbarui." : "Assignee dilepas.", "success");
+    showToast(
+      userIds.length > 0 ? "Assignee diperbarui." : "Semua assignee dilepas.",
+      "success"
+    );
   };
 
   /**
@@ -234,7 +239,7 @@ export function RunListView({ searchParams }: { searchParams: ActiveRunsSearchPa
           borderRadius: 8,
           padding: 16,
           boxShadow: "0 1px 2px rgba(15, 23, 42, 0.05)",
-          marginBottom: 16,
+          marginBottom: 12,
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
@@ -284,7 +289,7 @@ export function RunListView({ searchParams }: { searchParams: ActiveRunsSearchPa
         </div>
       </div>
 
-      {/* Daftar card per kelompok status — tiap grup punya kontainernya sendiri. */}
+      {/* Satu card utama berisi semua kelompok status. */}
       <div style={{ display: "flex", flexDirection: "column" }}>
         {filteredRuns.length === 0 ? (
           <div
@@ -347,15 +352,37 @@ export function RunListView({ searchParams }: { searchParams: ActiveRunsSearchPa
             )}
           </div>
         ) : (
-          <>
-            {groups.map((group) => {
+          /* SATU card utama menampung SEMUA kelompok status (tanpa garis pemisah). */
+          <div
+            style={{
+              background: "#fff",
+              border: "1px solid rgba(226, 232, 240, 0.8)",
+              borderRadius: 12,
+              boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+              overflow: "hidden",
+              padding: "0.875rem",
+              // Full-width & mengisi sisa tinggi viewport walau isi sedikit.
+              width: "100%",
+              minHeight: "calc(100vh - 160px)",
+              display: "flex",
+              flexDirection: "column",
+            }}
+          >
+            {groups.map((group, idx) => {
               const open = !collapsedGroups[group.status];
               const label =
                 RUN_STATUS_LABEL[group.status as RunStatusValue] ?? group.status;
+              const isLast = idx === groups.length - 1;
               return (
-                <div key={group.status}>
+                <div
+                  key={group.status}
+                  style={{
+                    // Tanpa garis pemisah — antar kelompok cukup diberi jarak.
+                    marginBottom: isLast ? 0 : "0.75rem",
+                  }}
+                >
                   {/* Section header status — chevron + badge berwarna + counter,
-                      berdiri sendiri DI LUAR card list. */}
+                      di posisi teratas card. */}
                   <div
                     role="button"
                     tabIndex={0}
@@ -372,9 +399,10 @@ export function RunListView({ searchParams }: { searchParams: ActiveRunsSearchPa
                       display: "flex",
                       alignItems: "center",
                       gap: 8,
-                      // py-1 + mb-2: menempel tepat di atas card listnya.
-                      padding: "4px 0",
-                      marginBottom: 8,
+                      // Header di dalam card: padding horizontal 16px agar
+                      // sejajar dengan baris tabel.
+                      padding: "10px 16px",
+                      marginBottom: 6,
                       cursor: "pointer",
                       userSelect: "none",
                       color: "#1E293B",
@@ -398,12 +426,6 @@ export function RunListView({ searchParams }: { searchParams: ActiveRunsSearchPa
                     <span style={{ fontSize: 12, fontWeight: 500, color: "#94A3B8" }}>
                       {group.runs.length}
                     </span>
-                    {/* Garis fleksibel mengisi sisa lebar — batas visual antar
-                        seksi status. */}
-                    <span
-                      aria-hidden="true"
-                      style={{ flex: 1, height: 1, background: "#E2E8F0" }}
-                    />
                   </div>
 
                   {/* List kolom + baris data. Konten TETAP ter-mount dan
@@ -415,7 +437,6 @@ export function RunListView({ searchParams }: { searchParams: ActiveRunsSearchPa
                       display: "grid",
                       gridTemplateRows: open ? "1fr" : "0fr",
                       transition: "grid-template-rows 300ms ease",
-                      marginBottom: 20,
                     }}
                   >
                     <div style={{ overflow: "hidden", minHeight: 0 }} aria-hidden={!open}>
@@ -489,7 +510,7 @@ export function RunListView({ searchParams }: { searchParams: ActiveRunsSearchPa
                 </div>
               );
             })}
-          </>
+          </div>
         )}
       </div>
 

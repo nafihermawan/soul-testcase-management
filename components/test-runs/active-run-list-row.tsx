@@ -45,7 +45,7 @@ export function ActiveRunListRow({
   sprint,
   status,
   pct,
-  assignee,
+  assignees,
   executorNames,
   assigneeOptions,
   onAssigneeChange,
@@ -63,12 +63,13 @@ export function ActiveRunListRow({
   sprint: string | null;
   status: string;
   pct: number;
-  assignee: { id: string; name: string | null } | null;
+  /** Penugasan tersimpan (multi-assignee). */
+  assignees: { id: string; name: string | null }[];
   executorNames: string[];
   /** Kandidat assignee untuk dropdown. */
   assigneeOptions: { id: string; name: string | null }[];
-  /** Bila diberikan, kolom Assignee jadi dropdown (bukan avatar statis). */
-  onAssigneeChange?: (assigneeId: string | null) => void;
+  /** Bila diberikan, kolom Assignee jadi dropdown multi-select. */
+  onAssigneeChange?: (userIds: string[]) => void;
   assigneePending?: boolean;
   createdAt: string;
   showActions: boolean;
@@ -79,8 +80,11 @@ export function ActiveRunListRow({
 }) {
   const [hovered, setHovered] = useState(false);
 
-  // Avatar = assignee tersimpan; kalau belum ada, pakai eksekutor (bisa banyak).
-  const avatarNames = assignee?.name ? [assignee.name] : executorNames;
+  // Avatar = assignee tersimpan (bisa banyak); kalau belum ada, pakai eksekutor.
+  const avatarNames =
+    assignees.length > 0
+      ? assignees.map((a) => a.name ?? "(tanpa nama)")
+      : executorNames;
 
   // Progress hijau saat penuh, indigo saat berjalan.
   const progressColor = pct >= 100 ? "#059669" : "#4F46E5";
@@ -142,25 +146,20 @@ export function ActiveRunListRow({
         {sprint?.trim() ? sprint : <span style={{ color: "#94A3B8" }}>—</span>}
       </div>
 
-      {/* 4. Assignee — avatar stack (+ dropdown saat boleh edit) */}
-      <div
-        style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}
-        onClick={(e) => e.stopPropagation()}
-        onMouseDown={(e) => e.stopPropagation()}
-      >
-        <AvatarStack names={avatarNames} max={3} size={22} />
-        {onAssigneeChange && (
-          <AssigneeSelect
-            assigneeId={assignee?.id ?? ""}
-            assigneeName={assignee?.name ?? null}
-            executorNames={executorNames}
-            options={assigneeOptions}
-            pending={assigneePending}
-            maxWidth={84}
-            onChange={onAssigneeChange}
-          />
-        )}
-      </div>
+      {/* 4. Assignee — avatar stack + chevron dropdown multi-assignee */}
+      {onAssigneeChange ? (
+        <AssigneeSelect
+          assignees={assignees}
+          executorNames={executorNames}
+          options={assigneeOptions}
+          pending={assigneePending}
+          onChange={onAssigneeChange}
+        />
+      ) : (
+        <div style={{ display: "flex", alignItems: "center", minWidth: 0 }}>
+          <AvatarStack names={avatarNames} max={3} size={22} />
+        </div>
+      )}
 
       {/* 5. Status — dropdown bila bisa diubah, badge bila read-only */}
       <div>

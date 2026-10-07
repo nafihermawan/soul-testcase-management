@@ -411,6 +411,8 @@ export type ActiveRunRow = {
   createdByName: string | null;
   /** Assignee tersimpan (penugasan manual); null = belum ditugaskan. */
   assignee: { id: string; name: string | null } | null;
+  /** Penugasan MULTI-assignee (join table TestRunAssignee); urut nama. */
+  assignees: { id: string; name: string | null }[];
   /**
    * QA yang benar-benar mengeksekusi run ini, diturunkan dari
    * TestRunResult.updatedById (bisa lebih dari satu orang). Dipakai sebagai

@@ -75,16 +75,32 @@ const STATUSES = [
  */
 const STATUS_BADGE: Record<
   RunResultItem["status"],
-  { label: string; bg: string; color: string; border: string; bold?: boolean }
+  { label: string; bg: string; color: string; weight: number }
 > = {
-  NOT_RUN: { label: "Untested", bg: "#F1F5F9", color: "#475569", border: "#E2E8F0" },
-  PASS: { label: "Passed", bg: "#ECFDF5", color: "#047857", border: "#A7F3D0", bold: true },
-  FAIL: { label: "Failed", bg: "#FFF1F2", color: "#BE123C", border: "#FECDD3", bold: true },
-  BLOCKED: { label: "Blocked", bg: "#FFFBEB", color: "#B45309", border: "#FDE68A", bold: true },
-  // Skipped sengaja UNGU (bukan amber) supaya tidak ketuker dengan Blocked
-  // yang sudah memakai amber, sekaligus kontras terhadap Untested yang abu-abu.
-  SKIPPED: { label: "Skipped", bg: "#FAF5FF", color: "#7E22CE", border: "#E9D5FF", bold: true },
+  // Pill kontras: latar -100, teks -700. Untested pakai weight medium (kalem).
+  NOT_RUN: { label: "Untested", bg: "#F1F5F9", color: "#475569", weight: 500 },
+  PASS: { label: "Passed", bg: "#D1FAE5", color: "#047857", weight: 600 },
+  FAIL: { label: "Failed", bg: "#FFE4E6", color: "#BE123C", weight: 600 },
+  BLOCKED: { label: "Blocked", bg: "#FEF3C7", color: "#B45309", weight: 600 },
+  // Skipped sengaja UNGU (bukan amber) agar tidak ketuker dengan Blocked.
+  SKIPPED: { label: "Skipped", bg: "#F3E8FF", color: "#7E22CE", weight: 600 },
 };
+
+/** Gaya pill status hasil eksekusi — kapsul ringkas, konsisten di semua tempat. */
+const statusPillStyle = (
+  badge: (typeof STATUS_BADGE)[RunResultItem["status"]]
+): React.CSSProperties => ({
+  display: "inline-flex",
+  alignItems: "center",
+  flexShrink: 0,
+  padding: "0.125rem 0.625rem",
+  borderRadius: 999,
+  background: badge.bg,
+  color: badge.color,
+  fontSize: 11,
+  fontWeight: badge.weight,
+  whiteSpace: "nowrap",
+});
 
 /**
  * Badge status bug untuk section riwayat bug di modal eksekusi.
@@ -1519,24 +1535,8 @@ function RunItemCard({
             </button>
           )}
 
-          {/* Indikator status pasif & subtle: perubahan status hanya lewat modal detail */}
-          <span
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              flexShrink: 0,
-              padding: "2px 8px",
-              borderRadius: 6,
-              background: "#F8FAFC",
-              color: "#94A3B8",
-              border: "1px solid rgba(226, 232, 240, 0.6)",
-              fontSize: 11,
-              fontWeight: 600,
-              whiteSpace: "nowrap",
-            }}
-          >
-            {badge.label}
-          </span>
+          {/* Pill status hasil eksekusi (Passed/Failed/Untested/…) — kontras. */}
+          <span style={statusPillStyle(badge)}>{badge.label}</span>
         </div>
       </div>
 
@@ -1760,22 +1760,7 @@ function CompleteRunModal({
                         >
                           {it.testCase?.tcId ?? "—"}
                         </span>
-                        <span
-                          style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            padding: "0.15rem 0.55rem",
-                            borderRadius: 999,
-                            background: b.bg,
-                            color: b.color,
-                            border: `1px solid ${b.border}`,
-                            fontSize: "0.68rem",
-                            fontWeight: b.bold ? 700 : 600,
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          {b.label}
-                        </span>
+                        <span style={statusPillStyle(b)}>{b.label}</span>
                       </div>
                       <div style={{ marginTop: "0.2rem", fontSize: "0.78rem", fontWeight: 600, color: "#1F2937" }}>
                         {it.titleSnapshot}

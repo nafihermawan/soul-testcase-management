@@ -9,7 +9,7 @@ import {
   type RoleFilter,
   type UserItem,
 } from "@/components/settings/users-manager";
-import { SettingsTabs, type SettingsTabKey } from "@/components/settings/settings-tabs";
+import { PageTabs } from "@/components/ui/page-tabs";
 import { Select } from "@/components/ui/select";
 import { RefreshContext } from "@/lib/client/refresh-context";
 
@@ -22,6 +22,8 @@ type ProjectItem = {
   docUrl: string | null;
   _count: { suites: number };
 };
+
+type SettingsTabKey = "projects" | "users";
 
 /** Tombol utama amber di header card (dipakai tab Projects & User & Roles). */
 const amberButtonStyle: React.CSSProperties = {
@@ -216,7 +218,14 @@ export function SettingsView({
         </Card>
 
         {/* Tab navigation — model lama: di luar card, tepat di bawah header. */}
-        <SettingsTabs active={tab} onChange={setTab} />
+        <PageTabs<SettingsTabKey>
+          active={tab}
+          onChange={setTab}
+          tabs={[
+            { key: "projects", label: "Projects" },
+            { key: "users", label: "User & Roles" },
+          ]}
+        />
 
         {/* Card 2 — konten, full-width & full-height */}
         <Card

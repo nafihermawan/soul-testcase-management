@@ -8,7 +8,6 @@ import {
   Bug,
   ChevronDown,
   FlaskConical,
-  Gauge,
   Layers,
   LayoutDashboard,
   LogOut,
@@ -38,8 +37,7 @@ function groupProjectsByEnv(projects: ProjectItem[]): Record<string, ProjectItem
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/reports", label: "Reports", icon: BarChart3 },
-  { href: "/qa-performance", label: "QA Performance", icon: Gauge },
+  { href: "/reports", label: "Reports & Analytics", icon: BarChart3 },
   { href: "/bugs", label: "Bugs", icon: Bug },
   { href: "/automation", label: "Automation", icon: FlaskConical },
   { href: "/settings", label: "Settings", icon: Settings },
@@ -190,13 +188,10 @@ export function Sidebar({
   projects,
   collapsed,
   userRole,
-  isQaLead,
 }: {
   projects: ProjectItem[];
   collapsed: boolean;
   userRole?: string | null;
-  /** Lead QA — satu-satunya yang melihat menu QA Performance. */
-  isQaLead?: boolean;
 }) {
   const pathname = usePathname();
   const isProjectsActive =
@@ -256,10 +251,8 @@ export function Sidebar({
     if (activePlatformKey) setExpandedCategory(activePlatformKey);
   }, [activePlatformKey]);
 
-  // Settings hanya untuk QA; Automation tersembunyi untuk PRODUCT;
-  // QA Performance hanya untuk Lead QA.
+  // Settings hanya untuk QA; Automation tersembunyi untuk PRODUCT.
   const visibleNavItems = navItems.filter((i) => {
-    if (i.href === "/qa-performance") return !!isQaLead;
     if (userRole === "PRODUCT") return i.href !== "/settings" && i.href !== "/automation";
     if (userRole === "QA") return true;
     return i.href !== "/settings";

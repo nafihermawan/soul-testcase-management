@@ -242,48 +242,31 @@ export function QaPerformanceView() {
   if (error) return <ErrorBlock message={error.message} onRetry={reload} />;
   if (loading || !data) {
     return (
-      <main style={{ width: "100%" }}>
-        <div style={{ marginBottom: 12 }}>
-          <div className="skeleton-block" style={{ width: 260, height: 22 }} />
-          <div className="skeleton-block" style={{ width: 340, height: 12, marginTop: 8 }} />
-        </div>
+      <div style={{ width: "100%" }}>
         <TableCardSkeleton />
-      </main>
+      </div>
     );
   }
 
   const totals = data.totals;
 
   return (
-    <main style={{ fontFamily: "var(--font-sans)", width: "100%" }}>
-      {/* Header: judul + filter periode + export */}
-      <Card style={{ padding: "1rem", marginBottom: 12 }}>
+    <div style={{ fontFamily: "var(--font-sans)", width: "100%" }}>
+      {/* Toolbar tab: periode + export (judul halaman ada di header induk) */}
+      <Card style={{ padding: "0.875rem", marginBottom: 12 }}>
         <div
           style={{
             display: "flex",
-            alignItems: "flex-start",
+            alignItems: "center",
             justifyContent: "space-between",
             gap: 12,
             flexWrap: "wrap",
           }}
         >
-          <div>
-            <h1
-              style={{
-                fontSize: 20,
-                fontWeight: 700,
-                color: "#1E293B",
-                letterSpacing: "-0.025em",
-                margin: 0,
-              }}
-            >
-              QA Performance Analytics
-            </h1>
-            <p style={{ fontSize: 12, color: "#64748B", margin: "0.25rem 0 0" }}>
-              Ringkasan performa tim QA periode{" "}
-              <strong style={{ color: "#334155", fontWeight: 600 }}>{data.period.label}</strong>.
-            </p>
-          </div>
+          <span style={{ fontSize: 12, color: "#64748B" }}>
+            Periode{" "}
+            <strong style={{ color: "#334155", fontWeight: 600 }}>{data.period.label}</strong>
+          </span>
 
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
             <Select
@@ -459,7 +442,7 @@ export function QaPerformanceView() {
           </div>
         )}
       </Card>
-    </main>
+    </div>
   );
 }
 

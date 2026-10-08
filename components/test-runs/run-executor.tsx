@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { useRefresh } from "@/lib/client/refresh-context";
 import { Bug, Check, CheckCircle2, ChevronDown, ChevronRight, CircleSlash, Copy, ExternalLink, FolderOpen, MinusCircle, Paperclip, Pencil, X, XCircle } from "lucide-react";
 import { completeRun, completeRunWithSkip, deleteRun, updateRunResult } from "@/lib/actions/test-runs";
-import { createBug } from "@/lib/actions/automation-bugs";
+import { createBug, updateBug, updateBugStatus } from "@/lib/actions/automation-bugs";
 import { ConfirmDialog, Spinner, Toast, useToast } from "@/components/ui/feedback";
 import { entityCode, runCodeOf } from "@/lib/format";
 import {
@@ -1050,6 +1050,14 @@ export function RunExecutor({
           onAttachmentsChange={(list) => patchResult(modalItem.id, { attachments: list })}
           onOpenBugDetail={setBugDetailId}
           bugPatch={bugPatch}
+          onBugStatusChange={(bugId, status) => {
+            // Badge bug di baris TC ikut berubah setelah bug lama di-Resolve.
+            mapResults((r) =>
+              r.bugs?.some((b) => b.id === bugId)
+                ? { ...r, bugs: r.bugs.map((b) => (b.id === bugId ? { ...b, status } : b)) }
+                : r
+            );
+          }}
           onSave={async (data) => {
             const res = await updateRunResult(modalItem.id, {
               status: data.status,
@@ -1065,8 +1073,34 @@ export function RunExecutor({
               notes: data.notes ?? null,
             });
 
-            // Mode Fail: buat Bug Ticket yang otomatis ter-link ke TC + hasil run ini.
             if (data.bug) {
+              /**
+               * Mode "edit": QA hanya menambah detail/evidence pada bug yang
+               * sama — tidak ada record bug baru.
+               */
+              if (data.bug.mode === "edit" && data.bug.id) {
+                const upRes = await updateBug({
+                  bugId: data.bug.id,
+                  title: data.bug.title,
+                  description: data.actualResult,
+                  severity: data.bug.severity || undefined,
+                  expectedResult: modalItem.testCase?.expectedResult ?? undefined,
+                });
+                if (upRes.error) return { error: upRes.error };
+                patchBug(data.bug.id, {
+                  title: data.bug.title,
+                  description: data.actualResult ?? null,
+                  severity: data.bug.severity || null,
+                  externalLink: null,
+                });
+                return { success: true };
+              }
+
+              /**
+               * Mode "new": buat Bug BARU (Bug ID baru) yang ter-link ke TC +
+               * hasil eksekusi ini. Bug lama sudah di-Resolve lewat tombol di
+               * form, jadi riwayatnya tetap tercatat.
+               */
               const bugRes = await createBug({
                 title: data.bug.title,
                 description: data.actualResult,
@@ -2360,6 +2394,7 @@ function ExecutionModal({
   onAttachmentsChange,
   onOpenBugDetail,
   bugPatch,
+  onBugStatusChange,
   onSave,
 }: {
   item: RunResultItem;
@@ -2373,12 +2408,18 @@ function ExecutionModal({
   onOpenBugDetail?: (bugId: string) => void;
   /** Patch bug hasil Edit Bug dari parent — dipakai untuk update `linkedBugs` in-place. */
   bugPatch?: { id: string; patch: BugEditableFields } | null;
+  /** Dipanggil setelah bug lama di-Resolve supaya badge di baris TC ikut berubah. */
+  onBugStatusChange?: (bugId: string, status: BugStatus) => void;
   onSave: (data: {
     status: RunResultItem["status"];
     actualResult?: string;
     notes?: string;
-    /** Diisi hanya di mode Fail: bug baru yang dibuat & otomatis ter-link ke TC ini. */
-    bug?: { title: string; severity: string };
+    /**
+     * Mode Fail saja:
+     * - `new`  → buat Bug BARU (ID baru) ter-link ke TC + hasil run ini;
+     * - `edit` → perbarui bug yang sedang ter-link (tanpa record baru).
+     */
+    bug?: { mode: "new" | "edit"; id?: string; title: string; severity: string };
   }) => Promise<{ success?: boolean; error?: string }>;
 }) {
   const [status, setStatus] = useState<RunResultItem["status"]>(item.status);
@@ -2451,6 +2492,41 @@ function ExecutionModal({
   const [bugHistoryOpen, setBugHistoryOpen] = useState(false);
   // Status tombol "Salin" Test Data (kembali normal setelah 2 detik).
   const [testDataCopied, setTestDataCopied] = useState(false);
+
+  /**
+   * Bug AKTIF yang menempel ke hasil eksekusi ini (fallback: bug aktif mana pun
+   * di riwayat TC). Dasar banner "Active Bug Attached" + penentu mode form.
+   */
+  const activeBug =
+    (item.bugs ?? []).find((b) => b.status === "OPEN" || b.status === "IN_PROGRESS") ??
+    linkedBugs.find((b) => b.status === "OPEN" || b.status === "IN_PROGRESS") ??
+    null;
+
+  /**
+   * Mode form bug (hanya relevan saat status Fail):
+   * - "edit" → QA menambah detail/evidence pada bug aktif (default bila ada);
+   * - "new"  → Retest Fail karena ISSUE BERBEDA: bug lama di-Resolve, bug baru dibuat.
+   */
+  const [bugMode, setBugMode] = useState<"new" | "edit">("new");
+  /** Sekali QA memilih "buat bug baru", pilihan itu tidak ditimpa lagi. */
+  const [userChoseNewBug, setUserChoseNewBug] = useState(false);
+  const [bugActionPending, setBugActionPending] = useState(false);
+  const appliedBugRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (userChoseNewBug) return;
+    setBugMode(activeBug ? "edit" : "new");
+  }, [activeBug, userChoseNewBug]);
+
+  // Prefill judul & severity dari bug aktif (sekali per bug) supaya mode edit
+  // langsung memperlihatkan isi bug yang sedang diperbarui.
+  useEffect(() => {
+    if (!activeBug) return;
+    if (appliedBugRef.current === activeBug.id) return;
+    appliedBugRef.current = activeBug.id;
+    setBugTitle(activeBug.title);
+    setBugSeverity(activeBug.severity ?? "MEDIUM");
+  }, [activeBug]);
 
   /**
    * Split panel yang bisa di-resize: lebar kolom kiri dalam persen, dibatasi
@@ -2544,7 +2620,6 @@ function ExecutionModal({
 
   // Mode Fail -> form berubah jadi Bug Reporting Form.
   const isFail = status === "FAIL";
-  const hasLinkedBug = (item.bugs?.length ?? 0) > 0;
   /**
    * Sudah pernah disimpan ke DB? Dilihat dari DATA TERSIMPAN (status bukan
    * NOT_RUN, atau sudah ada actual result / notes) — bukan draft di form,
@@ -2650,14 +2725,48 @@ function ExecutionModal({
     outline: "none",
   };
 
+  /**
+   * "Resolve Bug Lama & Laporkan Issue Baru": bug lama di-Resolve di server,
+   * lalu form dikosongkan supaya Simpan membuat Bug BARU untuk run ini.
+   */
+  const resolveOldAndStartNew = async () => {
+    if (!activeBug || bugActionPending) return;
+    setBugActionPending(true);
+    setMsg(null);
+    const res = await updateBugStatus(activeBug.id, "RESOLVED");
+    setBugActionPending(false);
+    if (res.error) {
+      setMsg(res.error);
+      return;
+    }
+    // Cermin lokal: badge di Bug History + badge di baris TC ikut jadi Resolved.
+    setLinkedBugs((prev) =>
+      prev.map((b) => (b.id === activeBug.id ? { ...b, status: "RESOLVED" } : b))
+    );
+    onBugStatusChange?.(activeBug.id, "RESOLVED");
+    appliedBugRef.current = null;
+    setUserChoseNewBug(true);
+    setBugMode("new");
+    // Form bug dikosongkan: judul kembali ke default, detail siap diisi ulang.
+    setBugTitle(`[BUG] - ${item.titleSnapshot}`);
+    setBugSeverity("MEDIUM");
+    setActualResult("");
+  };
+
+  /** "Update Bug Saat Ini": kembali ke mode edit (tambah detail pada bug yang sama). */
+  const useCurrentBug = () => {
+    setUserChoseNewBug(false);
+    setBugMode("edit");
+    setMsg(null);
+  };
+
   const save = async () => {
     if (saving) return; // penjaga double-click
     setMsg(null);
 
-    // Validasi khusus mode Fail: judul bug (kalau bug baru akan dibuat) dan
-    // langkah reproduksi wajib diisi.
+    // Validasi khusus mode Fail: judul bug + langkah reproduksi wajib diisi.
     if (isFail) {
-      if (!hasLinkedBug && !bugTitle.trim()) {
+      if (!bugTitle.trim()) {
         setMsg("Judul bug wajib diisi.");
         return;
       }
@@ -2684,9 +2793,16 @@ function ExecutionModal({
       status,
       actualResult,
       notes,
-      // Bug hanya dibuat sekali per hasil eksekusi; kalau sudah ada yang
-      // ter-link, submit berikutnya cukup memperbarui detail eksekusi.
-      bug: isFail && !hasLinkedBug ? { title: bugTitle.trim(), severity: bugSeverity } : undefined,
+      // Mode Fail: "edit" memperbarui bug yang sudah ter-link, "new" membuat bug
+      // BARU (dipakai saat retest gagal karena issue berbeda).
+      bug: isFail
+        ? {
+            mode: bugMode === "edit" && activeBug ? "edit" : "new",
+            id: bugMode === "edit" ? activeBug?.id : undefined,
+            title: bugTitle.trim(),
+            severity: bugSeverity,
+          }
+        : undefined,
     });
     if (res.error) {
       setSaving(false);
@@ -3048,83 +3164,169 @@ function ExecutionModal({
           >
             {showBugForm ? (
               <>
-                {/* Bug Reporting Form: hanya di mode edit, saat status Fail */}
-                {hasLinkedBug ? (
+                {/* Bug aktif yang menempel di TC ini → banner + pilihan aksi. */}
+                {activeBug && (
                   <div
                     style={{
                       display: "flex",
-                      alignItems: "flex-start",
-                      gap: "0.4rem",
-                      padding: "0.5rem 0.7rem",
-                      borderRadius: 8,
+                      flexDirection: "column",
+                      gap: "0.5rem",
+                      padding: "0.6rem 0.7rem",
+                      borderRadius: 10,
                       background: "#FEF2F2",
                       border: "1px solid #FECDD3",
-                      color: "#B91C1C",
-                      fontSize: "0.72rem",
-                      lineHeight: 1.5,
                     }}
                   >
-                    <Bug size={13} style={{ flexShrink: 0, marginTop: 2 }} />
-                    <span>
-                      Bug sudah terhubung ke hasil eksekusi ini — menyimpan hanya memperbarui detail
-                      eksekusi, bukan membuat bug baru.
-                    </span>
-                  </div>
-                ) : (
-                  <>
-                    <div>
-                      <label style={bugLabelStyle}>
-                        Bug Title <span style={{ color: "#E11D48" }}>*</span>
-                      </label>
-                      <input
-                        type="text"
-                        value={bugTitle}
-                        onChange={(e) => setBugTitle(e.target.value)}
-                        disabled={!editable}
-                        placeholder="Ringkasan singkat isu/bug yang ditemukan..."
-                        style={{ ...bugFieldStyle, height: 36 }}
-                      />
+                    <div style={{ display: "flex", alignItems: "flex-start", gap: "0.4rem" }}>
+                      <Bug size={13} style={{ flexShrink: 0, marginTop: 2, color: "#DC2626" }} />
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: "0.75rem", fontWeight: 700, color: "#B91C1C" }}>
+                          Active Bug Attached
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => onOpenBugDetail?.(activeBug.id)}
+                          title={activeBug.title}
+                          style={{
+                            display: "block",
+                            maxWidth: "100%",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                            border: "none",
+                            background: "transparent",
+                            padding: 0,
+                            marginTop: 2,
+                            fontFamily: "var(--font-mono, monospace)",
+                            fontSize: "0.7rem",
+                            color: "#B91C1C",
+                            textDecoration: "underline",
+                            cursor: "pointer",
+                            textAlign: "left",
+                          }}
+                        >
+                          {entityCode("BUG", activeBug.id)} · {activeBug.title}
+                        </button>
+                      </div>
                     </div>
 
-                    <div>
-                      <label style={bugLabelStyle}>Severity</label>
-                      <Select
-                        value={bugSeverity}
-                        onChange={(e) => setBugSeverity(e.target.value)}
-                        disabled={!editable}
-                        ariaLabel="Severity bug"
-                      >
-                        {SEVERITIES.map((s) => (
-                          <option key={s.value} value={s.value}>
-                            {s.label}
-                          </option>
-                        ))}
-                      </Select>
-                    </div>
-
-                    <div>
-                      <label style={bugLabelStyle}>
-                        Environment{" "}
-                        <span style={{ fontWeight: 500, color: "#9CA3AF" }}>
-                          (dari Test Run)
-                        </span>
-                      </label>
-                      <input
-                        type="text"
-                        value={environment ?? "—"}
-                        readOnly
-                        disabled
-                        title="Environment mengikuti Test Run terkait."
+                    <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
+                      <button
+                        type="button"
+                        onClick={() => void resolveOldAndStartNew()}
+                        disabled={bugActionPending || !editable}
+                        title="Tandai bug lama Resolved, lalu isi form untuk melaporkan issue baru."
                         style={{
-                          ...bugFieldStyle,
-                          height: 36,
-                          background: "#F9FAFB",
-                          color: "#6B7280",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "0.3rem",
+                          padding: "0.35rem 0.6rem",
+                          borderRadius: 7,
+                          border: "1px solid #FECDD3",
+                          background: bugMode === "new" ? "#DC2626" : "#fff",
+                          color: bugMode === "new" ? "#fff" : "#B91C1C",
+                          fontSize: "0.7rem",
+                          fontWeight: 600,
+                          cursor: bugActionPending || !editable ? "not-allowed" : "pointer",
+                          opacity: bugActionPending ? 0.7 : 1,
                         }}
-                      />
+                      >
+                        <Check size={12} />
+                        {bugActionPending ? "Memproses…" : "Resolve Bug Lama & Laporkan Issue Baru"}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={useCurrentBug}
+                        disabled={!editable}
+                        title="Tambahkan detail/evidence pada bug yang sama."
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "0.3rem",
+                          padding: "0.35rem 0.6rem",
+                          borderRadius: 7,
+                          border: "1px solid #E2E8F0",
+                          background: bugMode === "edit" ? "#0F172A" : "#fff",
+                          color: bugMode === "edit" ? "#fff" : "#334155",
+                          fontSize: "0.7rem",
+                          fontWeight: 600,
+                          cursor: editable ? "pointer" : "not-allowed",
+                        }}
+                      >
+                        <Pencil size={12} /> Update Bug Saat Ini
+                      </button>
                     </div>
-                  </>
+                  </div>
                 )}
+
+                {/* Indikator: bug baru vs edit bug saat ini. */}
+                <div
+                  style={{
+                    alignSelf: "flex-start",
+                    padding: "3px 9px",
+                    borderRadius: 999,
+                    fontSize: "0.7rem",
+                    fontWeight: 600,
+                    background: bugMode === "new" ? "#EFF6FF" : "#FFFBEB",
+                    color: bugMode === "new" ? "#1D4ED8" : "#B45309",
+                    border: `1px solid ${bugMode === "new" ? "#BFDBFE" : "#FDE68A"}`,
+                  }}
+                >
+                  {bugMode === "new"
+                    ? "Membuat Bug Baru untuk Test Run ini"
+                    : `Mengedit ${activeBug ? entityCode("BUG", activeBug.id) : "bug saat ini"}`}
+                </div>
+
+                <div>
+                  <label style={bugLabelStyle}>
+                    Bug Title <span style={{ color: "#E11D48" }}>*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={bugTitle}
+                    onChange={(e) => setBugTitle(e.target.value)}
+                    disabled={!editable}
+                    placeholder="Ringkasan singkat isu/bug yang ditemukan..."
+                    style={{ ...bugFieldStyle, height: 36 }}
+                  />
+                </div>
+
+                <div>
+                  <label style={bugLabelStyle}>Severity</label>
+                  <Select
+                    value={bugSeverity}
+                    onChange={(e) => setBugSeverity(e.target.value)}
+                    disabled={!editable}
+                    ariaLabel="Severity bug"
+                  >
+                    {SEVERITIES.map((s) => (
+                      <option key={s.value} value={s.value}>
+                        {s.label}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+
+                <div>
+                  <label style={bugLabelStyle}>
+                    Environment{" "}
+                    <span style={{ fontWeight: 500, color: "#9CA3AF" }}>(dari Test Run)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={environment ?? "—"}
+                    readOnly
+                    disabled
+                    title="Environment mengikuti Test Run terkait."
+                    style={{
+                      ...bugFieldStyle,
+                      height: 36,
+                      background: "#F9FAFB",
+                      color: "#6B7280",
+                    }}
+                  />
+                </div>
 
                 <div>
                   <label style={bugLabelStyle}>
@@ -3486,8 +3688,8 @@ function ExecutionModal({
                       >
                         {saving
                           ? "Menyimpan..."
-                          : isFail && !hasLinkedBug
-                            ? "Laporkan Bug"
+                          : isFail && bugMode === "new"
+                            ? "Laporkan Bug Baru"
                             : "Simpan Eksekusi"}
                       </button>
                     </>

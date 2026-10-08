@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRefresh } from "@/lib/client/refresh-context";
-import { Bug, Check, CheckCircle2, ChevronDown, ChevronRight, CircleSlash, Copy, ExternalLink, FolderOpen, MinusCircle, Paperclip, Pencil, X, XCircle } from "lucide-react";
+import { AlertTriangle, Bug, Check, CheckCircle2, ChevronDown, ChevronRight, CircleSlash, Copy, ExternalLink, FolderOpen, MinusCircle, Paperclip, Pencil, X, XCircle } from "lucide-react";
 import { completeRun, completeRunWithSkip, deleteRun, updateRunResult } from "@/lib/actions/test-runs";
 import { createBug, updateBug, updateBugStatus } from "@/lib/actions/automation-bugs";
 import { ConfirmDialog, Spinner, Toast, useToast } from "@/components/ui/feedback";
@@ -261,6 +261,9 @@ export function RunExecutor({
   // Modal ringkasan + overall notes sebelum Complete (Completion Summary)
   const [completeOpen, setCompleteOpen] = useState(false);
   const [overallNotes, setOverallNotes] = useState("");
+  // Gate Complete Run: muncul kalau masih ada bug OPEN yang tertaut ke run ini.
+  const [bugGateOpen, setBugGateOpen] = useState(false);
+  const [bugGateReason, setBugGateReason] = useState("");
   const [editOpen, setEditOpen] = useState(false);
   const [completing, setCompleting] = useState(false);
   // Modal report
@@ -421,25 +424,57 @@ export function RunExecutor({
   }, [groups]);
 
   // --- Complete Run flow ---
+  /**
+   * Bug ber-status OPEN yang masih tertaut ke hasil eksekusi run ini (unik per
+   * bug). Dipakai sebagai gate: run tidak boleh langsung diselesaikan selama
+   * masih ada bug OPEN — QA harus mengisi alasan force-complete dulu.
+   */
+  const openBugs = useMemo(() => {
+    const map = new Map<string, { id: string; title: string }>();
+    for (const item of items) {
+      for (const b of item.bugs ?? []) {
+        if (b.status === "OPEN" && !map.has(b.id)) map.set(b.id, { id: b.id, title: b.title });
+      }
+    }
+    return Array.from(map.values());
+  }, [items]);
+
   // Complete selalu lewat Completion Summary Modal dulu: QA me-review catatan
   // per TC dan mengisi overall notes sebelum status run diubah.
   const handleCompleteClick = () => {
     setCompleteOpen(true);
   };
 
-  const finalizeComplete = async () => {
+  /**
+   * @param forceReason Alasan force-complete saat masih ada bug OPEN (dari gate
+   *   modal). Tanpa argumen dan ada bug OPEN, fungsi ini menahan penyelesaian
+   *   dan membuka gate modal.
+   */
+  const finalizeComplete = async (forceReason?: string) => {
+    if (!forceReason && openBugs.length > 0) {
+      setCompleteOpen(false);
+      setBugGateReason("");
+      setBugGateOpen(true);
+      return;
+    }
+
     setCompleting(true);
+    // Catatan alasan dibawa serta ke overallNotes supaya jejaknya tersimpan.
+    const notes = forceReason
+      ? `${overallNotes.trim()}\n\n[Force complete — masih ada ${openBugs.length} bug OPEN] ${forceReason.trim()}`.trim()
+      : overallNotes;
     // Ada TC untested -> server menandainya SKIPPED sekaligus menyelesaikan run.
     const res =
       untested > 0
-        ? await completeRunWithSkip(runId, overallNotes)
-        : await completeRun(runId, overallNotes);
+        ? await completeRunWithSkip(runId, notes)
+        : await completeRun(runId, notes);
     setCompleting(false);
     if (res.error) {
       showToast(res.error, "error");
       return;
     }
     setCompleteOpen(false);
+    setBugGateOpen(false);
     showToast("Test run diselesaikan.", "success");
     refresh();
   };
@@ -1216,6 +1251,18 @@ export function RunExecutor({
         />
       )}
 
+      {/* Modal: gate bug OPEN — konfirmasi + alasan wajib sebelum Complete */}
+      {bugGateOpen && (
+        <BugOpenConfirmModal
+          bugs={openBugs}
+          reason={bugGateReason}
+          onReasonChange={setBugGateReason}
+          onReview={() => setBugGateOpen(false)}
+          onConfirm={() => void finalizeComplete(bugGateReason)}
+          completing={completing}
+        />
+      )}
+
       {/* Modal: Report export options */}
       {reportOpen &&
         createPortal(
@@ -1924,6 +1971,284 @@ function CompleteRunModal({
             onMouseLeave={(e) => (e.currentTarget.style.background = "#FFC348")}
           >
             {completing ? "Menyelesaikan..." : "Complete Run"}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+/**
+ * Gate Complete Run — masih ada bug OPEN yang tertaut ke run ini. Run TIDAK
+ * langsung diselesaikan: QA memilih meninjau bug dulu, atau force complete
+ * dengan alasan tertulis (wajib).
+ */
+function BugOpenConfirmModal({
+  bugs,
+  reason,
+  onReasonChange,
+  onReview,
+  onConfirm,
+  completing,
+}: {
+  bugs: { id: string; title: string }[];
+  reason: string;
+  onReasonChange: (v: string) => void;
+  onReview: () => void;
+  onConfirm: () => void;
+  completing: boolean;
+}) {
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !completing) onReview();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [onReview, completing]);
+
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, []);
+
+  // Tombol force-complete hanya aktif kalau alasannya sudah diisi.
+  const canConfirm = reason.trim().length > 0 && !completing;
+
+  const labelStyle: React.CSSProperties = {
+    display: "block",
+    fontSize: "0.75rem",
+    fontWeight: 700,
+    color: "#64748B",
+    marginBottom: "0.5rem",
+  };
+
+  return createPortal(
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Selesaikan Test Run dengan Bug Open?"
+      onClick={() => {
+        if (!completing) onReview();
+      }}
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 270,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "1rem",
+        background: "rgba(15, 23, 42, 0.45)",
+        backdropFilter: "blur(4px)",
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: "100%",
+          maxWidth: 560,
+          maxHeight: "85vh",
+          background: "#fff",
+          borderRadius: 16,
+          border: "1px solid #F1F5F9",
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
+          boxShadow: "0 25px 50px -12px rgba(0,0,0,0.25)",
+          animation: "modalIn 0.18s ease-out",
+        }}
+      >
+        <div
+          style={{
+            flex: 1,
+            minHeight: 0,
+            overflowY: "auto",
+            padding: "1.5rem",
+            display: "flex",
+            flexDirection: "column",
+            gap: "1.1rem",
+          }}
+        >
+          <h3 style={{ margin: 0, fontSize: "1.125rem", fontWeight: 700, color: "#0F172A" }}>
+            Selesaikan Test Run dengan Bug Open?
+          </h3>
+
+          {/* Warning + jumlah bug */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "flex-start",
+              gap: "0.5rem",
+              padding: "0.7rem 0.85rem",
+              borderRadius: 10,
+              background: "#FFF7ED",
+              border: "1px solid #FED7AA",
+              color: "#9A3412",
+              fontSize: "0.8rem",
+              lineHeight: 1.5,
+            }}
+          >
+            <AlertTriangle size={15} style={{ flexShrink: 0, marginTop: 1 }} />
+            <span>
+              Masih terdapat <strong>{bugs.length}</strong> bug aktif berstatus{" "}
+              <strong>OPEN</strong> pada Test Run ini.
+            </span>
+          </div>
+
+          {/* Daftar ringkas bug OPEN (ID + judul) */}
+          <div>
+            <span style={labelStyle}>Bug open ({bugs.length})</span>
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                maxHeight: "11rem",
+                overflowY: "auto",
+              }}
+            >
+              {bugs.map((b, idx) => (
+                <div
+                  key={b.id}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.5rem",
+                    padding: "0.4rem 0",
+                    borderBottom: idx < bugs.length - 1 ? "1px solid #F1F5F9" : "none",
+                  }}
+                >
+                  <Bug size={12} style={{ flexShrink: 0, color: "#DC2626" }} />
+                  <span
+                    style={{
+                      flexShrink: 0,
+                      fontFamily: "var(--font-mono, monospace)",
+                      fontSize: "0.7rem",
+                      color: "#64748B",
+                    }}
+                  >
+                    {entityCode("BUG", b.id)}
+                  </span>
+                  <span
+                    title={b.title}
+                    style={{
+                      minWidth: 0,
+                      fontSize: "0.78rem",
+                      color: "#334155",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {b.title}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Alasan force-complete (wajib) */}
+          <div>
+            <label htmlFor="bug-open-reason" style={labelStyle}>
+              Catatan / Remarks <span style={{ color: "#E11D48" }}>*</span>
+            </label>
+            <textarea
+              id="bug-open-reason"
+              value={reason}
+              onChange={(e) => onReasonChange(e.target.value)}
+              placeholder="Alasan menyelesaikan run meskipun masih ada bug open..."
+              style={{
+                width: "100%",
+                height: 84,
+                padding: "0.75rem",
+                border: "1px solid #E2E8F0",
+                borderRadius: 8,
+                fontSize: "0.75rem",
+                color: "#1F2937",
+                background: "#fff",
+                outline: "none",
+                resize: "vertical",
+                boxSizing: "border-box",
+                transition: "border-color 0.15s ease, box-shadow 0.15s ease",
+              }}
+              onFocus={(e) => {
+                e.currentTarget.style.borderColor = "#FBBF24";
+                e.currentTarget.style.boxShadow = "0 0 0 2px #FDE68A";
+              }}
+              onBlur={(e) => {
+                e.currentTarget.style.borderColor = "#E2E8F0";
+                e.currentTarget.style.boxShadow = "none";
+              }}
+            />
+            <p style={{ margin: "0.35rem 0 0", fontSize: "0.72rem", color: "#94A3B8" }}>
+              Wajib diisi untuk menyelesaikan run saat bug masih OPEN.
+            </p>
+          </div>
+        </div>
+
+        <div
+          style={{
+            flex: "none",
+            padding: "1rem 1.5rem",
+            borderTop: "1px solid #F1F5F9",
+            background: "#fff",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "flex-end",
+            gap: "0.75rem",
+            flexWrap: "wrap",
+          }}
+        >
+          <button
+            type="button"
+            onClick={onReview}
+            disabled={completing}
+            style={{
+              height: 34,
+              padding: "0 0.85rem",
+              fontSize: "0.75rem",
+              fontWeight: 600,
+              color: "#334155",
+              background: "#fff",
+              border: "1px solid #CBD5E1",
+              borderRadius: 8,
+              cursor: completing ? "not-allowed" : "pointer",
+            }}
+            onMouseEnter={(e) => {
+              if (!completing) e.currentTarget.style.background = "#F8FAFC";
+            }}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "#fff")}
+          >
+            Tinjau Bug History
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={!canConfirm}
+            title={canConfirm ? undefined : "Isi catatan dulu untuk melanjutkan"}
+            style={{
+              height: 34,
+              padding: "0 1rem",
+              fontSize: "0.75rem",
+              fontWeight: 600,
+              color: "#fff",
+              background: "#DC2626",
+              border: "none",
+              borderRadius: 8,
+              boxShadow: "0 1px 2px rgba(15, 23, 42, 0.08)",
+              cursor: canConfirm ? "pointer" : "not-allowed",
+              opacity: canConfirm ? 1 : 0.5,
+              transition: "background-color 0.15s ease",
+            }}
+            onMouseEnter={(e) => {
+              if (canConfirm) e.currentTarget.style.background = "#B91C1C";
+            }}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "#DC2626")}
+          >
+            {completing ? "Menyelesaikan..." : "Selesaikan dengan Catatan"}
           </button>
         </div>
       </div>
@@ -3343,9 +3668,42 @@ function ExecutionModal({
               </>
             )}
 
-            {/* Evidence: screenshot/video untuk hasil eksekusi ini */}
+            {/* Evidence: header inline (label kiri + tombol kanan), lalu preview
+                file yang diunggah. */}
             <div style={{ marginTop: "0.9rem" }}>
-              <div style={{ ...sectionLabel, margin: "0 0 0.4rem" }}>Evidence</div>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: "0.5rem",
+                  marginBottom: "0.5rem",
+                }}
+              >
+                <span style={{ ...sectionLabel, margin: 0, fontWeight: 600 }}>Evidence</span>
+                {editable && (
+                  <button
+                    type="button"
+                    onClick={() => evidenceRef.current?.pick()}
+                    title="Tambah file evidence"
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "0.3rem",
+                      padding: 0,
+                      border: "none",
+                      background: "transparent",
+                      color: "#D97706",
+                      fontSize: "0.76rem",
+                      fontWeight: 600,
+                      cursor: "pointer",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    <Paperclip size={12} /> Tambah File
+                  </button>
+                )}
+              </div>
               <AttachmentsPanel
                 owner={{ testRunResultId: item.id }}
                 attachments={item.attachments ?? []}
@@ -3355,6 +3713,7 @@ function ExecutionModal({
                 deferred
                 compact
                 plain
+                hideTrigger
               />
             </div>
 
@@ -3418,18 +3777,18 @@ function ExecutionModal({
                       Belum ada bug yang pernah dilaporkan untuk test case ini.
                     </div>
                   ) : (
-                    /* List ringkas: SATU baris per bug (ID · judul · severity ·
-                       status), dengan batas tinggi + scroll agar tidak memanjang. */
+                    /* List polos: SATU baris per bug — ikon + judul di kiri, badge
+                       status di kanan — tanpa kotak pembungkus; batas tinggi +
+                       scroll supaya tidak memanjang. */
                     <div
                       style={{
                         display: "flex",
                         flexDirection: "column",
-                        gap: "0.3rem",
                         maxHeight: "12rem",
                         overflowY: "auto",
                       }}
                     >
-                      {linkedBugs.map((b) => {
+                      {linkedBugs.map((b, idx) => {
                         const st = BUG_STATUS_BADGE[b.status];
                         // Metadata tetap dibawa sebagai tooltip judul — baris
                         // metadatanya sendiri sudah dihapus agar tetap 1 baris.
@@ -3458,10 +3817,11 @@ function ExecutionModal({
                               display: "flex",
                               alignItems: "center",
                               gap: "0.5rem",
-                              padding: "0.35rem 0.5rem",
-                              border: "1px solid #E2E8F0",
-                              borderRadius: 6,
-                              background: "#fff",
+                              // Baris polos: tanpa kotak/border card — hanya garis
+                              // pemisah halus antar baris (kalau lebih dari satu).
+                              padding: "0.4rem 0",
+                              borderBottom:
+                                idx < linkedBugs.length - 1 ? "1px solid #F1F5F9" : "none",
                             }}
                           >
                             {/* Ikon bug + judulnya. Judul tetap jadi pintu

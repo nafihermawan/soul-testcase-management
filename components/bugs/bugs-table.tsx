@@ -522,7 +522,9 @@ export function BugsPageClient({
                 // Title dilebarkan tabel ikut melebar, bukan menekan kolom lain.
                 minWidth: Math.max(1280, FIXED_COLUMNS_WIDTH + titleWidth),
                 borderCollapse: "collapse",
-                fontSize: "0.85rem",
+                // Seluruh teks tabel (th & td) dipatok 12px (text-xs); nilai
+                // ini jadi basis semua sel supaya seragam.
+                fontSize: 12,
                 tableLayout: "fixed",
               }}
             >
@@ -648,7 +650,7 @@ export function BugsPageClient({
                             fontFamily: "var(--font-mono, monospace)",
                             color: "#94A3B8",
                             fontWeight: 400,
-                            fontSize: 11,
+                            fontSize: 12,
                             whiteSpace: "nowrap",
                           }}
                         >
@@ -704,7 +706,7 @@ export function BugsPageClient({
                             title={b.run.name}
                             style={{
                               display: "inline-block",
-                              fontSize: "0.78rem",
+                              fontSize: 12,
                               fontWeight: 600,
                               color: "#2563EB",
                               textDecoration: "none",

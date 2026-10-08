@@ -37,6 +37,8 @@ export type AttachmentsPanelHandle = {
   commit: () => Promise<{ ok: boolean; error?: string }>;
   /** Buang perubahan tertunda dan kembali ke daftar awal. */
   reset: () => void;
+  /** Buka dialog pemilih file — dipakai parent yang punya tombol sendiri. */
+  pick: () => void;
 };
 
 /** Ambil file dari clipboard: `files` (salin dari file manager) atau `items` (screenshot). */
@@ -78,6 +80,7 @@ export function AttachmentsPanel({
   plain = false,
   thumbnailOnly = false,
   deferred = false,
+  hideTrigger = false,
   handleRef,
 }: {
   owner: AttachmentOwner;
@@ -99,7 +102,11 @@ export function AttachmentsPanel({
    *  apa pun sampai `handleRef.commit()` dipanggil (tombol Simpan). Dipakai
    *  modal eksekusi agar evidence batal tersimpan saat Batal/Close. */
   deferred?: boolean;
-  /** Handle untuk memicu commit/reset saat `deferred`. */
+  /** Sembunyikan tombol "Tambah File" bawaan panel — dipakai saat parent
+   *  menaruh pemicunya sendiri (mis. inline di header section Evidence).
+   *  Pemicunya tetap bisa dipanggil lewat `handleRef.current.pick()`. */
+  hideTrigger?: boolean;
+  /** Handle untuk memicu commit/reset/pick saat `deferred`. */
   handleRef?: React.Ref<AttachmentsPanelHandle>;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -359,7 +366,7 @@ export function AttachmentsPanel({
     return { ok: true };
   };
 
-  useImperativeHandle(handleRef, () => ({ commit: commitStaged, reset: resetStaged }));
+  useImperativeHandle(handleRef, () => ({ commit: commitStaged, reset: resetStaged, pick }));
 
   // `thumbnailOnly` = mode paling ringkas: tanpa kartu DAN tanpa caption.
   const bare = plain || thumbnailOnly;
@@ -494,8 +501,9 @@ export function AttachmentsPanel({
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "0.55rem" }}>
           {/* Tombol ringkas untuk menambah/mengganti file — dropzone besar
-              sudah disembunyikan karena daftar sudah berisi. */}
-          {canEdit && (
+              sudah disembunyikan karena daftar sudah berisi. Disembunyikan
+              total kalau parent menyediakan pemicunya sendiri (hideTrigger). */}
+          {canEdit && !hideTrigger && (
             <div>
               <button
                 type="button"

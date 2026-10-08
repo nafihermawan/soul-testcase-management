@@ -8,6 +8,7 @@ import { useRefresh } from "@/lib/client/refresh-context";
 import { RowActionsMenu } from "@/components/settings/row-actions-menu";
 import { ConfirmDialog, Spinner, Toast, useToast } from "@/components/ui/feedback";
 import { Select } from "@/components/ui/select";
+import { InitialsAvatar } from "@/components/ui/avatar";
 
 export type UserItem = {
   id: string;
@@ -18,20 +19,51 @@ export type UserItem = {
   isQaLead: boolean;
 };
 
+/** Filter role di toolbar: role sistem + opsi khusus "Lead QA". */
+export type RoleFilter = "ALL" | UserItem["role"] | "LEAD";
+
 const roleOptions = [
   { value: "QA", label: "QA" },
   { value: "DEVELOPER", label: "Developer" },
   { value: "PRODUCT", label: "Product" },
 ] as const;
 
-const roleBadgeStyle: React.CSSProperties = {
-  display: "inline-block",
-  padding: "0.2rem 0.65rem",
-  borderRadius: 999,
-  background: "#E5E7EB",
-  color: "#1F2937",
-  fontSize: "0.72rem",
-  fontWeight: 600,
+/** Warna badge role: QA/Lead QA amber, Developer blue, Product purple. */
+const ROLE_BADGE: Record<UserItem["role"], { bg: string; color: string; border: string }> = {
+  QA: { bg: "#FFFBEB", color: "#B45309", border: "#FDE68A" },
+  DEVELOPER: { bg: "#EFF6FF", color: "#1D4ED8", border: "#BFDBFE" },
+  PRODUCT: { bg: "#F5F3FF", color: "#6D28D9", border: "#DDD6FE" },
+};
+
+function RoleBadge({ label, tone }: { label: string; tone: UserItem["role"] }) {
+  const t = ROLE_BADGE[tone];
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        padding: "2px 10px",
+        borderRadius: 999,
+        background: t.bg,
+        color: t.color,
+        border: `1px solid ${t.border}`,
+        fontSize: 11,
+        fontWeight: 600,
+        whiteSpace: "nowrap",
+      }}
+    >
+      {label}
+    </span>
+  );
+}
+
+/** Divider inset antar baris (tidak mentok tepi kartu). */
+const insetRowDivider: React.CSSProperties = {
+  backgroundImage:
+    "linear-gradient(to right, transparent 0, transparent 16px, #F1F5F9 16px, #F1F5F9 calc(100% - 16px), transparent calc(100% - 16px))",
+  backgroundSize: "100% 1px",
+  backgroundPosition: "top left",
+  backgroundRepeat: "no-repeat",
 };
 
 const roleLabel = (role: UserItem["role"]) =>
@@ -318,12 +350,67 @@ function UserModal({
   );
 }
 
-export function UsersManager({ users }: { users: UserItem[] }) {
+export function UsersManager({
+  users,
+  query,
+  roleFilter,
+  createOpen,
+  onCreateHandled,
+}: {
+  users: UserItem[];
+  /** Pencarian dari toolbar di card header SettingsView. */
+  query: string;
+  /** Filter role dari toolbar di card header SettingsView. */
+  roleFilter: RoleFilter;
+  /** Sinyal dari tombol "Tambah User" di card header. */
+  createOpen: boolean;
+  onCreateHandled: () => void;
+}) {
   const refresh = useRefresh();
   const [modal, setModal] = useState<{ mode: "create" } | { mode: "edit"; user: UserItem } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<UserItem | null>(null);
   const [deletePending, setDeletePending] = useState(false);
   const { toast, showToast, dismissToast } = useToast();
+
+  // Tombol "Tambah User" ada di card header → buka modal create lalu reset sinyal.
+  useEffect(() => {
+    if (!createOpen) return;
+    setModal({ mode: "create" });
+    onCreateHandled();
+  }, [createOpen, onCreateHandled]);
+
+  // Pencarian + filter role diterapkan di sisi klien (daftar user sudah lengkap).
+  const needle = query.trim().toLowerCase();
+  const filtered = users.filter((u) => {
+    if (roleFilter === "LEAD") {
+      if (!u.isQaLead) return false;
+    } else if (roleFilter !== "ALL" && u.role !== roleFilter) {
+      return false;
+    }
+    if (!needle) return true;
+    return `${u.name ?? ""} ${u.email}`.toLowerCase().includes(needle);
+  });
+
+  const th: React.CSSProperties = {
+    position: "sticky",
+    top: 0,
+    zIndex: 10,
+    background: "#F8FAFC",
+    padding: "10px 10px",
+    fontSize: 13,
+    fontWeight: 600,
+    color: "#64748B",
+    textAlign: "left",
+    whiteSpace: "nowrap",
+    borderBottom: "1px solid #E5E7EB",
+  };
+
+  const td: React.CSSProperties = {
+    padding: "10px 10px",
+    fontSize: 13,
+    color: "#475569",
+    whiteSpace: "nowrap",
+  };
 
   const remove = async (user: UserItem) => {
     setDeletePending(true);
@@ -340,100 +427,79 @@ export function UsersManager({ users }: { users: UserItem[] }) {
   };
 
   return (
-    <div
-      style={{
-        marginTop: "1.5rem",
-        background: "#fff",
-        border: "1px solid rgba(229, 231, 235, 0.8)",
-        borderRadius: 8,
-        boxShadow: "var(--shadow-sm)",
-        overflow: "hidden",
-      }}
-    >
-      {/* Top bar: only Tambah User CTA, right-aligned, with divider */}
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "flex-end",
-          alignItems: "center",
-          padding: "0.875rem 1.5rem",
-          borderBottom: "1px solid #E5E7EB",
-        }}
-      >
-        <button
-          type="button"
-          onClick={() => setModal({ mode: "create" })}
-          style={{
-            padding: "0.5rem 1.1rem",
-            borderRadius: "3px !important",
-            border: "none",
-            background: "#F59E0B",
-            color: "#000000 !important",
-            fontWeight: 400,
-            fontSize: "0.875rem",
-            cursor: "pointer",
-            transition: "background-color 0.15s ease",
-          }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = "#D97706")}
-          onMouseLeave={(e) => (e.currentTarget.style.background = "#F59E0B")}
-        >
-          Tambah User
-        </button>
-      </div>
-
-      {/* Table */}
-      <div style={{ overflowX: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
+    <>
+      {/* Tabel — card pembungkus & toolbar hidup di SettingsView (card header). */}
+      <div style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
-            <tr style={{ color: "var(--text-muted)", textAlign: "left", background: "#F8FAFC", borderBottom: "1px solid #E5E7EB" }}>
-              <th style={{ padding: "0.6rem 1.25rem", fontWeight: 600 }}>Nama</th>
-              <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600 }}>Email</th>
-              <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600 }}>Role</th>
-              <th style={{ padding: "0.6rem 1.25rem", fontWeight: 600, textAlign: "right" }}>Opsi</th>
+            <tr>
+              <th style={th}>Nama</th>
+              <th style={th}>Email</th>
+              <th style={th}>Role</th>
+              <th style={{ ...th, textAlign: "right" }}>Opsi</th>
             </tr>
           </thead>
           <tbody>
-            {users.length === 0 ? (
+            {filtered.length === 0 ? (
               <tr>
-                <td colSpan={4} style={{ padding: "1.25rem", color: "var(--text-muted)", fontSize: "0.9rem", textAlign: "center" }}>
-                  Belum ada user. Tambahkan user pertama.
+                <td
+                  colSpan={4}
+                  style={{ padding: "2rem 12px", textAlign: "center", fontSize: 13, color: "#94A3B8" }}
+                >
+                  {users.length === 0
+                    ? "Belum ada user. Tambahkan user pertama."
+                    : "Tidak ada user yang cocok dengan pencarian / filter."}
                 </td>
               </tr>
             ) : (
-              users.map((u) => (
-                <tr key={u.id} style={{ borderTop: "1px solid var(--border)" }}>
-                <td style={{ padding: "0.6rem 1.25rem", fontWeight: 600 }}>{u.name ?? "—"}</td>
-                <td style={{ padding: "0.6rem 0.5rem", color: "var(--text-secondary)" }}>{u.email}</td>
-                <td style={{ padding: "0.6rem 0.5rem" }}>
-                  <span style={roleBadgeStyle}>{roleLabel(u.role)}</span>
-                  {u.isQaLead && (
+              filtered.map((u) => (
+                <tr key={u.id} style={insetRowDivider}>
+                  <td style={td}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+                      <InitialsAvatar name={u.name ?? u.email} size={20} fontSize={10} />
+                      <span
+                        style={{
+                          fontSize: 13,
+                          fontWeight: 600,
+                          color: "#1E293B",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                        }}
+                        title={u.name ?? "—"}
+                      >
+                        {u.name ?? "—"}
+                      </span>
+                    </div>
+                  </td>
+                  <td style={{ ...td, fontSize: 12, color: "#64748B" }}>{u.email}</td>
+                  <td style={td}>
                     <span
-                      style={{ ...roleBadgeStyle, marginLeft: 6, background: "#FFFBEB", color: "#B45309" }}
+                      style={{ display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}
                     >
-                      Lead QA
+                      <RoleBadge label={roleLabel(u.role)} tone={u.role} />
+                      {u.isQaLead && <RoleBadge label="Lead QA" tone="QA" />}
                     </span>
-                  )}
-                </td>
-                <td style={{ padding: "0.6rem 1.25rem" }}>
-                  <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center" }}>
-                    <RowActionsMenu
-                      actions={[
-                        {
-                          label: "Edit",
-                          icon: <Pencil size={15} />,
-                          onClick: () => setModal({ mode: "edit", user: u }),
-                        },
-                        {
-                          label: "Hapus",
-                          icon: <Trash2 size={15} />,
-                          onClick: () => setDeleteTarget(u),
-                          destructive: true,
-                        },
-                      ]}
-                    />
-                  </div>
-                </td>
-              </tr>
+                  </td>
+                  <td style={{ ...td, textAlign: "right" }}>
+                    <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center" }}>
+                      <RowActionsMenu
+                        actions={[
+                          {
+                            label: "Edit",
+                            icon: <Pencil size={15} />,
+                            onClick: () => setModal({ mode: "edit", user: u }),
+                          },
+                          {
+                            label: "Hapus",
+                            icon: <Trash2 size={15} />,
+                            onClick: () => setDeleteTarget(u),
+                            destructive: true,
+                          },
+                        ]}
+                      />
+                    </div>
+                  </td>
+                </tr>
               ))
             )}
           </tbody>
@@ -460,6 +526,6 @@ export function UsersManager({ users }: { users: UserItem[] }) {
 
       {/* Toast */}
       <Toast toast={toast} onDismiss={dismissToast} />
-    </div>
+    </>
   );
 }

@@ -2,6 +2,10 @@
 
 export type SettingsTabKey = "projects" | "users";
 
+/**
+ * Tab navigation Settings — model lama: berada DI LUAR card (tepat di bawah
+ * header halaman), tab aktif ditandai garis bawah amber + teks amber bold.
+ */
 export function SettingsTabs({
   active,
   onChange,
@@ -20,8 +24,7 @@ export function SettingsTabs({
       style={{
         display: "flex",
         gap: "0.25rem",
-        borderBottom: "1px solid var(--border)",
-        marginBottom: "1.5rem",
+        borderBottom: "1px solid #E5E7EB",
       }}
     >
       {tabs.map((tab) => {
@@ -34,14 +37,15 @@ export function SettingsTabs({
             aria-selected={isActive}
             onClick={() => onChange(tab.key)}
             style={{
-              padding: "0.55rem 1.1rem",
+              padding: "8px 14px",
               border: "none",
               background: "transparent",
-              color: isActive ? "#FFC348" : "var(--text-secondary)",
-              fontWeight: isActive ? 700 : 500,
-              fontSize: "0.875rem",
+              color: isActive ? "#F59E0B" : "#64748B",
+              fontWeight: isActive ? 700 : 600,
+              fontSize: 13,
               cursor: "pointer",
-              borderBottom: isActive ? "2px solid #FFC348" : "2px solid transparent",
+              borderBottom: isActive ? "2px solid #F59E0B" : "2px solid transparent",
+              borderRadius: "6px 6px 0 0",
               marginBottom: "-1px",
               transition: "color 0.2s ease, border-color 0.2s ease",
             }}

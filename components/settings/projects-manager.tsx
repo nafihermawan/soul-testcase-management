@@ -38,6 +38,41 @@ const platformOptions: { value: "MOBILE" | "WEB" | "HARDWARE" | "API"; label: st
   { value: "API", label: "API" },
 ];
 
+/** Filter platform di toolbar header. */
+export type PlatformFilter = "ALL" | "MOBILE" | "WEB" | "HARDWARE" | "API";
+
+/** Divider inset antar baris (tidak mentok tepi kartu). */
+const insetRowDivider: React.CSSProperties = {
+  backgroundImage:
+    "linear-gradient(to right, transparent 0, transparent 16px, #F1F5F9 16px, #F1F5F9 calc(100% - 16px), transparent calc(100% - 16px))",
+  backgroundSize: "100% 1px",
+  backgroundPosition: "top left",
+  backgroundRepeat: "no-repeat",
+};
+
+/** Header tabel bersih: tanpa isian warna, hanya garis tipis pemisah. */
+const th: React.CSSProperties = {
+  position: "sticky",
+  top: 0,
+  zIndex: 10,
+  background: "#fff",
+  padding: "10px 14px",
+  fontSize: 11,
+  fontWeight: 600,
+  color: "#94A3B8",
+  textAlign: "left",
+  whiteSpace: "nowrap",
+  borderBottom: "1px solid #E2E8F0",
+};
+
+const td: React.CSSProperties = {
+  padding: "10px 14px",
+  fontSize: 13,
+  color: "#475569",
+  whiteSpace: "nowrap",
+  verticalAlign: "middle",
+};
+
 const fieldStyle: React.CSSProperties = {
   width: "100%",
   padding: "0.5rem 0.75rem",
@@ -320,7 +355,22 @@ function ProjectModal({
   );
 }
 
-export function ProjectsManager({ projects }: { projects: Project[] }) {
+export function ProjectsManager({
+  projects,
+  query,
+  platformFilter,
+  createOpen,
+  onCreateHandled,
+}: {
+  projects: Project[];
+  /** Pencarian dari toolbar di card header SettingsView. */
+  query: string;
+  /** Filter platform dari toolbar di card header SettingsView. */
+  platformFilter: PlatformFilter;
+  /** Sinyal dari tombol "+ Tambah Project" di card header. */
+  createOpen: boolean;
+  onCreateHandled: () => void;
+}) {
   const refresh = useRefresh();
   const [modal, setModal] = useState<
     { mode: "create" } | { mode: "edit"; project: Project } | null
@@ -328,6 +378,21 @@ export function ProjectsManager({ projects }: { projects: Project[] }) {
   const [deleteTarget, setDeleteTarget] = useState<Project | null>(null);
   const [deletePending, setDeletePending] = useState(false);
   const { toast, showToast, dismissToast } = useToast();
+
+  // Tombol tambah ada di card header → buka modal create lalu reset sinyal.
+  useEffect(() => {
+    if (!createOpen) return;
+    setModal({ mode: "create" });
+    onCreateHandled();
+  }, [createOpen, onCreateHandled]);
+
+  // Pencarian (nama/key) + filter platform diterapkan di sisi klien.
+  const needle = query.trim().toLowerCase();
+  const filtered = projects.filter((p) => {
+    if (platformFilter !== "ALL" && p.platform !== platformFilter) return false;
+    if (!needle) return true;
+    return `${p.name} ${p.code}`.toLowerCase().includes(needle);
+  });
 
   const handleDelete = async (p: Project) => {
     setDeletePending(true);
@@ -341,98 +406,49 @@ export function ProjectsManager({ projects }: { projects: Project[] }) {
   };
 
   return (
-    <div
-      style={{
-        width: "100%",
-        background: "#ffffff",
-        border: "1px solid rgba(229, 231, 235, 0.8)",
-        borderRadius: 8,
-        boxShadow: "var(--shadow-sm)",
-        overflow: "hidden",
-      }}
-    >
-      {/* Top bar: only Tambah Project CTA, right-aligned, with divider */}
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "flex-end",
-          alignItems: "center",
-          padding: "0.875rem 1.5rem",
-          borderBottom: "1px solid #E5E7EB",
-        }}
-      >
-        <button
-          type="button"
-          onClick={() => setModal({ mode: "create" })}
-          style={{
-            padding: "0.5rem 1.1rem",
-            borderRadius: "3px !important",
-            border: "none",
-            background: "#F59E0B",
-            color: "#000000 !important",
-            fontWeight: 400,
-            fontSize: "0.875rem",
-            cursor: "pointer",
-            transition: "background-color 0.15s ease",
-          }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = "#D97706")}
-          onMouseLeave={(e) => (e.currentTarget.style.background = "#F59E0B")}
-          onFocus={(e) => {
-            e.currentTarget.style.boxShadow = "0 0 0 3px rgba(245, 158, 11, 0.35)";
-          }}
-          onBlur={(e) => {
-            e.currentTarget.style.boxShadow = "none";
-          }}
-        >
-          Tambah Project
-        </button>
-      </div>
-      
-
-      {/* Table */}
-      <div style={{ overflowX: "auto" }}>
-        {projects.length === 0 ? (
-          <p style={{ color: "var(--text-muted)", fontSize: "0.9rem", padding: "1.25rem" }}>
-            Belum ada project. Tambahkan project pertama untuk mulai menyusun suite & test case.
+    <>
+      {/* Tabel — toolbar (search / filter / tombol tambah) ada di card header. */}
+      <div style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
+        {filtered.length === 0 ? (
+          <p
+            style={{
+              color: "#94A3B8",
+              fontSize: 13,
+              padding: "2rem 12px",
+              textAlign: "center",
+              margin: 0,
+            }}
+          >
+            {projects.length === 0
+              ? "Belum ada project. Tambahkan project pertama untuk mulai menyusun suite & test case."
+              : "Tidak ada project yang cocok dengan pencarian / filter."}
           </p>
         ) : (
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
-              <tr
-                style={{
-                  color: "var(--text-muted)",
-                  textAlign: "left",
-                  background: "#F8FAFC",
-                  borderBottom: "1px solid #E5E7EB",
-                }}
-              >
-                <th style={{ padding: "0.6rem 1.25rem", fontWeight: 600 }}>Nama Project</th>
-                <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600 }}>Key</th>
-                <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600 }}>Platform</th>
-                <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600 }}>Suites</th>
-                <th style={{ padding: "0.6rem 1.25rem", fontWeight: 600, textAlign: "right" }}>
-                  Opsi
-                </th>
+              <tr>
+                <th style={th}>Nama Project</th>
+                <th style={th}>Key</th>
+                <th style={th}>Platform</th>
+                <th style={th}>Suites</th>
+                <th style={{ ...th, textAlign: "right" }}>Opsi</th>
               </tr>
             </thead>
             <tbody>
-              {projects.map((p) => (
+              {filtered.map((p) => (
                 <tr
                   key={p.id}
-                  style={{
-                    borderTop: "1px solid var(--border)",
-                    transition: "background 0.15s ease",
-                  }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-muted)")}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                  style={{ ...insetRowDivider, transition: "background-color 0.15s ease" }}
+                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#F8FAFC")}
+                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
                 >
-                  <td style={{ padding: "0.65rem 1.25rem" }}>
-                    <div style={{ fontWeight: 600 }}>{p.name}</div>
+                  <td style={td}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: "#1E293B" }}>{p.name}</div>
                     {p.description && (
                       <div
                         style={{
-                          fontSize: "0.75rem",
-                          color: "var(--text-muted)",
+                          fontSize: 12,
+                          color: "#94A3B8",
                           maxWidth: 320,
                           overflow: "hidden",
                           textOverflow: "ellipsis",
@@ -443,30 +459,30 @@ export function ProjectsManager({ projects }: { projects: Project[] }) {
                       </div>
                     )}
                   </td>
-                  <td style={{ padding: "0.65rem 0.5rem" }}>
+                  <td style={td}>
+                    {/* Key = teks monospace polos (tanpa chip/pill) */}
                     <span
                       style={{
-                        display: "inline-block",
-                        padding: "0.2rem 0.65rem",
-                        borderRadius: 999,
-                        background: "#E5E7EB",
-                        color: "#1F2937",
-                        fontSize: "0.72rem",
-                        fontWeight: 600,
                         fontFamily: "var(--font-mono, monospace)",
-                        letterSpacing: "0.02em",
+                        fontSize: 12,
+                        color: "#475569",
                       }}
                     >
                       {p.code}
                     </span>
                   </td>
-                  <td style={{ padding: "0.65rem 0.5rem", color: "var(--text-secondary)" }}>
-                    {p.platform ?? "—"}
+                  <td style={td}>
+                    {/* Platform = teks polos, tanpa badge berwarna */}
+                    {p.platform ? (
+                      <span style={{ fontSize: 12, fontWeight: 500, color: "#475569" }}>
+                        {platformOptions.find((o) => o.value === p.platform)?.label ?? p.platform}
+                      </span>
+                    ) : (
+                      <span style={{ color: "#94A3B8" }}>—</span>
+                    )}
                   </td>
-                  <td style={{ padding: "0.65rem 0.5rem", color: "var(--text-secondary)" }}>
-                    {p._count.suites} suite
-                  </td>
-                  <td style={{ padding: "0.65rem 1.25rem" }}>
+                  <td style={{ ...td, color: "#475569" }}>{p._count.suites} suite</td>
+                  <td style={{ ...td, textAlign: "right" }}>
                     <div
                       style={{ display: "flex", justifyContent: "flex-end", alignItems: "center" }}
                     >
@@ -528,6 +544,6 @@ export function ProjectsManager({ projects }: { projects: Project[] }) {
 
       {/* Toast */}
       <Toast toast={toast} onDismiss={dismissToast} />
-    </div>
+    </>
   );
 }

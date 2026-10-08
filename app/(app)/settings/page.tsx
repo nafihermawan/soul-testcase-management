@@ -39,13 +39,7 @@ export default function SettingsPage() {
           <TableCardSkeleton />
         </>
       ) : (
-        <>
-          <h1 style={{ fontSize: 20, fontWeight: 700, margin: "0 0 0.25rem", color: "#1E293B", letterSpacing: "-0.025em" }}>Settings</h1>
-          <p style={{ fontSize: 12, fontWeight: 400, color: "#64748B", marginBottom: "1.5rem" }}>
-            Kelola project aplikasi dan hak akses user di sini.
-          </p>
-          <SettingsView projects={data.projects} users={data.users} reload={reload} />
-        </>
+        <SettingsView projects={data.projects} users={data.users} reload={reload} />
       )}
     </main>
   );

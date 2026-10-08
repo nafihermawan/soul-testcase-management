@@ -39,10 +39,13 @@ export function InitialsAvatar({
   name,
   size = 24,
   title,
+  fontSize,
 }: {
   name: string;
   size?: number;
   title?: string;
+  /** Ukuran huruf inisial; default proporsional terhadap `size`. */
+  fontSize?: number;
 }) {
   const color = AVATAR_COLORS[hashName(name) % AVATAR_COLORS.length];
   return (
@@ -57,7 +60,7 @@ export function InitialsAvatar({
         borderRadius: "50%",
         background: color,
         color: "#fff",
-        fontSize: Math.round(size * 0.42),
+        fontSize: fontSize ?? Math.round(size * 0.42),
         fontWeight: 600,
         lineHeight: 1,
         flexShrink: 0,

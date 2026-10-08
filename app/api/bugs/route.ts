@@ -6,11 +6,20 @@ import { presignGetUrls } from "@/lib/storage/r2";
 import type { BugsPayload, BugRow } from "@/types/api";
 
 /**
+ * Fallback status: 'RESOLVED' sudah dihapus dari alur (Open → In Progress →
+ * Closed). Kalau masih ada baris lama ber-status itu, tampilkan sebagai Closed
+ * supaya tidak muncul sebagai status tanpa pilihan di dropdown.
+ */
+function normalizeBugStatus(status: BugRow["status"]): BugRow["status"] {
+  return status === "RESOLVED" ? "CLOSED" : status;
+}
+
+/**
  * GET /api/bugs
  * - tanpa query   -> seluruh bug (halaman Bugs Tracker).
  * - ?testCaseId=  -> hanya bug milik TestCase tsb, dipakai section
  *   "Linked Bugs & History" di modal detail eksekusi. Bug yang sudah
- *   RESOLVED/CLOSED tetap ikut supaya riwayatnya tidak hilang.
+ *   CLOSED tetap ikut supaya riwayatnya tidak hilang.
  */
 export async function GET(req: NextRequest) {
   const user = await apiSession();
@@ -46,7 +55,7 @@ export async function GET(req: NextRequest) {
       id: b.id,
       title: b.title,
       description: b.description,
-      status: b.status,
+      status: normalizeBugStatus(b.status),
       severity: b.severity,
       environment: b.environment,
       expectedResult: b.expectedResult,

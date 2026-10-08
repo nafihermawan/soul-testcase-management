@@ -79,12 +79,16 @@ const BUG_STATUS_RANK: Record<BugRow["status"], number> = {
   CLOSED: 3,
 };
 
-/** Warna teks status bug (teks polos, tanpa pill/box). */
-const statusColor: Record<BugRow["status"], string> = {
-  OPEN: "#E11D48", // rose-600
-  IN_PROGRESS: "#D97706", // amber-600
-  RESOLVED: "#059669", // emerald-600
-  CLOSED: "#059669", // emerald-600
+/**
+ * Warna & bobot teks status bug (teks polos, tanpa pill/box).
+ * Alur status: Open → In Progress → Closed. 'Resolved' sudah dihapus dari
+ * dropdown; entri RESOLVED di bawah hanya fallback tampilan (legacy).
+ */
+const statusStyle: Record<BugRow["status"], { color: string; weight: number }> = {
+  OPEN: { color: "#E11D48", weight: 600 }, // rose-600
+  IN_PROGRESS: { color: "#D97706", weight: 600 }, // amber-600
+  RESOLVED: { color: "#047857", weight: 500 }, // legacy → tampil seperti Closed
+  CLOSED: { color: "#047857", weight: 500 }, // emerald-700, medium
 };
 
 /** Warna teks severity bug (teks polos, tanpa pill/box). */
@@ -200,8 +204,8 @@ export function BugsPageClient({
     return hay.includes(q);
   });
 
-  // Urutkan: status aktif (Open → In Progress) di atas, Resolved → Closed di
-  // bawah; tiebreak tetap bug terbaru lebih dulu.
+  // Urutkan: status aktif (Open → In Progress) di atas, Closed paling bawah;
+  // tiebreak tetap bug terbaru lebih dulu.
   visibleBugs.sort((a, b) => {
     const ra = BUG_STATUS_RANK[a.status] ?? 9;
     const rb = BUG_STATUS_RANK[b.status] ?? 9;
@@ -422,7 +426,6 @@ export function BugsPageClient({
                   { value: "", label: "Semua Status" },
                   { value: "OPEN", label: "Open" },
                   { value: "IN_PROGRESS", label: "In Progress" },
-                  { value: "RESOLVED", label: "Resolved" },
                   { value: "CLOSED", label: "Closed" },
                 ]}
               />
@@ -621,7 +624,7 @@ export function BugsPageClient({
               </thead>
               <tbody>
                 {pagedBugs.map((b) => {
-                  const st = statusColor[b.status];
+                  const st = statusStyle[b.status];
                   const sev = b.severity ? (severityColor[b.severity] ?? severityColor.LOW) : null;
                   // Environment bug; fallback ke environment Test Run terkait.
                   const env = b.environment ?? b.run?.environment ?? null;
@@ -773,14 +776,13 @@ export function BugsPageClient({
                               boxShadow: "none",
                               width: "auto",
                               fontSize: 12,
-                              fontWeight: 600,
-                              color: st,
+                              fontWeight: st.weight,
+                              color: st.color,
                             }}
                             onChange={(e) => changeStatus(b.id, e.target.value as BugRow["status"])}
                           >
                             <option value="OPEN">Open</option>
                             <option value="IN_PROGRESS">In Progress</option>
-                            <option value="RESOLVED">Resolved</option>
                             <option value="CLOSED">Closed</option>
                           </Select>
                         </span>

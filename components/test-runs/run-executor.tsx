@@ -5,9 +5,11 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRefresh } from "@/lib/client/refresh-context";
-import { AlertTriangle, Bug, Check, CheckCircle2, ChevronDown, ChevronRight, CircleSlash, Copy, ExternalLink, FolderOpen, MinusCircle, Paperclip, Pencil, X, XCircle } from "lucide-react";
+import { AlertTriangle, Bug, Check, CheckCircle2, ChevronDown, ChevronRight, CircleSlash, Copy, ExternalLink, FileDown, FolderOpen, MinusCircle, Paperclip, Pencil, X, XCircle } from "lucide-react";
 import { completeRun, completeRunWithSkip, deleteRun, updateRunResult } from "@/lib/actions/test-runs";
 import { createBug, updateBug, updateBugStatus } from "@/lib/actions/automation-bugs";
+import { downloadBugPdf } from "@/lib/bug-pdf";
+import { useMe } from "@/lib/client/me-context";
 import { ConfirmDialog, Spinner, Toast, useToast } from "@/components/ui/feedback";
 import { entityCode, runCodeOf } from "@/lib/format";
 import {
@@ -1083,6 +1085,7 @@ export function RunExecutor({
           item={modalItem}
           canEdit={canEdit}
           environment={environment ?? null}
+          runName={`${runName}${runCode ? ` (${runCode})` : ""}`}
           onClose={() => setModalItem(null)}
           onAttachmentsChange={(list) => patchResult(modalItem.id, { attachments: list })}
           onOpenBugDetail={setBugDetailId}
@@ -2730,6 +2733,7 @@ function ExecutionModal({
   item,
   canEdit,
   environment,
+  runName,
   onClose,
   onAttachmentsChange,
   onOpenBugDetail,
@@ -2740,6 +2744,8 @@ function ExecutionModal({
   canEdit: boolean;
   /** Environment run — read-only, ditampilkan di form bug mode Fail. */
   environment: string | null;
+  /** Nama + kode run, dipakai di header laporan PDF bug. */
+  runName?: string | null;
   onClose: () => void;
   /** Teruskan daftar attachment terbaru ke parent (update in-place). */
   onAttachmentsChange?: (list: AttachmentItem[]) => void;
@@ -2770,6 +2776,7 @@ function ExecutionModal({
   const [status, setStatus] = useState<RunResultItem["status"]>(item.status);
   const [actualResult, setActualResult] = useState(item.actualResult ?? "");
   const [notes, setNotes] = useState(item.notes ?? "");
+  const { me } = useMe();
   // Judul bug default KOSONG — diisi QA, atau ter-prefill dari bug aktif saat
   // mode "edit" (lihat effect activeBug di bawah).
   const [bugTitle, setBugTitle] = useState("");
@@ -3171,6 +3178,36 @@ function ExecutionModal({
     }
     // Sukses: tutup modal dengan animasi (data sudah dipatch ke daftar induk).
     setClosing(true);
+  };
+
+  /**
+   * Unduh laporan bug ringkas (PDF 1 halaman). Hyperlink evidence memakai URL
+   * presigned R2, jadi Dev bisa klik langsung tanpa login sampai masa
+   * berlakunya habis.
+   */
+  const downloadPdf = () => {
+    const bug = activeBug;
+    void downloadBugPdf({
+      bugCode: bug ? entityCode("BUG", bug.id) : (item.testCase?.tcId ?? "—"),
+      title: bugTitle.trim() || bug?.title || item.titleSnapshot,
+      severity: bugSeverity || bug?.severity || null,
+      status: bug ? (BUG_STATUS_BADGE[bug.status as BugStatus]?.label ?? bug.status) : "Open",
+      precondition: item.testCase?.precondition ?? null,
+      expectedResult: item.testCase?.expectedResult ?? null,
+      actualResult: actualResult || item.actualResult,
+      runName: runName ?? null,
+      environment,
+      moduleName: item.testCase?.suite?.name ?? null,
+      reporter: me?.name ?? null,
+      createdAt: item.testCase?.createdAt
+        ? new Date(item.testCase.createdAt).toISOString()
+        : null,
+      evidence: (item.attachments ?? []).map((a) => ({
+        fileName: a.fileName,
+        url: a.url,
+        mimeType: a.mimeType,
+      })),
+    });
   };
 
   return createPortal(
@@ -3944,7 +3981,33 @@ function ExecutionModal({
 
                 {/* Mode view: satu tombol "Edit". Mode edit: "Batal" + simpan.
                     Tombol hug-contents, rata kanan. */}
-                <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.5rem" }}>
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.5rem", flexWrap: "wrap" }}>
+                  {/* Ekspor laporan bug ringkas (PDF) — sebelah tombol simpan. */}
+                  {(isFail || (item.bugs?.length ?? 0) > 0) && (
+                    <button
+                      type="button"
+                      onClick={downloadPdf}
+                      title="Download laporan bug (PDF) — link evidence bisa diklik tanpa login"
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 5,
+                        padding: "0.5rem 0.75rem",
+                        border: "1px solid #E2E8F0",
+                        borderRadius: 6,
+                        background: "#fff",
+                        color: "#334155",
+                        fontSize: "0.75rem",
+                        fontWeight: 600,
+                        cursor: "pointer",
+                        transition: "background-color 0.15s ease",
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = "#F8FAFC")}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = "#fff")}
+                    >
+                      <FileDown size={14} /> Download PDF Bug
+                    </button>
+                  )}
                   {!editable ? (
                     <button
                       type="button"

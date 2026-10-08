@@ -31,7 +31,9 @@ export async function GET(req: NextRequest) {
     where: testCaseId ? { testCaseId } : undefined,
     orderBy: { createdAt: "desc" },
     include: {
-      testCase: { select: { id: true, tcId: true, title: true, expectedResult: true } },
+      testCase: {
+        select: { id: true, tcId: true, title: true, expectedResult: true, precondition: true },
+      },
       suite: { select: { id: true, name: true } },
       project: { select: { id: true, name: true } },
       testRunResult: {

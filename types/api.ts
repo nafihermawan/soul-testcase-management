@@ -122,7 +122,14 @@ export type BugRow = {
   /** Diisi saat bug RESOLVED/CLOSED — dipakai sebagai data riwayat. */
   resolvedAt: string | null;
   /** `expectedResult` dipakai modal detail bug untuk section Expected Result. */
-  testCase: { id: string; tcId: string; title: string; expectedResult: string | null } | null;
+  testCase: {
+    id: string;
+    tcId: string;
+    title: string;
+    expectedResult: string | null;
+    /** Prasyarat Test Case — dipakai laporan PDF bug. */
+    precondition: string | null;
+  } | null;
   /** Suite/modul tempat bug ditemukan (diisi untuk temuan ad-hoc). */
   suite: { id: string; name: string } | null;
   /** Project pemilik suite di atas — dasar agregasi jumlah bug per project. */

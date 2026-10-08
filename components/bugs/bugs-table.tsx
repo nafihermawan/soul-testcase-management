@@ -2,8 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { ExternalLink, Plus, Search, Trash2 } from "lucide-react";
+import { ExternalLink, FileDown, Plus, Search, Trash2 } from "lucide-react";
 import { deleteBug, updateBugStatus } from "@/lib/actions/automation-bugs";
+import { downloadBugPdf } from "@/lib/bug-pdf";
 import { ConfirmDialog, Toast, useToast } from "@/components/ui/feedback";
 import { FilterModal } from "@/components/ui/filter-modal";
 import { CustomSelect, filterLabelStyle } from "@/components/ui/custom-select";
@@ -26,7 +27,16 @@ export type BugRow = {
   environment?: string | null;
   externalLink: string | null;
   createdAt: string;
-  testCase: { id: string; tcId: string; title: string } | null;
+  /** Hasil yang diharapkan (diisi reporter) — dipakai laporan PDF bug. */
+  expectedResult?: string | null;
+  testCase: {
+    id: string;
+    tcId: string;
+    title: string;
+    /** Prasyarat TC — dipakai laporan PDF bug. */
+    precondition?: string | null;
+    expectedResult?: string | null;
+  } | null;
   /** Suite/Module tempat bug berada; null = tidak diketahui (mis. temuan tanpa suite). */
   suite?: { id: string; name: string } | null;
   /** Test Run tempat bug ditemukan; null untuk temuan ad-hoc.
@@ -796,6 +806,51 @@ export function BugsPageClient({
                         {new Date(b.createdAt).toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" })}
                       </td>
                       <td style={{ padding: "0.6rem 1.25rem", textAlign: "center" }}>
+                        {/* Ekspor laporan bug ringkas (PDF) — link evidence aktif. */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void downloadBugPdf({
+                              bugCode: entityCode("BUG", b.id),
+                              title: b.title,
+                              severity: b.severity,
+                              status: b.status,
+                              precondition: b.testCase?.precondition ?? null,
+                              expectedResult: b.testCase?.expectedResult ?? b.expectedResult,
+                              actualResult: b.description,
+                              runName: b.run?.name ?? null,
+                              environment: b.environment ?? b.run?.environment ?? null,
+                              moduleName: b.suite?.name ?? null,
+                              reporter: b.createdBy?.name ?? null,
+                              createdAt: b.createdAt,
+                              evidence: (b.attachments ?? []).map((a) => ({
+                                fileName: a.fileName,
+                                url: a.url,
+                                mimeType: a.mimeType,
+                              })),
+                            });
+                          }}
+                          title="Download PDF Bug"
+                          aria-label="Download PDF Bug"
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            width: 30,
+                            height: 30,
+                            borderRadius: 8,
+                            border: "none",
+                            background: "transparent",
+                            color: "#94A3B8",
+                            cursor: "pointer",
+                            transition: "color 0.15s ease",
+                          }}
+                          onMouseEnter={(e) => (e.currentTarget.style.color = "#D97706")}
+                          onMouseLeave={(e) => (e.currentTarget.style.color = "#94A3B8")}
+                        >
+                          <FileDown size={15} />
+                        </button>
                         <button
                           type="button"
                           onClick={(e) => {

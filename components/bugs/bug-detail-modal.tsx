@@ -3,10 +3,11 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import { ExternalLink, Pencil, X } from "lucide-react";
+import { ExternalLink, FileDown, Pencil, X } from "lucide-react";
 import { AttachmentsPanel } from "@/components/attachments/attachments-panel";
 import { EditBugModal } from "@/components/bugs/edit-bug-modal";
 import { Spinner } from "@/components/ui/feedback";
+import { downloadBugPdf } from "@/lib/bug-pdf";
 import { entityCode } from "@/lib/format";
 import type { BugDetailPayload, BugEditableFields, BugRow } from "@/types/api";
 
@@ -131,6 +132,33 @@ export function BugDetailModal({
   // Expected Result milik bug; kalau kosong, pakai milik Test Case terkait.
   const expectedText =
     bug?.expectedResult?.trim() || bug?.testCase?.expectedResult?.trim() || "";
+
+  /**
+   * Ekspor laporan bug ringkas (PDF). Hyperlink evidence memakai URL presigned
+   * R2, jadi bisa dibuka tanpa login sampai masa berlakunya habis.
+   */
+  const exportPdf = () => {
+    if (!bug) return;
+    void downloadBugPdf({
+      bugCode: entityCode("BUG", bug.id),
+      title: bug.title,
+      severity: bug.severity,
+      status: bug.status,
+      precondition: bug.testCase?.precondition ?? null,
+      expectedResult: bug.testCase?.expectedResult ?? bug.expectedResult,
+      actualResult: bug.description,
+      runName: bug.run?.name ?? null,
+      environment: bug.environment ?? bug.run?.environment ?? null,
+      moduleName: bug.suite?.name ?? null,
+      reporter: bug.createdBy?.name ?? null,
+      createdAt: bug.createdAt,
+      evidence: bug.attachments.map((a) => ({
+        fileName: a.fileName,
+        url: a.url,
+        mimeType: a.mimeType,
+      })),
+    });
+  };
 
   return createPortal(
     <>
@@ -376,7 +404,7 @@ export function BugDetailModal({
           {/* Divider inset di atas footer — tidak full-bleed ke tepi modal. */}
           <div style={{ flexShrink: 0, borderTop: "1px solid #F1F5F9", margin: "0 1.5rem" }} />
 
-          {/* Footer — tanpa tombol hapus; hanya Edit, rata kanan. */}
+          {/* Footer — [Export PDF] lalu [Edit] (Edit hanya untuk yang berhak). */}
           <div
             style={{
               flexShrink: 0,
@@ -387,6 +415,31 @@ export function BugDetailModal({
               padding: "1rem 1.5rem",
             }}
           >
+            {bug && (
+              <button
+                type="button"
+                onClick={exportPdf}
+                title="Download laporan bug (PDF) — link evidence bisa diklik tanpa login"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "0.4rem",
+                  padding: "0.375rem 0.75rem",
+                  border: "1px solid #CBD5E1",
+                  borderRadius: 8,
+                  background: "#fff",
+                  color: "#334155",
+                  fontSize: "0.75rem",
+                  fontWeight: 500,
+                  cursor: "pointer",
+                  transition: "background-color 0.15s ease",
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = "#F8FAFC")}
+                onMouseLeave={(e) => (e.currentTarget.style.background = "#fff")}
+              >
+                <FileDown size={13} /> Export PDF
+              </button>
+            )}
             {bug && canEdit && (
               <button
                 type="button"

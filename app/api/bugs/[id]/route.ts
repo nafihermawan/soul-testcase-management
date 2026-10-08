@@ -12,7 +12,9 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   const bug = await prisma.bug.findUnique({
     where: { id: params.id },
     include: {
-      testCase: { select: { id: true, tcId: true, title: true, expectedResult: true } },
+      testCase: {
+        select: { id: true, tcId: true, title: true, expectedResult: true, precondition: true },
+      },
       suite: { select: { id: true, name: true } },
       project: { select: { id: true, name: true } },
       testRunResult: {

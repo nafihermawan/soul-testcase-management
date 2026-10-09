@@ -70,7 +70,7 @@ export function RecentBugs({ bugs }: { bugs: DashboardBugItem[] }) {
               width: "100%",
               minWidth: 450,
               borderCollapse: "collapse",
-              fontSize: "0.8rem",
+              fontSize: 12,
               // table-auto: kolom mengikuti konten (tidak kolaps) sehingga header
               // tidak bertumpuk; container overflow-x menangani layar sempit.
               tableLayout: "auto",
@@ -84,12 +84,12 @@ export function RecentBugs({ bugs }: { bugs: DashboardBugItem[] }) {
                   ...insetDivider,
                 }}
               >
-                <th style={{ padding: "0.75rem 1.25rem", fontWeight: 600, minWidth: 150, whiteSpace: "nowrap" }}>Bug</th>
-                <th style={{ padding: "0.75rem 0.5rem", fontWeight: 600, width: 88, whiteSpace: "nowrap" }}>Severity</th>
-                <th style={{ padding: "0.75rem 0.5rem", fontWeight: 600, width: 118, whiteSpace: "nowrap" }}>Module</th>
-                <th style={{ padding: "0.75rem 0.5rem", fontWeight: 600, width: 84, whiteSpace: "nowrap" }}>Env</th>
-                <th style={{ padding: "0.75rem 0.5rem", fontWeight: 600, width: 106, whiteSpace: "nowrap" }}>Status</th>
-                <th style={{ padding: "0.75rem 1.25rem", fontWeight: 600, width: 92, whiteSpace: "nowrap" }}>Age</th>
+                <th style={{ padding: "0.625rem 1.25rem", fontWeight: 600, minWidth: 150, whiteSpace: "nowrap" }}>Bug</th>
+                <th style={{ padding: "0.625rem 0.5rem", fontWeight: 600, width: 88, whiteSpace: "nowrap" }}>Severity</th>
+                <th style={{ padding: "0.625rem 0.5rem", fontWeight: 600, width: 118, whiteSpace: "nowrap" }}>Module</th>
+                <th style={{ padding: "0.625rem 0.5rem", fontWeight: 600, width: 84, whiteSpace: "nowrap" }}>Env</th>
+                <th style={{ padding: "0.625rem 0.5rem", fontWeight: 600, width: 106, whiteSpace: "nowrap" }}>Status</th>
+                <th style={{ padding: "0.625rem 1.25rem", fontWeight: 600, width: 92, whiteSpace: "nowrap" }}>Age</th>
               </tr>
             </thead>
             <tbody>
@@ -104,7 +104,7 @@ export function RecentBugs({ bugs }: { bugs: DashboardBugItem[] }) {
                     <td
                       title={b.title}
                       style={{
-                        padding: "0.75rem 1.25rem",
+                        padding: "0.625rem 1.25rem",
                         maxWidth: 180,
                         overflow: "hidden",
                         fontWeight: attention ? 600 : 400,
@@ -126,9 +126,9 @@ export function RecentBugs({ bugs }: { bugs: DashboardBugItem[] }) {
                     </td>
                     <td
                       style={{
-                        padding: "0.75rem 0.5rem",
-                        fontSize: 12,
-                        fontWeight: 600,
+                        padding: "0.625rem 0.5rem",
+                        fontSize: 11,
+                        fontWeight: 700,
                         whiteSpace: "nowrap",
                         // Teks polos berwarna (tanpa pill).
                         color:
@@ -145,7 +145,7 @@ export function RecentBugs({ bugs }: { bugs: DashboardBugItem[] }) {
                     </td>
                     <td
                       style={{
-                        padding: "0.75rem 0.5rem",
+                        padding: "0.625rem 0.5rem",
                         color: "var(--text-secondary)",
                         overflow: "hidden",
                         textOverflow: "ellipsis",
@@ -154,10 +154,10 @@ export function RecentBugs({ bugs }: { bugs: DashboardBugItem[] }) {
                     >
                       {b.suiteName ?? "—"}
                     </td>
-                    <td style={{ padding: "0.75rem 0.5rem", color: "var(--text-secondary)" }}>
+                    <td style={{ padding: "0.625rem 0.5rem", color: "var(--text-secondary)" }}>
                       {b.environment ?? "—"}
                     </td>
-                    <td style={{ padding: "0.75rem 0.5rem" }}>
+                    <td style={{ padding: "0.625rem 0.5rem" }}>
                       <span style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem" }}>
                         {/* Status teks polos: open/in-progress amber, resolved
                             emerald, closed slate muted. */}
@@ -204,7 +204,7 @@ export function RecentBugs({ bugs }: { bugs: DashboardBugItem[] }) {
                         )}
                       </span>
                     </td>
-                    <td style={{ padding: "0.75rem 1.25rem", color: "var(--text-muted)", whiteSpace: "nowrap" }}>
+                    <td style={{ padding: "0.625rem 1.25rem", color: "var(--text-muted)", whiteSpace: "nowrap" }}>
                       {formatAge(ageInDays(b.createdAt))}
                     </td>
                   </tr>

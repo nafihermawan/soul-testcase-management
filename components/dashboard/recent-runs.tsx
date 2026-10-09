@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Card, PanelHeader, ProgressBar } from "@/components/ui";
+import { Tooltip } from "@/components/ui/tooltip";
 import { EmptyState } from "@/components/dashboard/empty-state";
 import { formatPct, pct } from "@/lib/qa-metrics";
 import { RUN_STATUS_LABEL, type RunStatusValue } from "@/lib/run-status";
@@ -79,7 +80,7 @@ export function RecentRuns({ runs }: { runs: DashboardRunItem[] }) {
               width: "100%",
               minWidth: 600,
               borderCollapse: "collapse",
-              fontSize: "0.8rem",
+              fontSize: 12,
               // table-auto: kolom mengikuti konten (tidak kolaps) sehingga header
               // tidak bertumpuk; container overflow-x menangani layar sempit.
               tableLayout: "auto",
@@ -94,15 +95,15 @@ export function RecentRuns({ runs }: { runs: DashboardRunItem[] }) {
                   ...insetDivider,
                 }}
               >
-                <th style={{ padding: "0.75rem 1.25rem", fontWeight: 600, minWidth: 160, whiteSpace: "nowrap" }}>Test Run</th>
-                <th style={{ padding: "0.75rem 0.5rem", fontWeight: 600, minWidth: 100, width: 116, whiteSpace: "nowrap" }}>Project</th>
-                <th style={{ padding: "0.75rem 0.5rem", fontWeight: 600, width: 84, whiteSpace: "nowrap" }}>Env</th>
-                <th style={{ padding: "0.75rem 0.5rem", fontWeight: 600, minWidth: 170, width: 190, textAlign: "left", whiteSpace: "nowrap" }}>Progress</th>
-                <th style={{ padding: "0.75rem 0.75rem", fontWeight: 600, width: 84, textAlign: "right", whiteSpace: "nowrap" }}>
+                <th style={{ padding: "0.625rem 1.25rem", fontWeight: 600, minWidth: 160, whiteSpace: "nowrap" }}>Test Run</th>
+                <th style={{ padding: "0.625rem 0.5rem", fontWeight: 600, minWidth: 100, width: 116, whiteSpace: "nowrap" }}>Project</th>
+                <th style={{ padding: "0.625rem 0.5rem", fontWeight: 600, width: 84, whiteSpace: "nowrap" }}>Env</th>
+                <th style={{ padding: "0.625rem 0.5rem", fontWeight: 600, minWidth: 170, width: 190, textAlign: "left", whiteSpace: "nowrap" }}>Progress</th>
+                <th style={{ padding: "0.625rem 0.75rem", fontWeight: 600, width: 84, textAlign: "right", whiteSpace: "nowrap" }}>
                   Pass Rate
                 </th>
-                <th style={{ padding: "0.75rem 0.5rem", fontWeight: 600, width: 96, whiteSpace: "nowrap" }}>Status</th>
-                <th style={{ padding: "0.75rem 1.25rem", fontWeight: 600, width: 104, whiteSpace: "nowrap" }}>Updated</th>
+                <th style={{ padding: "0.625rem 0.5rem", fontWeight: 600, width: 96, whiteSpace: "nowrap" }}>Status</th>
+                <th style={{ padding: "0.625rem 1.25rem", fontWeight: 600, width: 104, whiteSpace: "nowrap" }}>Updated</th>
               </tr>
             </thead>
             <tbody>
@@ -114,6 +115,10 @@ export function RecentRuns({ runs }: { runs: DashboardRunItem[] }) {
                 );
                 // Pass Rate = rasio lolos dari yang dieksekusi (Passed+Failed).
                 const passRate = pct(r.counts.passed, r.counts.passed + r.counts.failed);
+                // Rincian status dipindah ke tooltip progress (menggantikan sub-teks).
+                const statusDetail = `${r.counts.passed} Passed · ${r.counts.failed} Failed · ${r.counts.notRun} Not Run${
+                  r.counts.blocked > 0 ? ` · ${r.counts.blocked} Blocked` : ""
+                }`;
                 return (
                   <tr
                     key={r.id}
@@ -123,7 +128,7 @@ export function RecentRuns({ runs }: { runs: DashboardRunItem[] }) {
                   >
                     <td
                       style={{
-                        padding: "0.75rem 1.25rem",
+                        padding: "0.625rem 1.25rem",
                         overflow: "hidden",
                         textOverflow: "ellipsis",
                         whiteSpace: "nowrap",
@@ -148,7 +153,7 @@ export function RecentRuns({ runs }: { runs: DashboardRunItem[] }) {
                     </td>
                     <td
                       style={{
-                        padding: "0.75rem 0.5rem",
+                        padding: "0.625rem 0.5rem",
                         color: "var(--text-secondary)",
                         overflow: "hidden",
                         textOverflow: "ellipsis",
@@ -157,19 +162,14 @@ export function RecentRuns({ runs }: { runs: DashboardRunItem[] }) {
                     >
                       {r.project}
                     </td>
-                    <td style={{ padding: "0.75rem 0.5rem", color: "var(--text-secondary)" }}>
+                    <td style={{ padding: "0.625rem 0.5rem", color: "var(--text-secondary)" }}>
                       {r.environment ?? "—"}
                     </td>
-                    <td style={{ padding: "0.75rem 0.5rem", minWidth: 170 }}>
-                      <div
-                        style={{
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: "0.25rem",
-                        }}
-                      >
-                        {/* Baris 1: bar (sky-500, h-1.5) + persentase mono */}
-                        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                    <td style={{ padding: "0.625rem 0.5rem", minWidth: 170 }}>
+                      {/* Hover di bar / persentase memunculkan rincian status
+                          sebagai tooltip — baris tetap ringkas satu tinggi. */}
+                      <Tooltip label={statusDetail} style={{ display: "block", width: "100%" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", width: "100%" }}>
                           <span style={{ flex: 1, maxWidth: 160, minWidth: 0 }}>
                             <ProgressBar value={progress ?? 0} color="#0EA5E9" height={6} />
                           </span>
@@ -184,22 +184,11 @@ export function RecentRuns({ runs }: { runs: DashboardRunItem[] }) {
                             {formatPct(progress)}
                           </span>
                         </div>
-                        {/* Baris 2: detail status — tidak boleh patah baris */}
-                        <div
-                          style={{
-                            fontSize: 10,
-                            color: "#94A3B8",
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          {r.counts.passed} Passed · {r.counts.failed} Failed · {r.counts.notRun} Not Run
-                          {r.counts.blocked > 0 ? ` · ${r.counts.blocked} Blocked` : ""}
-                        </div>
-                      </div>
+                      </Tooltip>
                     </td>
                     <td
                       style={{
-                        padding: "0.75rem 0.75rem",
+                        padding: "0.625rem 0.75rem",
                         textAlign: "right",
                         fontSize: 12,
                         fontWeight: 700,
@@ -219,7 +208,7 @@ export function RecentRuns({ runs }: { runs: DashboardRunItem[] }) {
                     </td>
                     <td
                       style={{
-                        padding: "0.75rem 0.5rem",
+                        padding: "0.625rem 0.5rem",
                         fontSize: 12,
                         fontWeight: 600,
                         whiteSpace: "nowrap",
@@ -228,7 +217,7 @@ export function RecentRuns({ runs }: { runs: DashboardRunItem[] }) {
                     >
                       {RUN_STATUS_LABEL[r.status as RunStatusValue] ?? r.status}
                     </td>
-                    <td style={{ padding: "0.75rem 1.25rem", color: "var(--text-muted)", whiteSpace: "nowrap" }}>
+                    <td style={{ padding: "0.625rem 1.25rem", color: "var(--text-muted)", whiteSpace: "nowrap" }}>
                       {formatDate(r.completedAt ?? r.updatedAt)}
                     </td>
                   </tr>

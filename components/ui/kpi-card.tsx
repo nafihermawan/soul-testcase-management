@@ -13,6 +13,7 @@ export function KpiCard({
   sub,
   accent = "#E2E8F0",
   dot,
+  compact = false,
 }: {
   label: string;
   value: string;
@@ -21,11 +22,13 @@ export function KpiCard({
   accent?: string;
   /** Warna indicator dot; bila diisi, garis aksen atas tidak dirender. */
   dot?: string;
+  /** Padding vertikal lebih rapat — untuk deretan kartu statistik yang ringkas. */
+  compact?: boolean;
 }) {
   return (
     <Card
       style={{
-        padding: "1rem",
+        padding: compact ? "0.75rem 1rem" : "1rem",
         height: "100%",
         ...(dot ? {} : { borderTop: `3px solid ${accent}` }),
       }}

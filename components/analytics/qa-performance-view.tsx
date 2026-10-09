@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
-import { ChevronDown, Download, FileSpreadsheet, FileText, Info } from "lucide-react";
+import { ChevronDown, Download, FileSpreadsheet, FileText, Info, SlidersHorizontal } from "lucide-react";
 import { Card } from "@/components/ui";
 import { KpiCard } from "@/components/ui/kpi-card";
 import { ProgressBar } from "@/components/ui/progress-bar";
@@ -10,7 +10,7 @@ import { Select } from "@/components/ui/select";
 import { InitialsAvatar } from "@/components/ui/avatar";
 import { ErrorBlock, TableCardSkeleton } from "@/components/ui/data-states";
 import { useApi } from "@/lib/client/use-api";
-import { BADGE_LABEL, type PeriodMode, type PerformanceBadge } from "@/lib/qa-performance";
+import { BADGE_LABEL, MONTH_NAMES, type PeriodMode, type PerformanceBadge } from "@/lib/qa-performance";
 import {
   exportQaPerformanceCsv,
   exportQaPerformanceXlsx,
@@ -19,11 +19,11 @@ import type { QaPerformanceMember, QaPerformancePayload } from "@/types/api";
 
 const MONTHS_PER_QUARTER = 3;
 
-/** Warna badge status performa (halus: latar -50, teks -700). */
-const BADGE_TONE: Record<PerformanceBadge, { bg: string; color: string }> = {
-  TOP_PERFORMER: { bg: "#ECFDF5", color: "#047857" },
-  ON_TRACK: { bg: "#EFF6FF", color: "#2563EB" },
-  NEEDS_ATTENTION: { bg: "#FFF1F2", color: "#BE123C" },
+/** Warna teks status performa — minimalis (tanpa pill/latar). */
+const BADGE_COLOR: Record<PerformanceBadge, string> = {
+  TOP_PERFORMER: "#047857",
+  ON_TRACK: "#2563EB",
+  NEEDS_ATTENTION: "#BE123C",
 };
 
 /** Warna bar pass rate: hijau ≥80, amber 50–79, rose <50, abu bila belum ada data. */
@@ -33,19 +33,6 @@ function passRateColor(value: number | null): string {
   if (value >= 50) return "#D97706";
   return "#E11D48";
 }
-
-/** Badge netral untuk angka konteks di header tabel. */
-const neutralBadge: CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  padding: "2px 10px",
-  borderRadius: 999,
-  background: "#F1F5F9",
-  color: "#475569",
-  fontSize: 11,
-  fontWeight: 600,
-  whiteSpace: "nowrap",
-};
 
 /** Penjelasan perhitungan tiap metrik — dipindah ke tooltip (i) header tabel. */
 const METRIC_HELP = [
@@ -72,7 +59,7 @@ const th: CSSProperties = {
   zIndex: 10,
   background: "#F8FAFC",
   padding: "9px 12px",
-  fontSize: 13,
+  fontSize: 12,
   fontWeight: 600,
   color: "#64748B",
   whiteSpace: "nowrap",
@@ -220,6 +207,296 @@ function ExportMenu({
   );
 }
 
+/** Nilai filter periode QA Performance (mode + bulan/quarter + tahun). */
+type QaPeriodSelection = {
+  mode: PeriodMode;
+  year: number;
+  quarter: number;
+  month: number;
+};
+
+const MODE_LABEL: Record<PeriodMode, string> = {
+  month: "Per Bulan",
+  quarter: "Per Quarter",
+  year: "Per Tahun",
+};
+
+/** Label ringkas periode dari nilai yang berlaku (mis. "Q4 2026"). */
+function periodLabelOf(p: QaPeriodSelection): string {
+  if (p.mode === "month") return `${MONTH_NAMES[p.month - 1]} ${p.year}`;
+  if (p.mode === "quarter") return `Q${p.quarter} ${p.year}`;
+  return String(p.year);
+}
+
+/**
+ * Satu tombol filter periode menggantikan 3 dropdown (mode/quarter/tahun):
+ * trigger menampilkan label gabungan, popover berisi segment mode + selector
+ * bulan/quarter + tahun. Nilai ditahan sebagai draft dan baru diterapkan saat
+ * "Terapkan" diklik; popover di-portal agar tidak terpotong `overflow: hidden`
+ * kartu toolbar.
+ */
+function PeriodFilterControl({
+  value,
+  availableYears,
+  onApply,
+}: {
+  value: QaPeriodSelection;
+  availableYears: number[];
+  onApply: (next: QaPeriodSelection) => void;
+}) {
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState<QaPeriodSelection>(value);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+
+  const openPopover = () => {
+    const r = btnRef.current?.getBoundingClientRect();
+    // Clamp ke kiri viewport supaya popover (lebar 288) tidak keluar layar.
+    if (r) setPos({ top: r.bottom + 6, left: Math.max(12, Math.min(r.left, window.innerWidth - 288 - 12)) });
+    setDraft(value);
+    setOpen(true);
+  };
+
+  // Hanya Escape di sini. Klik "di luar" ditangani BACKDROP di dalam portal
+  // (lihat bawah) — bukan listener `document`. Listener document tidak bisa
+  // dipakai karena menu dropdown <Select> di-render lewat portal TERPISAH ke
+  // body, sehingga klik pada opsinya terbaca sebagai "di luar" dan menutup
+  // popover ini sebelum pilihan diterapkan.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open]);
+
+  const set = <K extends keyof QaPeriodSelection>(key: K, v: QaPeriodSelection[K]) =>
+    setDraft((prev) => ({ ...prev, [key]: v }));
+
+  // Reset draft ke default: quarter berjalan (bulan/tahun saat ini).
+  const resetDraft = () =>
+    setDraft({
+      mode: "quarter",
+      year: new Date().getUTCFullYear(),
+      quarter: Math.floor(new Date().getUTCMonth() / MONTHS_PER_QUARTER) + 1,
+      month: new Date().getUTCMonth() + 1,
+    });
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        type="button"
+        onClick={() => (open ? setOpen(false) : openPopover())}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: "0.375rem",
+          // Styling baku tombol Filter aplikasi (selaras Bugs Tracker / Run History):
+          // border-amber-400 · text-amber-700 · bg-amber-50/50 · hover:bg-amber-100
+          // font-semibold · text-xs · px-3 py-1.5 · rounded-lg
+          fontSize: 12,
+          fontWeight: 600,
+          color: "#B45309",
+          background: "rgba(255, 251, 235, 0.5)",
+          border: "1px solid #FBBF24",
+          borderRadius: 8,
+          padding: "0.375rem 0.75rem",
+          cursor: "pointer",
+          transition: "background-color 0.15s ease",
+        }}
+        onMouseEnter={(e) => (e.currentTarget.style.background = "#FEF3C7")}
+        onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(255, 251, 235, 0.5)")}
+      >
+        <SlidersHorizontal size={13} />
+        Filter
+      </button>
+
+      {open &&
+        pos &&
+        createPortal(
+          <>
+            {/* Backdrop transparan (z di bawah popover): klik di luar menutup.
+                Berada di portal yang SAMA dengan popover sehingga klik pada menu
+                Select (portal terpisah) tetap dianggap "di dalam" — double-click
+                tidak menutup. */}
+            <div
+              aria-hidden="true"
+              onMouseDown={() => setOpen(false)}
+              style={{ position: "fixed", inset: 0, zIndex: 399 }}
+            />
+            <div
+              role="dialog"
+              aria-label="Filter periode"
+              // Cegah klik/gulir dari dalam popover merambat ke luar.
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                position: "fixed",
+                top: pos.top,
+                left: pos.left,
+                zIndex: 400,
+                width: 288,
+                background: "#fff",
+                border: "1px solid #E2E8F0",
+                borderRadius: 12,
+                boxShadow: "0 12px 32px rgba(15, 23, 42, 0.16)",
+                padding: 12,
+                display: "flex",
+                flexDirection: "column",
+                gap: 12,
+              }}
+            >
+              {/* Segment mode periode */}
+              <div
+                style={{
+                  display: "flex",
+                  gap: 4,
+                  background: "#F1F5F9",
+                  padding: 3,
+                  borderRadius: 8,
+                }}
+              >
+                {(["month", "quarter", "year"] as const).map((m) => {
+                  const active = draft.mode === m;
+                  return (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => set("mode", m)}
+                      style={{
+                        flex: 1,
+                        padding: "0.3rem 0.4rem",
+                        border: "none",
+                        borderRadius: 6,
+                        fontSize: 12,
+                        fontWeight: 600,
+                        cursor: "pointer",
+                        background: active ? "#fff" : "transparent",
+                        color: active ? "#0F172A" : "#64748B",
+                        boxShadow: active ? "0 1px 2px rgba(15, 23, 42, 0.08)" : "none",
+                        transition: "background-color 0.15s ease, color 0.15s ease",
+                      }}
+                    >
+                      {MODE_LABEL[m]}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Selector kontekstual — Bulan / Quarter (mode tahun tak perlu). */}
+              {draft.mode !== "year" && (
+                <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  <span style={{ fontSize: 11, fontWeight: 600, color: "#64748B" }}>
+                    {draft.mode === "month" ? "Bulan" : "Quarter"}
+                  </span>
+                  {draft.mode === "month" ? (
+                    <Select
+                      value={String(draft.month)}
+                      size="sm"
+                      ariaLabel="Bulan"
+                      onChange={(e) => set("month", Number(e.target.value))}
+                    >
+                      {MONTH_NAMES.map((name, i) => (
+                        <option key={name} value={i + 1}>
+                          {name}
+                        </option>
+                      ))}
+                    </Select>
+                  ) : (
+                    <Select
+                      value={String(draft.quarter)}
+                      size="sm"
+                      ariaLabel="Quarter"
+                      onChange={(e) => set("quarter", Number(e.target.value))}
+                    >
+                      {[1, 2, 3, 4].map((q) => (
+                        <option key={q} value={q}>
+                          Q{q}
+                        </option>
+                      ))}
+                    </Select>
+                  )}
+                </label>
+              )}
+
+              <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                <span style={{ fontSize: 11, fontWeight: 600, color: "#64748B" }}>Tahun</span>
+                <Select
+                  value={String(draft.year)}
+                  size="sm"
+                  ariaLabel="Tahun"
+                  onChange={(e) => set("year", Number(e.target.value))}
+                >
+                  {availableYears.map((y) => (
+                    <option key={y} value={y}>
+                      {y}
+                    </option>
+                  ))}
+                </Select>
+              </label>
+
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "flex-end",
+                  gap: 8,
+                  paddingTop: 10,
+                  borderTop: "1px solid #F1F5F9",
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={resetDraft}
+                  style={{
+                    padding: "0.4rem 0.9rem",
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: "#475569",
+                    background: "#fff",
+                    border: "1px solid #E2E8F0",
+                    borderRadius: 6,
+                    cursor: "pointer",
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = "#F8FAFC")}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = "#fff")}
+                >
+                  Reset
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onApply(draft);
+                    setOpen(false);
+                  }}
+                  style={{
+                    padding: "0.4rem 0.9rem",
+                    fontSize: 12,
+                    fontWeight: 700,
+                    color: "#0F172A",
+                    background: "#FFC348",
+                    border: "none",
+                    borderRadius: 6,
+                    cursor: "pointer",
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = "#F0B53D")}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = "#FFC348")}
+                >
+                  Terapkan
+                </button>
+              </div>
+            </div>
+          </>,
+          document.body
+        )}
+    </>
+  );
+}
+
 /**
  * QA Performance Analytics — hanya dirender untuk Lead QA (gerbang di page).
  *
@@ -229,14 +506,15 @@ function ExportMenu({
  */
 export function QaPerformanceView() {
   const now = new Date();
-  const [mode, setMode] = useState<PeriodMode>("quarter");
-  const [year, setYear] = useState(now.getUTCFullYear());
-  const [quarter, setQuarter] = useState(
-    Math.floor(now.getUTCMonth() / MONTHS_PER_QUARTER) + 1
-  );
+  const [period, setPeriod] = useState<QaPeriodSelection>({
+    mode: "quarter",
+    year: now.getUTCFullYear(),
+    quarter: Math.floor(now.getUTCMonth() / MONTHS_PER_QUARTER) + 1,
+    month: now.getUTCMonth() + 1,
+  });
 
   const { data, error, loading, reload } = useApi<QaPerformancePayload>(
-    `/api/qa-performance?mode=${mode}&year=${year}&quarter=${quarter}`
+    `/api/qa-performance?mode=${period.mode}&year=${period.year}&quarter=${period.quarter}&month=${period.month}`
   );
 
   if (error) return <ErrorBlock message={error.message} onRetry={reload} />;
@@ -263,53 +541,20 @@ export function QaPerformanceView() {
             flexWrap: "wrap",
           }}
         >
-          <span style={{ fontSize: 12, color: "#64748B" }}>
-            Periode{" "}
-            <strong style={{ color: "#334155", fontWeight: 600 }}>{data.period.label}</strong>
-          </span>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            {/* Satu tombol Filter standar; label periode aktif tetap ditampilkan. */}
+            <PeriodFilterControl
+              value={period}
+              availableYears={data.availableYears}
+              onApply={setPeriod}
+            />
+            <span style={{ fontSize: 12, color: "#64748B" }}>
+              Periode{" "}
+              <strong style={{ color: "#334155", fontWeight: 600 }}>{periodLabelOf(period)}</strong>
+            </span>
+          </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <Select
-              value={mode}
-              size="sm"
-              ariaLabel="Mode periode"
-              style={{ width: 132 }}
-              onChange={(e) => setMode(e.target.value as PeriodMode)}
-            >
-              <option value="quarter">Per Quarter</option>
-              <option value="year">Per Year</option>
-            </Select>
-
-            {mode === "quarter" && (
-              <Select
-                value={String(quarter)}
-                size="sm"
-                ariaLabel="Quarter"
-                style={{ width: 84 }}
-                onChange={(e) => setQuarter(Number(e.target.value))}
-              >
-                {[1, 2, 3, 4].map((q) => (
-                  <option key={q} value={q}>
-                    Q{q}
-                  </option>
-                ))}
-              </Select>
-            )}
-
-            <Select
-              value={String(year)}
-              size="sm"
-              ariaLabel="Tahun"
-              style={{ width: 96 }}
-              onChange={(e) => setYear(Number(e.target.value))}
-            >
-              {data.availableYears.map((y) => (
-                <option key={y} value={y}>
-                  {y}
-                </option>
-              ))}
-            </Select>
-
             <ExportMenu
               disabled={data.members.length === 0}
               onExcel={() => void exportQaPerformanceXlsx(data)}
@@ -319,18 +564,18 @@ export function QaPerformanceView() {
         </div>
       </Card>
 
-      {/* Kartu ringkasan tim — aksen berupa indicator dot, tanpa garis atas. */}
+      {/* Kartu ringkasan tim — padding rapat, tanpa dot dekoratif (netral & seragam). */}
       <div className="metric-grid" style={{ marginBottom: 12 }}>
         <KpiCard
+          compact
           label="Total Executed Test Cases"
           value={String(totals.executedCases)}
-          dot="#0EA5E9"
           sub="Eksekusi (status ≠ Not run) pada periode ini"
         />
         <KpiCard
+          compact
           label="Average Pass Rate"
           value={totals.passRate === null ? "—" : `${totals.passRate}%`}
-          dot="#F59E0B"
           sub={
             totals.passRate === null
               ? "Belum ada hasil Pass/Fail di periode ini"
@@ -338,15 +583,15 @@ export function QaPerformanceView() {
           }
         />
         <KpiCard
+          compact
           label="Total Bugs Reported"
           value={String(totals.bugsReported)}
-          dot="#F43F5E"
           sub="Bug yang dilaporkan pada periode ini"
         />
         <KpiCard
+          compact
           label="Resolved / Re-opened Runs"
           value={`${totals.completedRuns} / ${totals.reopenedRuns}`}
-          dot="#10B981"
           sub="Run COMPLETED / RE_OPEN"
         />
       </div>
@@ -385,10 +630,10 @@ export function QaPerformanceView() {
               </span>
             </span>
             <span
-              style={neutralBadge}
               title="Total test case di sistem (seluruh waktu) — tidak mengikuti filter periode"
+              style={{ fontSize: 12, fontWeight: 500, color: "#64748B" }}
             >
-              Total Test Case Dibuat: {totals.allTimeCreatedCases.toLocaleString("id-ID")}
+              Total TC: {totals.allTimeCreatedCases.toLocaleString("id-ID")}
             </span>
           </div>
         </div>
@@ -447,17 +692,17 @@ export function QaPerformanceView() {
 }
 
 function MemberRow({ member }: { member: QaPerformanceMember }) {
-  const tone = BADGE_TONE[member.badge];
+  const tone = BADGE_COLOR[member.badge];
   return (
     <tr style={rowDivider}>
       {/* QA member: avatar inisial + nama + role */}
       <td style={td}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-          <InitialsAvatar name={member.name ?? "(tanpa nama)"} size={30} />
+        <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+          <InitialsAvatar name={member.name ?? "(tanpa nama)"} size={24} />
           <div style={{ minWidth: 0 }}>
             <div
               style={{
-                fontSize: 13,
+                fontSize: 12,
                 fontWeight: 500,
                 color: "#1E293B",
                 overflow: "hidden",
@@ -513,19 +758,21 @@ function MemberRow({ member }: { member: QaPerformanceMember }) {
       </td>
 
       <td style={td}>
+        {/* Status minimalis: dot warna + teks, tanpa pill/latar. */}
         <span
           style={{
             display: "inline-flex",
             alignItems: "center",
-            padding: "2px 10px",
-            borderRadius: 999,
-            background: tone.bg,
-            color: tone.color,
-            fontSize: 11,
+            gap: 6,
+            color: tone,
+            fontSize: 12,
             fontWeight: 600,
             whiteSpace: "nowrap",
           }}
         >
+          <span
+            style={{ width: 6, height: 6, borderRadius: 999, background: tone, flexShrink: 0 }}
+          />
           {BADGE_LABEL[member.badge]}
         </span>
       </td>

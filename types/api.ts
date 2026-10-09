@@ -298,7 +298,9 @@ export type QaPerformancePeriod = {
   mode: PeriodMode;
   year: number;
   quarter: number | null;
-  /** Label siap tampil, mis. "Q4 2026" atau "2026". */
+  /** Bulan (1–12); hanya terisi saat mode "month". */
+  month: number | null;
+  /** Label siap tampil, mis. "Q4 2026", "Agustus 2026", atau "2026". */
   label: string;
 };
 

@@ -7,7 +7,23 @@
  * metrik "Avg. Execution Time" sengaja tidak dihitung di sini.
  */
 
-export type PeriodMode = "quarter" | "year";
+export type PeriodMode = "month" | "quarter" | "year";
+
+/** Nama bulan (Indonesia) — dipakai untuk label periode & pilihan filter. */
+export const MONTH_NAMES = [
+  "Januari",
+  "Februari",
+  "Maret",
+  "April",
+  "Mei",
+  "Juni",
+  "Juli",
+  "Agustus",
+  "September",
+  "Oktober",
+  "November",
+  "Desember",
+] as const;
 
 export type PerformanceBadge = "TOP_PERFORMER" | "ON_TRACK" | "NEEDS_ATTENTION";
 
@@ -28,12 +44,21 @@ export const BADGE_LABEL: Record<PerformanceBadge, string> = {
   NEEDS_ATTENTION: "Needs Attention",
 };
 
-/** Rentang waktu [start, end) dalam UTC untuk mode quarter/year. */
+/** Rentang waktu [start, end) dalam UTC untuk mode month/quarter/year. */
 export function periodRange(
   mode: PeriodMode,
   year: number,
-  quarter?: number
+  quarter?: number,
+  month?: number
 ): { start: Date; end: Date; label: string } {
+  if (mode === "month") {
+    const m = Math.min(12, Math.max(1, Math.trunc(month ?? 1)));
+    return {
+      start: new Date(Date.UTC(year, m - 1, 1)),
+      end: new Date(Date.UTC(year, m, 1)),
+      label: `${MONTH_NAMES[m - 1]} ${year}`,
+    };
+  }
   if (mode === "quarter") {
     const q = Math.min(4, Math.max(1, Math.trunc(quarter ?? 1)));
     const startMonth = (q - 1) * 3;

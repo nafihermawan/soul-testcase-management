@@ -40,7 +40,8 @@ export async function GET(request: Request) {
   }
 
   const params = new URL(request.url).searchParams;
-  const mode: PeriodMode = params.get("mode") === "year" ? "year" : "quarter";
+  const rawMode = params.get("mode");
+  const mode: PeriodMode = rawMode === "year" ? "year" : rawMode === "month" ? "month" : "quarter";
   const nowYear = new Date().getUTCFullYear();
   const year = toYear(params.get("year")) ?? nowYear;
   const rawQuarter = Number(params.get("quarter"));
@@ -48,8 +49,13 @@ export async function GET(request: Request) {
     Number.isInteger(rawQuarter) && rawQuarter >= 1 && rawQuarter <= 4
       ? rawQuarter
       : Math.floor(new Date().getUTCMonth() / 3) + 1;
+  const rawMonth = Number(params.get("month"));
+  const month =
+    Number.isInteger(rawMonth) && rawMonth >= 1 && rawMonth <= 12
+      ? rawMonth
+      : new Date().getUTCMonth() + 1;
 
-  const { start, end, label } = periodRange(mode, year, quarter);
+  const { start, end, label } = periodRange(mode, year, quarter, month);
   const range = { gte: start, lt: end };
 
   const [
@@ -239,7 +245,13 @@ export async function GET(request: Request) {
   }
 
   const payload: QaPerformancePayload = {
-    period: { mode, year, quarter: mode === "quarter" ? quarter : null, label },
+    period: {
+      mode,
+      year,
+      quarter: mode === "quarter" ? quarter : null,
+      month: mode === "month" ? month : null,
+      label,
+    },
     totals,
     members,
     availableYears,

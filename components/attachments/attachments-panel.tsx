@@ -41,8 +41,9 @@ export type AttachmentsPanelHandle = {
   pick: () => void;
 };
 
-/** Ambil file dari clipboard: `files` (salin dari file manager) atau `items` (screenshot). */
-function filesFromClipboard(data: DataTransfer | null): File[] {
+/** Ambil file dari clipboard: `files` (salin dari file manager) atau `items` (screenshot).
+ *  Di-export agar panel lain (mis. modal Laporkan Bug) bisa memakai aturan yang sama. */
+export function filesFromClipboard(data: DataTransfer | null): File[] {
   if (!data) return [];
   const fromFiles = Array.from(data.files ?? []);
   if (fromFiles.length > 0) return fromFiles;

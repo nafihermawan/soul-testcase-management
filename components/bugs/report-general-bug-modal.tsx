@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { FileVideo, Image as ImageIcon, Info, X } from "lucide-react";
 import { createBug } from "@/lib/actions/automation-bugs";
+import { filesFromClipboard } from "@/components/attachments/attachments-panel";
 import { CustomSelect } from "@/components/ui/custom-select";
 import { Select } from "@/components/ui/select";
 import { FieldError } from "@/components/ui/field-error";
@@ -164,7 +165,7 @@ export function ReportGeneralBugModal({
   const filesRef = useRef<StagedFile[]>([]);
   filesRef.current = files;
 
-  const addFiles = (list: FileList | null) => {
+  const addFiles = useCallback((list: FileList | File[] | null) => {
     if (!list || list.length === 0) return;
     const accepted: StagedFile[] = [];
     for (const file of Array.from(list)) {
@@ -184,7 +185,7 @@ export function ReportGeneralBugModal({
     }
     if (accepted.length > 0) setFiles((prev) => [...prev, ...accepted]);
     if (inputRef.current) inputRef.current.value = "";
-  };
+  }, []);
 
   const removeFile = (id: string) => {
     setFiles((prev) => {
@@ -202,6 +203,25 @@ export function ReportGeneralBugModal({
     },
     []
   );
+
+  /**
+   * Ctrl/Cmd+V: sisipkan gambar/video dari clipboard ke daftar Upload Evidence —
+   * berlaku di mana pun selama modal ini terbuka, karena event paste dari elemen
+   * mana pun tetap bubble ke document. Hanya diproses bila clipboard benar-benar
+   * membawa file, sehingga paste teks ke input/textarea tetap normal.
+   */
+  useEffect(() => {
+    if (!canAttach) return;
+    const onPaste = (e: ClipboardEvent) => {
+      if (saving) return;
+      const pasted = filesFromClipboard(e.clipboardData);
+      if (pasted.length === 0) return;
+      e.preventDefault();
+      addFiles(pasted);
+    };
+    document.addEventListener("paste", onPaste);
+    return () => document.removeEventListener("paste", onPaste);
+  }, [canAttach, saving, addFiles]);
 
   // Opsi Suite / Module: daftar flat lintas project dari /api/suites.
   useEffect(() => {
@@ -656,7 +676,7 @@ export function ReportGeneralBugModal({
               />
               <ImageIcon size={20} color="#94A3B8" />
               <div style={{ fontSize: "0.75rem", fontWeight: 600, color: "#475569" }}>
-                Tarik &amp; lepas file di sini, atau klik untuk memilih
+                Tarik &amp; lepas file di sini, klik untuk memilih, atau tekan Ctrl+V untuk paste gambar
               </div>
               <div style={{ fontSize: "0.68rem", color: "#94A3B8" }}>
                 Gambar (JPG/PNG) atau video (MP4) · maks {MAX_MB} MB per file

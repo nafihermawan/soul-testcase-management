@@ -40,11 +40,11 @@ const RUN_NAME_MAX_W = 420;
 
 /** Gaya dasar <th> — teks kecil sentence case, slate-500 (bukan uppercase lagi). */
 const HEADER_TH: CSSProperties = {
-  fontSize: 13,
+  fontSize: 12,
   fontWeight: 600,
   letterSpacing: "0.05em",
   color: "#64748B",
-  padding: "14px 16px",
+  padding: "0.6rem 16px",
   textAlign: "left",
   // Judul kolom tidak boleh tertekuk ke baris baru — dengan table-layout fixed
   // dan lebar kolom yang paten, wrap bikin header bertumpuk.
@@ -288,7 +288,7 @@ export function HistoryView({ searchParams }: { searchParams: HistorySearchParam
                   )
                 ),
                 borderCollapse: "collapse",
-                fontSize: "0.85rem",
+                fontSize: 12,
                 tableLayout: "fixed",
               }}
             >

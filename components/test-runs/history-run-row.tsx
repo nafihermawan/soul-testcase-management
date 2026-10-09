@@ -130,8 +130,8 @@ export function HistoryRunRow({
       {/* 1. Nama Run — kolom BEKU (sticky kiri); shadow sebagai batas area scroll */}
       <td
         style={{
-          padding: "0.7rem 1rem",
-          fontSize: 13,
+          padding: "0.6rem 1rem",
+          fontSize: 12,
           fontWeight: 600,
           color: "#1E293B",
           textAlign: "left",
@@ -145,11 +145,11 @@ export function HistoryRunRow({
         {name}
       </td>
       {/* 2. Projects Covered */}
-      <td style={{ padding: "0.7rem 0.5rem", fontSize: 13, fontWeight: 400, color: "#475569", textAlign: "center", ...truncate }}>{projectLabel}</td>
+      <td style={{ padding: "0.6rem 0.5rem", fontSize: 12, fontWeight: 400, color: "#475569", textAlign: "center", ...truncate }}>{projectLabel}</td>
       {/* 3. Suites Included */}
-      <td style={{ padding: "0.7rem 0.5rem", fontSize: 13, fontWeight: 400, color: "#475569", textAlign: "center", ...truncate }}>{suiteLabel}</td>
+      <td style={{ padding: "0.6rem 0.5rem", fontSize: 12, fontWeight: 400, color: "#475569", textAlign: "center", ...truncate }}>{suiteLabel}</td>
       {/* 4. Platform */}
-      <td style={{ padding: "0.7rem 0.5rem", fontSize: 13, fontWeight: 400, color: "#475569", textAlign: "center", ...truncate }}>{platforms ?? "—"}</td>
+      <td style={{ padding: "0.6rem 0.5rem", fontSize: 12, fontWeight: 400, color: "#475569", textAlign: "center", ...truncate }}>{platforms ?? "—"}</td>
       {/* 5. Status — filled pill hijau solid + ikon centang putih */}
       <td style={{ padding: "0.7rem 0.5rem", textAlign: "center" }}>
         <span
@@ -173,18 +173,18 @@ export function HistoryRunRow({
         </span>
       </td>
       {/* 6. Sprint */}
-      <td style={{ padding: "0.7rem 0.5rem", fontSize: 13, fontWeight: 400, color: "#475569", textAlign: "center", ...truncate }}>{sprint ?? "—"}</td>
+      <td style={{ padding: "0.6rem 0.5rem", fontSize: 12, fontWeight: 400, color: "#475569", textAlign: "center", ...truncate }}>{sprint ?? "—"}</td>
       {/* 7. QA */}
-      <td style={{ padding: "0.7rem 0.5rem", fontSize: 13, fontWeight: 400, color: "#475569", textAlign: "center", ...truncate }}>
+      <td style={{ padding: "0.6rem 0.5rem", fontSize: 12, fontWeight: 400, color: "#475569", textAlign: "center", ...truncate }}>
         {qaName ?? "—"}
       </td>
       {/* 8. Execution date */}
-      <td style={{ padding: "0.7rem 0.5rem", fontSize: 13, fontWeight: 400, color: "#475569", textAlign: "center", ...truncate }}>
+      <td style={{ padding: "0.6rem 0.5rem", fontSize: 12, fontWeight: 400, color: "#475569", textAlign: "center", ...truncate }}>
         {new Date(createdAt).toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" })}
       </td>
       {/* 9. Aksi */}
 
-      <td style={{ padding: "0.7rem 1rem", textAlign: "right", whiteSpace: "nowrap" }}>
+      <td style={{ padding: "0.6rem 1rem", fontSize: 12, textAlign: "right", whiteSpace: "nowrap" }}>
         <span style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem" }}>
           <Link
             href={`/test-runs/${id}/report`}
@@ -199,12 +199,12 @@ export function HistoryRunRow({
               border: "1px solid #E2E8F0",
               background: "#F8FAFC",
               color: "#475569",
-              fontSize: "0.78rem",
+              fontSize: 12,
               fontWeight: 600,
               textDecoration: "none",
             }}
           >
-            <FileText size={13} /> Report
+            <FileText size={12} /> Report
           </Link>
           {extraAction}
         </span>

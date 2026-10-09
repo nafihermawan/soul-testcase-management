@@ -1639,19 +1639,21 @@ function RunItemCard({
         </div>
       </div>
 
-      {/* Blok hasil eksekusi: deskripsi di kiri, link bug di POJOK KANAN
-          dalam container yang sama. Hanya tampil saat gagal/terblokir. */}
+      {/* Sub-card Actual Result — 1 baris ringkas (truncate). Tidak ada toggle
+          sendiri: klik di mana pun pada row (termasuk box ini) dipropagasi ke
+          root row yang membuka Modal Execution. Tag bug di kanan tetap punya
+          aksinya sendiri. Hanya tampil saat gagal/terblokir. */}
       {showActualResult && item.actualResult && (
         <div
           style={{
             display: "flex",
-            alignItems: "flex-start",
+            alignItems: "center",
             justifyContent: "space-between",
             gap: "0.75rem",
             fontSize: "0.75rem",
             color: "#475569",
             lineHeight: 1.55,
-            background: "#F8FAFC",
+            background: "rgba(248, 250, 252, 0.5)",
             borderLeft: "2px solid #CBD5E1",
             paddingLeft: "0.75rem",
             paddingRight: "0.6rem",
@@ -1660,10 +1662,20 @@ function RunItemCard({
             borderRadius: "0 6px 6px 0",
           }}
         >
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <span style={{ fontWeight: 700, color: "#334155" }}>Actual Result: </span>
+          <span style={{ fontWeight: 700, color: "#334155", flexShrink: 0 }}>
+            Actual Result:
+          </span>
+          <span
+            style={{
+              flex: 1,
+              minWidth: 0,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
             {item.actualResult}
-          </div>
+          </span>
 
           {hasBugLinks && (
             <div

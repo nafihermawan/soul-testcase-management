@@ -1,10 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { updateBug } from "@/lib/actions/automation-bugs";
-import { AttachmentsPanel } from "@/components/attachments/attachments-panel";
+import {
+  AttachmentsPanel,
+  type AttachmentsPanelHandle,
+} from "@/components/attachments/attachments-panel";
 import { CustomSelect } from "@/components/ui/custom-select";
 import { Select } from "@/components/ui/select";
 import { FieldError } from "@/components/ui/field-error";
@@ -93,6 +96,8 @@ export function EditBugModal({
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   // Error sistem/server tampil sebagai toast kanan-atas, bukan banner di modal.
   const { toast, showToast, dismissToast } = useToast();
+  // Pemicu dialog file Evidence — tombolnya ditaruh di header section, bukan di panel.
+  const evidenceRef = useRef<AttachmentsPanelHandle>(null);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -469,13 +474,53 @@ export function EditBugModal({
 
           {/* 7. Evidence (Lampiran) — opsional */}
           <div>
-            <label style={labelStyle}>Evidence (Lampiran)</label>
+            {/* Header inline: label kiri + tombol Tambah File kanan. Pemicu file
+                diserahkan ke header (hideTrigger) agar panel hanya menampilkan
+                thumbnail polos tanpa kartu pembungkus. */}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: "0.5rem",
+                marginBottom: "0.4rem",
+              }}
+            >
+              <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "#334155" }}>
+                Evidence (Lampiran)
+              </span>
+              {canAttach && (
+                <button
+                  type="button"
+                  onClick={() => evidenceRef.current?.pick()}
+                  disabled={pending}
+                  style={{
+                    padding: 0,
+                    border: "none",
+                    background: "transparent",
+                    fontSize: "0.75rem",
+                    fontWeight: 600,
+                    color: "#2563EB",
+                    cursor: pending ? "not-allowed" : "pointer",
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!pending) e.currentTarget.style.color = "#1D4ED8";
+                  }}
+                  onMouseLeave={(e) => (e.currentTarget.style.color = "#2563EB")}
+                >
+                  🔗 Tambah File
+                </button>
+              )}
+            </div>
             <AttachmentsPanel
               owner={{ bugId: bug.id }}
               attachments={bug.attachments}
               canEdit={canAttach}
               onChange={onAttachmentsChange}
               compact
+              plain
+              hideTrigger
+              handleRef={evidenceRef}
             />
           </div>
         </div>

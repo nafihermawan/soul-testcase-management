@@ -8,12 +8,21 @@ import { FilterModal } from "@/components/ui/filter-modal";
 import { CustomSelect, filterLabelStyle } from "@/components/ui/custom-select";
 import { ErrorBlock, StatsCardsSkeleton, TableCardSkeleton } from "@/components/ui/data-states";
 import { ReportsView } from "@/components/reports/reports-view";
-import { WeeklyReportButton } from "@/components/reports/weekly-report-button";
-import { QaPerformanceView } from "@/components/analytics/qa-performance-view";
+import {
+  QaPerformanceView,
+  PeriodFilterControl,
+  ExportMenu,
+  defaultQaPeriod,
+  type QaPeriodSelection,
+} from "@/components/analytics/qa-performance-view";
+import {
+  exportQaPerformanceCsv,
+  exportQaPerformanceXlsx,
+} from "@/components/analytics/qa-performance-export";
 import { useApi } from "@/lib/client/use-api";
 import { useMe } from "@/lib/client/me-context";
 import { pct } from "@/lib/qa-metrics";
-import type { ReportsPayload } from "@/types/api";
+import type { QaPerformancePayload, ReportsPayload } from "@/types/api";
 
 const ALL = "ALL";
 
@@ -27,7 +36,7 @@ type ReportsTabKey = "coverage" | "performance";
  * dengan guard screen; API performa juga menolak 403 di sisi server.
  *
  * Tab navigation duduk di luar card konten (persis di bawah header), dan
- * toolbar tiap tab (Filter / Buat Laporan) ada di header kanan atas.
+ * toolbar tiap tab (Filter / Export Report) ada di header kanan atas.
  */
 export function ReportsAnalyticsView() {
   const { me, loading: meLoading } = useMe();
@@ -51,6 +60,20 @@ export function ReportsAnalyticsView() {
   }, [platform, project, tcStatus]);
 
   const isFiltered = platform !== ALL || project !== ALL;
+
+  // --- Tab QA Performance: periode + data di-fetch di sini (bukan di dalam
+  // QaPerformanceView) supaya tombol Filter & Export bisa duduk di header
+  // halaman, sejajar dengan tombol Filter tab Coverage & Repository.
+  const [period, setPeriod] = useState<QaPeriodSelection>(defaultQaPeriod);
+  const {
+    data: qaData,
+    error: qaError,
+    loading: qaLoading,
+    reload: qaReload,
+  } = useApi<QaPerformancePayload>(
+    `/api/qa-performance?mode=${period.mode}&year=${period.year}&quarter=${period.quarter}&month=${period.month}`,
+    { enabled: tab === "performance" }
+  );
 
   // Section yang punya keterkaitan project/suite dihitung ulang di client dari
   // daftar suite, supaya filter Platform/Project konsisten di seluruh tab.
@@ -148,7 +171,7 @@ export function ReportsAnalyticsView() {
         gap: "1rem",
       }}
     >
-      {/* Header halaman + aksi (Filter & Buat Laporan) — responsif. */}
+      {/* Header halaman + aksi (Filter & Export Report) — responsif. */}
       <Card style={{ padding: "0.875rem" }}>
         <div
           style={{
@@ -251,7 +274,20 @@ export function ReportsAnalyticsView() {
                 </div>
               </FilterModal>
             )}
-            <WeeklyReportButton />
+            {tab === "performance" && (
+              <>
+                <PeriodFilterControl
+                  value={period}
+                  availableYears={qaData?.availableYears ?? [new Date().getUTCFullYear()]}
+                  onApply={setPeriod}
+                />
+                <ExportMenu
+                  disabled={!qaData || qaData.members.length === 0}
+                  onExcel={() => qaData && void exportQaPerformanceXlsx(qaData)}
+                  onCsv={() => qaData && void exportQaPerformanceCsv(qaData)}
+                />
+              </>
+            )}
           </div>
         </div>
       </Card>
@@ -284,8 +320,12 @@ export function ReportsAnalyticsView() {
             isFiltered={isFiltered}
           />
         )
+      ) : qaError ? (
+        <ErrorBlock message={qaError.message} onRetry={qaReload} />
+      ) : qaLoading || !qaData ? (
+        <TableCardSkeleton />
       ) : (
-        <QaPerformanceView />
+        <QaPerformanceView data={qaData} />
       )}
     </main>
   );

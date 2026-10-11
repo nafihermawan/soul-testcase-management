@@ -624,13 +624,13 @@ export function BugsPageClient({
                       />
                     </span>
                   </th>
-                  <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600, textAlign: "center", position: "sticky", top: 0, zIndex: 20, background: "#F8FAFC" }}>Test Run</th>
+                  <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600, textAlign: "left", position: "sticky", top: 0, zIndex: 20, background: "#F8FAFC" }}>Test Run</th>
                   <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600, textAlign: "left", minWidth: 120, position: "sticky", top: 0, zIndex: 20, background: "#F8FAFC", whiteSpace: "nowrap" }}>Module</th>
-                  <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600, textAlign: "center", position: "sticky", top: 0, zIndex: 20, background: "#F8FAFC" }}>Environment</th>
-                  <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600, textAlign: "center", position: "sticky", top: 0, zIndex: 20, background: "#F8FAFC" }}>Severity</th>
-                  <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600, textAlign: "center", position: "sticky", top: 0, zIndex: 20, background: "#F8FAFC" }}>Status</th>
-                  <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600, textAlign: "center", position: "sticky", top: 0, zIndex: 20, background: "#F8FAFC" }}>Created By</th>
-                  <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600, textAlign: "center", position: "sticky", top: 0, zIndex: 20, background: "#F8FAFC" }}>Created Date</th>
+                  <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600, textAlign: "left", position: "sticky", top: 0, zIndex: 20, background: "#F8FAFC" }}>Environment</th>
+                  <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600, textAlign: "left", position: "sticky", top: 0, zIndex: 20, background: "#F8FAFC" }}>Severity</th>
+                  <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600, textAlign: "left", position: "sticky", top: 0, zIndex: 20, background: "#F8FAFC" }}>Status</th>
+                  <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600, textAlign: "left", position: "sticky", top: 0, zIndex: 20, background: "#F8FAFC" }}>Created By</th>
+                  <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600, textAlign: "left", position: "sticky", top: 0, zIndex: 20, background: "#F8FAFC" }}>Created Date</th>
                   <th style={{ padding: "0.6rem 1.25rem", fontWeight: 600, textAlign: "center", position: "sticky", top: 0, zIndex: 20, background: "#F8FAFC" }}>Aksi</th>
                 </tr>
               </thead>
@@ -708,7 +708,7 @@ export function BugsPageClient({
                           )}
                         </div>
                       </td>
-                      <td style={{ padding: "0.6rem 0.5rem", textAlign: "center", overflow: "hidden" }}>
+                      <td style={{ padding: "0.6rem 0.5rem", textAlign: "left", overflow: "hidden" }}>
                         {b.run && b.run.name ? (
                           <Link
                             href={`/test-runs/${b.run.id}`}
@@ -756,7 +756,7 @@ export function BugsPageClient({
                           <span style={{ color: "#94A3B8", fontWeight: 400 }}>—</span>
                         )}
                       </td>
-                      <td style={{ padding: "0.6rem 0.5rem", textAlign: "center", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      <td style={{ padding: "0.6rem 0.5rem", textAlign: "left", overflow: "hidden", textOverflow: "ellipsis" }}>
                         {env ? (
                           <span style={{ fontSize: 12, fontWeight: 600, color: "#475569", whiteSpace: "nowrap" }}>
                             {env}
@@ -765,7 +765,7 @@ export function BugsPageClient({
                           <span style={{ color: "#94A3B8" }}>—</span>
                         )}
                       </td>
-                      <td style={{ padding: "0.6rem 0.5rem", textAlign: "center" }}>
+                      <td style={{ padding: "0.6rem 0.5rem", textAlign: "left" }}>
                         {sev ? (
                           <span style={{ fontSize: 12, fontWeight: 600, color: sev }}>
                             {b.severity}
@@ -774,7 +774,7 @@ export function BugsPageClient({
                           "—"
                         )}
                       </td>
-                      <td style={{ padding: "0.6rem 0.5rem", textAlign: "center" }}>
+                      <td style={{ padding: "0.6rem 0.5rem", textAlign: "left" }}>
                         <span onClick={(e) => e.stopPropagation()} style={{ display: "inline-flex", maxWidth: 130 }}>
                           <Select
                             size="sm"
@@ -799,10 +799,10 @@ export function BugsPageClient({
                           </Select>
                         </span>
                       </td>
-                      <td style={{ padding: "0.6rem 0.5rem", textAlign: "center", color: "var(--text-secondary)", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      <td style={{ padding: "0.6rem 0.5rem", textAlign: "left", color: "var(--text-secondary)", overflow: "hidden", textOverflow: "ellipsis" }}>
                         {b.createdBy?.name ?? "—"}
                       </td>
-                      <td style={{ padding: "0.6rem 0.5rem", textAlign: "center", color: "var(--text-muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      <td style={{ padding: "0.6rem 0.5rem", textAlign: "left", color: "var(--text-muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                         {new Date(b.createdAt).toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" })}
                       </td>
                       <td style={{ padding: "0.6rem 1.25rem", textAlign: "center" }}>

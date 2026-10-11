@@ -2,19 +2,13 @@
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
-import { ChevronDown, Download, FileSpreadsheet, FileText, Info, SlidersHorizontal } from "lucide-react";
+import { FileSpreadsheet, FileText, SlidersHorizontal } from "lucide-react";
 import { Card } from "@/components/ui";
 import { KpiCard } from "@/components/ui/kpi-card";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { Select } from "@/components/ui/select";
 import { InitialsAvatar } from "@/components/ui/avatar";
-import { ErrorBlock, TableCardSkeleton } from "@/components/ui/data-states";
-import { useApi } from "@/lib/client/use-api";
 import { BADGE_LABEL, MONTH_NAMES, type PeriodMode, type PerformanceBadge } from "@/lib/qa-performance";
-import {
-  exportQaPerformanceCsv,
-  exportQaPerformanceXlsx,
-} from "@/components/analytics/qa-performance-export";
 import type { QaPerformanceMember, QaPerformancePayload } from "@/types/api";
 
 const MONTHS_PER_QUARTER = 3;
@@ -33,16 +27,6 @@ function passRateColor(value: number | null): string {
   if (value >= 50) return "#D97706";
   return "#E11D48";
 }
-
-/** Penjelasan perhitungan tiap metrik — dipindah ke tooltip (i) header tabel. */
-const METRIC_HELP = [
-  "TCs created — pembuat awal test case (TestCase.createdById) pada periode ini.",
-  "Executed cases & Pass rate — hasil eksekusi yang terakhir diubah pada periode ini (TestRunResult.updatedById, status ≠ NOT_RUN); Pass rate = PASS ÷ (PASS + FAIL).",
-  "Bugs found — bug yang dilaporkan (Bug.createdById) pada periode ini.",
-  "Assigned runs — penugasan multi-assignee (TestRunAssignee) pada run yang dibuat di periode ini.",
-  "Score — 0,6×pass rate + 0,25×volume eksekusi (relatif ke tertinggi) + 0,15×bug (relatif ke tertinggi); badge ≥85 Top Performer, ≥70 On Track, sisanya Needs Attention.",
-  "Avg. execution time belum tersedia — sistem tidak mencatat durasi eksekusi.",
-].join("\n");
 
 /** Divider inset (tidak mentok tepi kartu) — pola yang dipakai tabel lain. */
 const rowDivider: CSSProperties = {
@@ -77,7 +61,7 @@ const td: CSSProperties = {
 };
 
 /** Menu kecil Export Report (portal supaya tidak terpotong overflow card). */
-function ExportMenu({
+export function ExportMenu({
   disabled,
   onExcel,
   onCsv,
@@ -137,25 +121,35 @@ function ExportMenu({
         aria-haspopup="menu"
         aria-expanded={open}
         style={{
-          display: "inline-flex",
-          alignItems: "center",
-          gap: 6,
-          height: 32,
-          padding: "0 12px",
+          // Primary Action Button — solid tanpa garis tepi (border-0), kuning/
+          // amber khas sistem. Spec memakai kelas Tailwind (bg-amber-400 …,
+          // shadow-2xs, border-0), tapi proyek ini TIDAK memakai Tailwind, jadi
+          // nilainya diterjemahkan ke inline style: bg-amber-400 #FBBF24 ·
+          // hover bg-amber-500 #F59E0B · text-slate-900 #0F172A · font-bold ·
+          // px-4 py-2 · text-xs · shadow-2xs · border-0.
+          // (`border: none` wajib eksplisit — tidak ada reset border global
+          // untuk <button>, sehingga border bawaan browser ikut tampil.)
+          padding: "8px 16px",
           borderRadius: 8,
-          border: "1px solid #E2E8F0",
-          background: "#fff",
-          color: "#334155",
+          border: "none",
+          background: "#FBBF24",
+          color: "#0F172A",
           fontSize: 12,
-          fontWeight: 600,
+          fontWeight: 700,
+          boxShadow: "0 1px 2px rgba(0, 0, 0, 0.05)",
           cursor: disabled ? "not-allowed" : "pointer",
           opacity: disabled ? 0.55 : 1,
           whiteSpace: "nowrap",
+          transition: "background-color 0.15s ease, color 0.15s ease",
+        }}
+        onMouseEnter={(e) => {
+          if (!disabled) e.currentTarget.style.background = "#F59E0B";
+        }}
+        onMouseLeave={(e) => {
+          if (!disabled) e.currentTarget.style.background = "#FBBF24";
         }}
       >
-        <Download size={14} />
         Export Report
-        <ChevronDown size={13} style={{ color: "#94A3B8" }} />
       </button>
 
       {open &&
@@ -208,7 +202,7 @@ function ExportMenu({
 }
 
 /** Nilai filter periode QA Performance (mode + bulan/quarter + tahun). */
-type QaPeriodSelection = {
+export type QaPeriodSelection = {
   mode: PeriodMode;
   year: number;
   quarter: number;
@@ -222,10 +216,21 @@ const MODE_LABEL: Record<PeriodMode, string> = {
 };
 
 /** Label ringkas periode dari nilai yang berlaku (mis. "Q4 2026"). */
-function periodLabelOf(p: QaPeriodSelection): string {
+export function periodLabelOf(p: QaPeriodSelection): string {
   if (p.mode === "month") return `${MONTH_NAMES[p.month - 1]} ${p.year}`;
   if (p.mode === "quarter") return `Q${p.quarter} ${p.year}`;
   return String(p.year);
+}
+
+/** Nilai default periode: quarter berjalan (bulan/tahun saat ini). */
+export function defaultQaPeriod(): QaPeriodSelection {
+  const now = new Date();
+  return {
+    mode: "quarter",
+    year: now.getUTCFullYear(),
+    quarter: Math.floor(now.getUTCMonth() / MONTHS_PER_QUARTER) + 1,
+    month: now.getUTCMonth() + 1,
+  };
 }
 
 /**
@@ -235,7 +240,7 @@ function periodLabelOf(p: QaPeriodSelection): string {
  * "Terapkan" diklik; popover di-portal agar tidak terpotong `overflow: hidden`
  * kartu toolbar.
  */
-function PeriodFilterControl({
+export function PeriodFilterControl({
   value,
   availableYears,
   onApply,
@@ -275,13 +280,7 @@ function PeriodFilterControl({
     setDraft((prev) => ({ ...prev, [key]: v }));
 
   // Reset draft ke default: quarter berjalan (bulan/tahun saat ini).
-  const resetDraft = () =>
-    setDraft({
-      mode: "quarter",
-      year: new Date().getUTCFullYear(),
-      quarter: Math.floor(new Date().getUTCMonth() / MONTHS_PER_QUARTER) + 1,
-      month: new Date().getUTCMonth() + 1,
-    });
+  const resetDraft = () => setDraft(defaultQaPeriod());
 
   return (
     <>
@@ -294,22 +293,28 @@ function PeriodFilterControl({
         style={{
           display: "inline-flex",
           alignItems: "center",
-          gap: "0.375rem",
-          // Styling baku tombol Filter aplikasi (selaras Bugs Tracker / Run History):
-          // border-amber-400 · text-amber-700 · bg-amber-50/50 · hover:bg-amber-100
-          // font-semibold · text-xs · px-3 py-1.5 · rounded-lg
+          gap: 8,
+          // Styling identik dengan tombol Filter tab Coverage & Repository
+          // (FilterModal): outlined/ghost amber, h-8 (32px), px-12, text-xs.
+          height: 32,
+          padding: "0 12px",
+          border: "1px solid #FFC348",
+          background: "#fff",
+          color: "#F59E0B",
+          fontWeight: 500,
           fontSize: 12,
-          fontWeight: 600,
-          color: "#B45309",
-          background: "rgba(255, 251, 235, 0.5)",
-          border: "1px solid #FBBF24",
           borderRadius: 8,
-          padding: "0.375rem 0.75rem",
           cursor: "pointer",
-          transition: "background-color 0.15s ease",
+          transition: "background-color 0.15s ease, border-color 0.15s ease",
         }}
-        onMouseEnter={(e) => (e.currentTarget.style.background = "#FEF3C7")}
-        onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(255, 251, 235, 0.5)")}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = "rgba(255, 251, 235, 0.5)";
+          e.currentTarget.style.borderColor = "#FBBF24";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = "#fff";
+          e.currentTarget.style.borderColor = "#FFC348";
+        }}
       >
         <SlidersHorizontal size={13} />
         Filter
@@ -504,68 +509,13 @@ function PeriodFilterControl({
  * belum menyimpan durasi eksekusi (tidak ada kolom startedAt/finishedAt), dan
  * atribusi eksekusi memakai `TestRunResult.updatedById` = pengubah terakhir.
  */
-export function QaPerformanceView() {
-  const now = new Date();
-  const [period, setPeriod] = useState<QaPeriodSelection>({
-    mode: "quarter",
-    year: now.getUTCFullYear(),
-    quarter: Math.floor(now.getUTCMonth() / MONTHS_PER_QUARTER) + 1,
-    month: now.getUTCMonth() + 1,
-  });
-
-  const { data, error, loading, reload } = useApi<QaPerformancePayload>(
-    `/api/qa-performance?mode=${period.mode}&year=${period.year}&quarter=${period.quarter}&month=${period.month}`
-  );
-
-  if (error) return <ErrorBlock message={error.message} onRetry={reload} />;
-  if (loading || !data) {
-    return (
-      <div style={{ width: "100%" }}>
-        <TableCardSkeleton />
-      </div>
-    );
-  }
-
+export function QaPerformanceView({ data }: { data: QaPerformancePayload }) {
   const totals = data.totals;
 
   return (
     <div style={{ fontFamily: "var(--font-sans)", width: "100%" }}>
-      {/* Toolbar tab: periode + export (judul halaman ada di header induk) */}
-      <Card style={{ padding: "0.875rem", marginBottom: 12 }}>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 12,
-            flexWrap: "wrap",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            {/* Satu tombol Filter standar; label periode aktif tetap ditampilkan. */}
-            <PeriodFilterControl
-              value={period}
-              availableYears={data.availableYears}
-              onApply={setPeriod}
-            />
-            <span style={{ fontSize: 12, color: "#64748B" }}>
-              Periode{" "}
-              <strong style={{ color: "#334155", fontWeight: 600 }}>{periodLabelOf(period)}</strong>
-            </span>
-          </div>
-
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <ExportMenu
-              disabled={data.members.length === 0}
-              onExcel={() => void exportQaPerformanceXlsx(data)}
-              onCsv={() => void exportQaPerformanceCsv(data)}
-            />
-          </div>
-        </div>
-      </Card>
-
-      {/* Kartu ringkasan tim — padding rapat, tanpa dot dekoratif (netral & seragam). */}
-      <div className="metric-grid" style={{ marginBottom: 12 }}>
+      {/* Kartu ringkasan tim — 3 kartu simetris (grid-cols-3). */}
+      <div className="metric-grid-3" style={{ marginBottom: 12 }}>
         <KpiCard
           compact
           label="Total Executed Test Cases"
@@ -588,12 +538,6 @@ export function QaPerformanceView() {
           value={String(totals.bugsReported)}
           sub="Bug yang dilaporkan pada periode ini"
         />
-        <KpiCard
-          compact
-          label="Resolved / Re-opened Runs"
-          value={`${totals.completedRuns} / ${totals.reopenedRuns}`}
-          sub="Run COMPLETED / RE_OPEN"
-        />
       </div>
 
       {/* Tabel performa member — full height seperti halaman Active Runs */}
@@ -605,39 +549,6 @@ export function QaPerformanceView() {
           flexDirection: "column",
         }}
       >
-        <div style={{ padding: "12px 16px 8px", flexShrink: 0 }}>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: 8,
-              flexWrap: "wrap",
-            }}
-          >
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-              <h2 style={{ fontSize: 13, fontWeight: 600, color: "#475569", margin: 0 }}>
-                Performa member QA
-              </h2>
-              {/* Detail perhitungan disembunyikan di tooltip supaya header rapi. */}
-              <span
-                role="img"
-                aria-label="Penjelasan perhitungan metrik"
-                title={METRIC_HELP}
-                style={{ display: "inline-flex", color: "#94A3B8", cursor: "help" }}
-              >
-                <Info size={14} />
-              </span>
-            </span>
-            <span
-              title="Total test case di sistem (seluruh waktu) — tidak mengikuti filter periode"
-              style={{ fontSize: 12, fontWeight: 500, color: "#64748B" }}
-            >
-              Total TC: {totals.allTimeCreatedCases.toLocaleString("id-ID")}
-            </span>
-          </div>
-        </div>
-
         {data.members.length === 0 ? (
           <div
             style={{

@@ -520,6 +520,19 @@ button,
   }
 }
 
+/* Kartu metrik 3 kolom simetris (QA Performance): 1 kolom (mobile) -> 3 (tablet+). */
+.metric-grid-3 {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+}
+
+@media (min-width: 640px) {
+  .metric-grid-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
 /* Baris split dashboard: menumpuk di layar sempit, side-by-side di layar lebar */
 .dash-split {
   display: grid;

@@ -78,7 +78,8 @@ export function SuiteDetailView({
           borderRadius: 16,
           padding: "1.5rem",
           boxShadow: "0 1px 3px rgba(15, 23, 42, 0.06)",
-          marginBottom: "1.5rem",
+          // mb-3: jarak header suite ke card tabel/accordion di bawahnya dipadatkan.
+          marginBottom: "0.75rem",
         }}
       >
         {/* 1. Breadcrumb */}

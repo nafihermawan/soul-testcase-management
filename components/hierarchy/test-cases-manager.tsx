@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
+import { formatCase } from "@/lib/format";
 import { useRefresh } from "@/lib/client/refresh-context";
 import {
   AlertCircle,
@@ -693,7 +694,8 @@ function SectionCard({
         if (draggingTcId) onDropTc(draggingTcId);
       }}
       style={{
-        marginBottom: "1rem",
+        // mb-2: jarak antar accordion section dipadatkan (16 -> 8px).
+        marginBottom: "0.5rem",
         background: dragOver ? "rgba(251, 191, 36, 0.05)" : "#fff",
         border: dragOver ? "1px solid #FBBF24" : "1px solid var(--border)",
         borderRadius: 8,
@@ -1023,13 +1025,13 @@ function TestCaseTable({
             <th style={{ padding: "0.5rem 0.5rem", fontWeight: 600, width: "auto", textAlign: "left" }}>
               Title
             </th>
-            <th style={{ padding: "0.5rem 0.5rem", fontWeight: 600, width: 110, textAlign: "center" }}>
+            <th style={{ padding: "0.5rem 0.5rem", fontWeight: 600, width: 144, textAlign: "left" }}>
               Type
             </th>
-            <th style={{ padding: "0.5rem 0.5rem", fontWeight: 600, width: 140, textAlign: "center" }}>
+            <th style={{ padding: "0.5rem 0.5rem", fontWeight: 600, width: 144, textAlign: "left" }}>
               Priority
             </th>
-            <th style={{ padding: "0.5rem 0.5rem", fontWeight: 600, width: 140, textAlign: "center" }}>
+            <th style={{ padding: "0.5rem 0.5rem", fontWeight: 600, width: 144, textAlign: "left" }}>
               Status
             </th>
             {canEdit && (
@@ -1139,78 +1141,106 @@ function TestCaseTable({
               >
                 {t.title}
               </td>
-              <td style={{ padding: "0.5rem 0.5rem", width: 110, textAlign: "center" }}>
+              <td style={{ padding: "0.5rem 0.5rem", width: 144, textAlign: "left" }}>
                 {/* Teks polos berwarna + chevron bawaan Select (sama seperti
-                    dropdown Priority/Status) — bisa diubah langsung. */}
-                <Select
-                  size="sm"
-                  value={t.type ?? ""}
-                  disabled={!canEdit}
-                  ariaLabel="Ubah type TC"
+                    dropdown Priority/Status) — bisa diubah langsung. Rata KIRI
+                    supaya sejajar dengan judul kolomnya (kolom Opsi tetap tengah). */}
+                <div
                   style={{
-                    ...plainSelectStyle(typeTone(t.type)),
-                    maxWidth: "100%",
-                    width: "auto",
                     display: "inline-flex",
-                  }}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    onQuickUpdate(t, {
-                      type: val === "POSITIVE" || val === "NEGATIVE" ? val : null,
-                    });
+                    alignItems: "center",
+                    justifyContent: "flex-start",
+                    maxWidth: "100%",
                   }}
                 >
-                  <option value="">— Belum dipilih —</option>
-                  <option value="POSITIVE">Positive</option>
-                  <option value="NEGATIVE">Negative</option>
-                </Select>
+                  <Select
+                    size="sm"
+                    value={t.type ?? ""}
+                    disabled={!canEdit}
+                    ariaLabel="Ubah type TC"
+                    style={{
+                      ...plainSelectStyle(typeTone(t.type)),
+                      maxWidth: "100%",
+                      width: "auto",
+                      display: "inline-flex",
+                    }}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      onQuickUpdate(t, {
+                        type: val === "POSITIVE" || val === "NEGATIVE" ? val : null,
+                      });
+                    }}
+                  >
+                    <option value="">— Belum dipilih —</option>
+                    <option value="POSITIVE">Positive</option>
+                    <option value="NEGATIVE">Negative</option>
+                  </Select>
+                </div>
               </td>
-              <td style={{ padding: "0.5rem 0.5rem", width: 140, textAlign: "center" }}>
-                <Select
-                  size="sm"
-                  value={t.priority}
-                  disabled={!canEdit}
-                  ariaLabel="Ubah priority TC"
+              <td style={{ padding: "0.5rem 0.5rem", width: 144, textAlign: "left" }}>
+                <div
                   style={{
-                    ...plainSelectStyle(priorityTone(t.priority)),
-                    maxWidth: "100%",
-                    // Menyusut ke konten agar bisa muncul rata tengah di sel.
-                    width: "auto",
                     display: "inline-flex",
-                  }}
-                  onChange={(e) => {
-                    const val = e.target.value as TestCase["priority"];
-                    onQuickUpdate(t, { priority: val });
+                    alignItems: "center",
+                    justifyContent: "flex-start",
+                    maxWidth: "100%",
                   }}
                 >
-                  <option value="CRITICAL">CRITICAL</option>
-                  <option value="HIGH">HIGH</option>
-                  <option value="MEDIUM">MEDIUM</option>
-                  <option value="LOW">LOW</option>
-                </Select>
+                  <Select
+                    size="sm"
+                    value={t.priority}
+                    disabled={!canEdit}
+                    ariaLabel="Ubah priority TC"
+                    style={{
+                      ...plainSelectStyle(priorityTone(t.priority)),
+                      maxWidth: "100%",
+                      // Menyusut ke konten agar bisa muncul rata tengah di sel.
+                      width: "auto",
+                      display: "inline-flex",
+                    }}
+                    onChange={(e) => {
+                      const val = e.target.value as TestCase["priority"];
+                      onQuickUpdate(t, { priority: val });
+                    }}
+                  >
+                    <option value="CRITICAL">Critical</option>
+                    <option value="HIGH">High</option>
+                    <option value="MEDIUM">Medium</option>
+                    <option value="LOW">Low</option>
+                  </Select>
+                </div>
               </td>
-              <td style={{ padding: "0.5rem 0.5rem", width: 140, textAlign: "center" }}>
-                <Select
-                  size="sm"
-                  value={t.status}
-                  disabled={!canEdit}
-                  ariaLabel="Ubah status TC"
+              <td style={{ padding: "0.5rem 0.5rem", width: 144, textAlign: "left" }}>
+                <div
                   style={{
-                    ...plainSelectStyle(statusTone(t.status)),
-                    maxWidth: "100%",
-                    // Menyusut ke konten agar bisa muncul rata tengah di sel.
-                    width: "auto",
                     display: "inline-flex",
-                  }}
-                  onChange={(e) => {
-                    const val = e.target.value as TestCase["status"];
-                    onQuickUpdate(t, { status: val });
+                    alignItems: "center",
+                    justifyContent: "flex-start",
+                    maxWidth: "100%",
                   }}
                 >
-                  <option value="ACTIVE">ACTIVE</option>
-                  <option value="DRAFT">DRAFT</option>
-                  <option value="DEPRECATED">DEPRECATED</option>
-                </Select>
+                  <Select
+                    size="sm"
+                    value={t.status}
+                    disabled={!canEdit}
+                    ariaLabel="Ubah status TC"
+                    style={{
+                      ...plainSelectStyle(statusTone(t.status)),
+                      maxWidth: "100%",
+                      // Menyusut ke konten agar bisa muncul rata tengah di sel.
+                      width: "auto",
+                      display: "inline-flex",
+                    }}
+                    onChange={(e) => {
+                      const val = e.target.value as TestCase["status"];
+                      onQuickUpdate(t, { status: val });
+                    }}
+                  >
+                    <option value="ACTIVE">Active</option>
+                    <option value="DRAFT">Draft</option>
+                    <option value="DEPRECATED">Deprecated</option>
+                  </Select>
+                </div>
               </td>
               {canEdit && (
                 <td style={{ padding: "0.5rem 0.5rem", textAlign: "center", width: 64 }}>
@@ -2912,7 +2942,7 @@ function TestCaseDetailModal({
               >
                 Priority
               </span>
-              <span style={priorityText}>{tc.priority}</span>
+              <span style={priorityText}>{formatCase(tc.priority)}</span>
             </div>
             <div>
               <span
@@ -2926,7 +2956,7 @@ function TestCaseDetailModal({
               >
                 Status
               </span>
-              <span style={statusText}>{tc.status}</span>
+              <span style={statusText}>{formatCase(tc.status)}</span>
             </div>
             <div>
               <span

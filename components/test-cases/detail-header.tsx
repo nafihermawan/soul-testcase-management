@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Pencil, Trash2 } from "lucide-react";
 import { deleteTestCase } from "@/lib/actions/test-cases";
+import { formatCase } from "@/lib/format";
 import { ConfirmDialog, Toast, useToast } from "@/components/ui/feedback";
 
 const badge = (label: string, bg: string, color: string) => (
@@ -46,21 +47,23 @@ export function TestCasePageHeader({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
+  // Label badge pakai Title Case ("Active", "Critical") — nilainya sendiri tetap
+  // uppercase di data.
   const statusBadge =
     status === "ACTIVE"
-      ? badge(status, "#D1FAE5", "#047857")
+      ? badge(formatCase(status), "#D1FAE5", "#047857")
       : status === "DRAFT"
-        ? badge(status, "#FEF3C7", "#B45309")
-        : badge(status, "#F3F4F6", "#6B7280");
+        ? badge(formatCase(status), "#FEF3C7", "#B45309")
+        : badge(formatCase(status), "#F3F4F6", "#6B7280");
 
   const priorityBadge =
     priority === "CRITICAL"
-      ? badge(priority, "#FEE2E2", "#B91C1C")
+      ? badge(formatCase(priority), "#FEE2E2", "#B91C1C")
       : priority === "HIGH"
-        ? badge(priority, "#FFEDD5", "#C2410C")
+        ? badge(formatCase(priority), "#FFEDD5", "#C2410C")
         : priority === "MEDIUM"
-          ? badge(priority, "#DBEAFE", "#1D4ED8")
-          : badge(priority, "#F3F4F6", "#374151");
+          ? badge(formatCase(priority), "#DBEAFE", "#1D4ED8")
+          : badge(formatCase(priority), "#F3F4F6", "#374151");
 
   const doDelete = async () => {
     setDeleting(true);

@@ -59,6 +59,15 @@ export function getFormattedDate(date: Date = new Date()): string {
   return date.toISOString().split("T")[0].replace(/-/g, "");
 }
 
+/**
+ * Title Case sederhana untuk nilai enum: `"CRITICAL"` → `"Critical"`.
+ * Dipakai di tampilan (priority/status) tanpa mengubah nilai yang tersimpan.
+ */
+export function formatCase(text: string | null | undefined): string {
+  if (!text) return "";
+  return text.charAt(0).toUpperCase() + text.slice(1).toLowerCase();
+}
+
 /* ---------- Run code: sprint-tanggal-kode unik ---------- */
 
 export type RunCodeInput = {

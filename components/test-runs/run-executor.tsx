@@ -11,7 +11,7 @@ import { createBug, updateBug, updateBugStatus } from "@/lib/actions/automation-
 import { downloadBugPdf } from "@/lib/bug-pdf";
 import { useMe } from "@/lib/client/me-context";
 import { ConfirmDialog, Spinner, Toast, useToast } from "@/components/ui/feedback";
-import { entityCode, runCodeOf } from "@/lib/format";
+import { entityCode, formatCase, runCodeOf } from "@/lib/format";
 import {
   AttachmentsPanel,
   type AttachmentsPanelHandle,
@@ -3391,11 +3391,11 @@ function ExecutionModal({
           >
             <div>
               <span style={{ display: "block", color: "#94A3B8", fontWeight: 500, fontSize: "0.6875rem", marginBottom: "0.25rem" }}>Priority</span>
-              <span style={{ fontWeight: 600, color: "#1E293B", fontSize: "0.75rem" }}>{tc?.priority ?? "—"}</span>
+              <span style={{ fontWeight: 600, color: "#1E293B", fontSize: "0.75rem" }}>{formatCase(tc?.priority) || "—"}</span>
             </div>
             <div>
               <span style={{ display: "block", color: "#94A3B8", fontWeight: 500, fontSize: "0.6875rem", marginBottom: "0.25rem" }}>Status</span>
-              <span style={{ fontWeight: 600, color: "#1E293B", fontSize: "0.75rem" }}>{tc?.status ?? "—"}</span>
+              <span style={{ fontWeight: 600, color: "#1E293B", fontSize: "0.75rem" }}>{formatCase(tc?.status) || "—"}</span>
             </div>
             <div>
               <span style={{ display: "block", color: "#94A3B8", fontWeight: 500, fontSize: "0.6875rem", marginBottom: "0.25rem" }}>Author</span>

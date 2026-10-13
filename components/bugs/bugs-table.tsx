@@ -287,8 +287,11 @@ export function BugsPageClient({
           borderRadius: 12,
           border: "1px solid #E5E7EB",
           boxShadow: "0px 1px 2px rgba(16, 24, 40, 0.04), 0px 4px 12px rgba(16, 24, 40, 0.06)",
-          padding: "20px 24px",
-          marginBottom: 20,
+          // pb-4: padding bawah card dikurangi (20 -> 16px).
+          padding: "20px 24px 16px",
+          // mb-4: tab kini pindah KE DALAM card tabel, jadi jarak header ke card
+          // di bawahnya tak perlu dirapatkan lagi seperti saat tab masih di antaranya.
+          marginBottom: 16,
         }}
       >
         <div style={{ minWidth: 0 }}>
@@ -317,52 +320,6 @@ export function BugsPageClient({
         </div>
       </div>
 
-      {/* Tab sumber bug */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "0.5rem",
-          borderBottom: "1px solid #E2E8F0",
-          marginBottom: "1rem",
-        }}
-      >
-        {tabs.map((t) => {
-          const active = tab === t.key;
-          return (
-            <button
-              key={t.key}
-              type="button"
-              aria-pressed={active}
-              onClick={() => setTab(t.key)}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "0.4rem",
-                padding: "0.625rem 1rem",
-                marginBottom: -1,
-                border: "none",
-                borderBottom: active ? "2px solid #FFC348" : "2px solid transparent",
-                background: "transparent",
-                color: active ? "#0F172A" : "#64748B",
-                fontWeight: active ? 700 : 500,
-                fontSize: "0.75rem",
-                cursor: "pointer",
-                transition: "color 0.15s ease",
-              }}
-              onMouseEnter={(e) => {
-                if (!active) e.currentTarget.style.color = "#334155";
-              }}
-              onMouseLeave={(e) => {
-                if (!active) e.currentTarget.style.color = "#64748B";
-              }}
-            >
-              {t.label}
-            </button>
-          );
-        })}
-      </div>
-
       {/* Card pembungkus toolbar + tabel. Toolbar ber-padding `px-4`, sedangkan
           tabel full-bleed ke tepi card — inset horizontalnya datang dari sel
           pertama (pl-4) & terakhir (pr-4), jadi keduanya tetap sejajar 16px. */}
@@ -375,20 +332,72 @@ export function BugsPageClient({
           overflow: "hidden",
         }}
       >
-      {/* Control bar: pencarian, filter, dan aksi laporkan bug.
-          px-4 py-3 (compact) — inset horizontalnya 16px, sama dengan inset sel
-          pertama & terakhir tabel sehingga isinya sejajar. */}
+      {/* Toolbar card — style CLASSIC UNDERLINE TAB: `align-items: flex-end` +
+          `padding-bottom: 0` membuat garis bawah tab menempel persis pada
+          border-bottom toolbar. Inset horizontalnya tetap 16px (px-4) agar
+          sejajar dengan sel pertama & terakhir tabel. */}
       <div
         style={{
           display: "flex",
-          alignItems: "center",
-          justifyContent: "flex-end",
-          gap: "0.625rem",
-          padding: "12px 16px",
-          borderBottom: "1px solid #F1F5F9",
+          alignItems: "flex-end",
+          justifyContent: "space-between",
+          gap: "1rem",
+          padding: "8px 16px 0",
+          borderBottom: "1px solid #E2E8F0",
           flexWrap: "wrap",
         }}
       >
+        {/* KIRI: navigasi sumber bug sebagai CLASSIC UNDERLINE TAB — tanpa box/pill,
+            hanya teks; tab aktif diberi garis 2px amber yang `marginBottom: -1`
+            supaya menempel/overlay pada border-bottom toolbar. */}
+        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+          {tabs.map((t) => {
+            const active = tab === t.key;
+            return (
+              <button
+                key={t.key}
+                type="button"
+                aria-pressed={active}
+                onClick={() => setTab(t.key)}
+                style={{
+                  padding: "0 4px 12px",
+                  border: "none",
+                  borderBottom: active ? "2px solid #F59E0B" : "2px solid transparent",
+                  marginBottom: -1,
+                  background: "transparent",
+                  color: active ? "#0F172A" : "#64748B",
+                  fontWeight: active ? 700 : 500,
+                  fontSize: "0.75rem",
+                  cursor: "pointer",
+                  transition: "color 0.15s ease, border-color 0.15s ease",
+                }}
+                onMouseEnter={(e) => {
+                  if (!active) e.currentTarget.style.color = "#1E293B";
+                }}
+                onMouseLeave={(e) => {
+                  if (!active) e.currentTarget.style.color = "#64748B";
+                }}
+              >
+                {t.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* KANAN: pencarian, filter, dan aksi laporkan bug. `paddingBottom: 8`
+            mengangkat kontrol 32px ini sedikit dari garis pembatas, sejajar
+            dengan teks tab di sebelahnya. */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "flex-end",
+            gap: "0.625rem",
+            marginLeft: "auto",
+            paddingBottom: 8,
+            flexWrap: "wrap",
+          }}
+        >
           <div
             style={{
               display: "flex",
@@ -523,7 +532,9 @@ export function BugsPageClient({
               <Plus size={14} /> Laporkan Bug
             </button>
           )}
+          {/* /KANAN */}
         </div>
+      </div>
 
       {/* Daftar Bug Table */}
       {visibleBugs.length === 0 ? (

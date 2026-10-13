@@ -988,10 +988,15 @@ function TestCaseTable({
               color: "var(--text-muted)",
               textAlign: "left",
               borderBottom: "1px solid var(--border)",
+              // Header 12px semibold (text-xs): sebelumnya mewarisi fontSize tabel
+              // (0.85rem / 13.6px) sehingga lebih besar dari isi selnya (11-12px).
+              fontSize: 12,
             }}
           >
             {canEdit && onToggleTc && (
-              <th style={{ padding: "0.5rem 0.4rem", width: 40, textAlign: "center" }}>
+              // Padding vertikal disamakan dengan sel checkbox-nya (0.4rem) supaya
+              // tinggi header & barisnya presisi.
+              <th style={{ padding: "0.4rem 0.4rem", width: 40, textAlign: "center" }}>
                 {onToggleAll && (
                   <input
                     type="checkbox"
@@ -1033,7 +1038,7 @@ function TestCaseTable({
                   padding: "0.5rem 0.5rem",
                   fontWeight: 600,
                   textAlign: "center",
-                  width: 60,
+                  width: 64,
                 }}
               >
                 Opsi
@@ -1208,7 +1213,7 @@ function TestCaseTable({
                 </Select>
               </td>
               {canEdit && (
-                <td style={{ padding: "0.5rem 0.5rem", textAlign: "center", width: 60 }}>
+                <td style={{ padding: "0.5rem 0.5rem", textAlign: "center", width: 64 }}>
                   <div
                     // Kebab/action menu bukan bagian dari aksi "buka detail".
                     onClick={(e) => e.stopPropagation()}

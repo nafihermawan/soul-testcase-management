@@ -105,17 +105,17 @@ const statusPillStyle = (
 });
 
 /**
- * Badge status bug untuk section riwayat bug di modal eksekusi.
- * Kontras sengaja tinggi (teks gelap di atas latar soft + border tipis) supaya
- * langsung terbaca. Istilah "selesai" di sini memakai CLOSED untuk keduanya
- * (RESOLVED & CLOSED) dengan badge netral abu — supaya tidak ada dua sebutan
- * berbeda untuk arti yang sama.
+ * Badge status bug untuk section riwayat bug di modal eksekusi — sekaligus
+ * trigger dropdown untuk mengubah statusnya langsung. Palet mengikuti status:
+ * Open = rose, In Progress = amber, Closed/Resolved = emerald. Istilah "selesai"
+ * memakai CLOSED untuk keduanya (RESOLVED & CLOSED) supaya tidak ada dua
+ * sebutan berbeda untuk arti yang sama.
  */
 const BUG_STATUS_BADGE: Record<BugStatus, { label: string; bg: string; color: string; border: string }> = {
-  OPEN: { label: "Open", bg: "#FEF2F2", color: "#B91C1C", border: "#FECACA" },
-  IN_PROGRESS: { label: "In Progress", bg: "#FFFBEB", color: "#B45309", border: "#FDE68A" },
-  RESOLVED: { label: "Closed", bg: "#F1F5F9", color: "#047857", border: "#E2E8F0" },
-  CLOSED: { label: "Closed", bg: "#F1F5F9", color: "#047857", border: "#E2E8F0" },
+  OPEN: { label: "Open", bg: "#FFF1F2", color: "#E11D48", border: "#FECDD3" },
+  IN_PROGRESS: { label: "In Progress", bg: "#FFFBEB", color: "#D97706", border: "#FDE68A" },
+  RESOLVED: { label: "Closed", bg: "#ECFDF5", color: "#059669", border: "#A7F3D0" },
+  CLOSED: { label: "Closed", bg: "#ECFDF5", color: "#059669", border: "#A7F3D0" },
 };
 
 /** Severity bug pada Bug Reporting Form (nilai disimpan uppercase, sama dgn data Bug). */
@@ -2881,6 +2881,34 @@ function ExecutionModal({
   const [bugHistoryOpen, setBugHistoryOpen] = useState(false);
   // Status tombol "Salin" Test Data (kembali normal setelah 2 detik).
   const [testDataCopied, setTestDataCopied] = useState(false);
+  // Toast + guard khusus modal ini (ubah status bug langsung dari Bug History).
+  const { toast, showToast, dismissToast } = useToast();
+  const [statusPendingId, setStatusPendingId] = useState<string | null>(null);
+
+  /**
+   * Ubah status bug langsung dari badge di Bug History. Daftarnya dicerminkan ke
+   * state lokal dan di-patch IN-PLACE setelah sukses (tanpa refetch halaman),
+   * jadi warna & label badge langsung ikut berubah.
+   */
+  const changeBugStatus = async (bugId: string, status: BugStatus) => {
+    if (statusPendingId) return;
+    setStatusPendingId(bugId);
+    const res = await updateBugStatus(bugId, status);
+    setStatusPendingId(null);
+    if (res?.error) {
+      showToast(res.error, "error");
+      return;
+    }
+    const isDone = status === "CLOSED" || status === "RESOLVED";
+    setLinkedBugs((prev) =>
+      prev.map((b) =>
+        b.id === bugId
+          ? { ...b, status, resolvedAt: isDone ? new Date().toISOString() : null }
+          : b
+      )
+    );
+    showToast(`Status bug berhasil diubah ke ${BUG_STATUS_BADGE[status].label}.`, "success");
+  };
 
   /**
    * Bug AKTIF yang menempel ke hasil eksekusi ini (fallback: bug aktif mana pun
@@ -3273,8 +3301,9 @@ function ExecutionModal({
         style={{
           position: "relative",
           width: "100%",
-          maxWidth: 1024,
-          maxHeight: "85vh",
+          // max-w-6xl (sebelumnya 1024 = max-w-5xl) supaya isi dua kolom lebih lega.
+          maxWidth: 1152,
+          maxHeight: "90vh",
           display: "grid",
           // Tiga track: kolom kiri (persen, bisa di-resize) — divider — kanan.
           gridTemplateColumns: `${splitPct}% ${SPLIT_DIVIDER_W}px minmax(0, 1fr)`,
@@ -3930,10 +3959,21 @@ function ExecutionModal({
                               {b.title}
                             </button>
 
-                            <span
+                            {/* Badge status = dropdown (komponen Select app yang
+                                menunya dirender lewat portal, jadi tidak terpotong
+                                scroll/overflow daftar ini). */}
+                            <Select
+                              size="sm"
+                              value={b.status === "RESOLVED" ? "CLOSED" : b.status}
+                              disabled={!canEdit || statusPendingId === b.id}
+                              ariaLabel="Ubah status bug"
+                              title="Ubah status bug"
+                              chevronColor="currentColor"
                               style={{
                                 flexShrink: 0,
-                                padding: "0.1rem 0.45rem",
+                                width: "auto",
+                                height: 22,
+                                padding: "0 0.4rem 0 0.55rem",
                                 borderRadius: 999,
                                 fontSize: "0.6875rem",
                                 fontWeight: 700,
@@ -3941,10 +3981,18 @@ function ExecutionModal({
                                 background: st.bg,
                                 color: st.color,
                                 border: `1px solid ${st.border}`,
+                                // Select bawaan punya ring fokus amber + border hover
+                                // abu; di sini warnanya harus tetap ikut status.
+                                boxShadow: "none",
                               }}
+                              onChange={(e) =>
+                                void changeBugStatus(b.id, e.target.value as BugStatus)
+                              }
                             >
-                              {st.label}
-                            </span>
+                              <option value="OPEN">Open</option>
+                              <option value="IN_PROGRESS">In Progress</option>
+                              <option value="CLOSED">Closed</option>
+                            </Select>
                           </div>
                         );
                       })}
@@ -4119,6 +4167,8 @@ function ExecutionModal({
           </div>
         </div>
       </div>
+      {/* Toast modal ini — dipakai untuk umpan balik ubah status bug. */}
+      <Toast toast={toast} onDismiss={dismissToast} />
     </div>,
     document.body
   );

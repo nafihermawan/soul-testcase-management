@@ -75,6 +75,7 @@ export function Select({
   size = "md",
   style,
   hideValue,
+  chevronColor,
 }: {
   value: string;
   onChange?: (e: ChangeEvent<HTMLSelectElement>) => void;
@@ -93,6 +94,9 @@ export function Select({
    * (`title`) dan `ariaLabel`.
    */
   hideValue?: boolean;
+  /** Warna chevron pada trigger. Default abu (perilaku lama); kirim `currentColor`
+   *  bila trigger-nya berwarna sendiri (mis. pill status bug). */
+  chevronColor?: string;
 }) {
   const options = useMemo(() => parseOptions(children), [children]);
   const current = value;
@@ -260,7 +264,7 @@ export function Select({
         <ChevronDown
           size={14}
           style={{
-            color: "#94A3B8",
+            color: chevronColor ?? "#94A3B8",
             flexShrink: 0,
             transform: open ? "rotate(180deg)" : "none",
             transition: "transform 0.15s ease",

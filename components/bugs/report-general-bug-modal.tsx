@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { FileVideo, Image as ImageIcon, Info, X } from "lucide-react";
+import { ChevronDown, FileVideo, Image as ImageIcon, Info, Paperclip, X } from "lucide-react";
 import { createBug } from "@/lib/actions/automation-bugs";
 import { filesFromClipboard } from "@/components/attachments/attachments-panel";
 import { CustomSelect } from "@/components/ui/custom-select";
@@ -15,6 +15,13 @@ import { urlFormatError, normalizeUrl } from "@/lib/validation";
 import type { BugDetailPayload, BugRow, SuiteOption, SuitesPayload } from "@/types/api";
 
 const MAX_MB = Math.round(MAX_ATTACHMENT_BYTES / 1024 / 1024);
+
+/** Ukuran file dalam format ringkas (B / KB / MB) untuk detail kartu evidence. */
+const humanSize = (bytes: number): string => {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+};
 
 const SEVERITIES = [
   { value: "LOW", label: "Low" },
@@ -164,6 +171,25 @@ export function ReportGeneralBugModal({
   // Dipakai untuk merevoke object URL saat modal ditutup.
   const filesRef = useRef<StagedFile[]>([]);
   filesRef.current = files;
+
+  // Petunjuk scroll: ikon chevron melayang hanya tampil selama masih ada isi di
+  // bawah — fade-out otomatis begitu scroll menyentuh dasar.
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const [canScrollMore, setCanScrollMore] = useState(false);
+  const updateScrollCue = useCallback(() => {
+    const el = bodyRef.current;
+    if (!el) return;
+    setCanScrollMore(el.scrollTop + el.clientHeight < el.scrollHeight - 10);
+  }, []);
+  // Ukur ulang tiap render (file/error/validasi bisa menambah tinggi isi)…
+  useEffect(() => {
+    updateScrollCue();
+  });
+  // …dan saat tinggi viewport berubah.
+  useEffect(() => {
+    window.addEventListener("resize", updateScrollCue);
+    return () => window.removeEventListener("resize", updateScrollCue);
+  }, [updateScrollCue]);
 
   const addFiles = useCallback((list: FileList | File[] | null) => {
     if (!list || list.length === 0) return;
@@ -373,6 +399,7 @@ export function ReportGeneralBugModal({
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
+          position: "relative",
           width: "100%",
           maxWidth: 512,
           // Header & footer tetap di tempat; hanya body yang scroll (flex:1).
@@ -440,6 +467,8 @@ export function ReportGeneralBugModal({
 
         {/* Body */}
         <div
+          ref={bodyRef}
+          onScroll={updateScrollCue}
           style={{
             flex: 1,
             minHeight: 0,
@@ -639,77 +668,144 @@ export function ReportGeneralBugModal({
           {canAttach && (
           <div>
             <span style={labelStyle}>Upload Evidence</span>
-            <div
-              onDragOver={(e) => {
-                e.preventDefault();
-                if (!saving) setDragging(true);
-              }}
-              onDragLeave={() => setDragging(false)}
-              onDrop={(e) => {
-                e.preventDefault();
-                setDragging(false);
-                if (!saving) addFiles(e.dataTransfer.files);
-              }}
-              onClick={() => {
-                if (!saving) inputRef.current?.click();
-              }}
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                gap: "0.25rem",
-                padding: "1rem",
-                borderRadius: 12,
-                border: `1px dashed ${dragging ? "#FFC348" : "#CBD5E1"}`,
-                background: dragging ? "#FFFBEB" : "#F8FAFC",
-                cursor: saving ? "not-allowed" : "pointer",
-                transition: "border-color 0.15s ease, background-color 0.15s ease",
-              }}
-            >
-              <input
-                ref={inputRef}
-                type="file"
-                multiple
-                accept="image/*,video/*"
-                hidden
-                onChange={(e) => addFiles(e.target.files)}
-              />
-              <ImageIcon size={20} color="#94A3B8" />
-              <div style={{ fontSize: "0.75rem", fontWeight: 600, color: "#475569" }}>
-                Tarik &amp; lepas file di sini, klik untuk memilih, atau tekan Ctrl+V untuk paste gambar
+            {/* Input file sengaja DI LUAR dropzone dan selalu ter-mount, supaya
+                tombol "Upload File Lain" tetap bisa membuka picker walau dropzone
+                besar sudah disembunyikan saat sudah ada file. */}
+            <input
+              ref={inputRef}
+              type="file"
+              multiple
+              accept="image/*,video/*"
+              hidden
+              onChange={(e) => addFiles(e.target.files)}
+            />
+
+            {/* Dropzone besar hanya tampil saat BELUM ada file. */}
+            {files.length === 0 && (
+              <div
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  if (!saving) setDragging(true);
+                }}
+                onDragLeave={() => setDragging(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setDragging(false);
+                  if (!saving) addFiles(e.dataTransfer.files);
+                }}
+                onClick={() => {
+                  if (!saving) inputRef.current?.click();
+                }}
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  gap: "0.25rem",
+                  padding: "1rem",
+                  borderRadius: 12,
+                  border: `1px dashed ${dragging ? "#FFC348" : "#CBD5E1"}`,
+                  background: dragging ? "#FFFBEB" : "#F8FAFC",
+                  cursor: saving ? "not-allowed" : "pointer",
+                  transition: "border-color 0.15s ease, background-color 0.15s ease",
+                }}
+              >
+                <ImageIcon size={20} color="#94A3B8" />
+                <div style={{ fontSize: "0.75rem", fontWeight: 600, color: "#475569" }}>
+                  Tarik &amp; lepas file di sini, klik untuk memilih, atau tekan Ctrl+V untuk paste gambar
+                </div>
+                <div style={{ fontSize: "0.68rem", color: "#94A3B8" }}>
+                  Gambar (JPG/PNG) atau video (MP4) · maks {MAX_MB} MB per file
+                </div>
               </div>
-              <div style={{ fontSize: "0.68rem", color: "#94A3B8" }}>
-                Gambar (JPG/PNG) atau video (MP4) · maks {MAX_MB} MB per file
-              </div>
-            </div>
+            )}
+
+            {/* Sudah ada file: cukup tombol sekunder ringkas untuk menambah file
+                lain — paste (Ctrl+V) dan drag-drop langsung ke daftar tetap jalan. */}
+            {files.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (!saving) inputRef.current?.click();
+                }}
+                disabled={saving}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "0.375rem",
+                  padding: "0.375rem 0.75rem",
+                  borderRadius: 8,
+                  border: "1px dashed #CBD5E1",
+                  background: "#F8FAFC",
+                  color: "#475569",
+                  fontSize: "0.75rem",
+                  fontWeight: 600,
+                  cursor: saving ? "not-allowed" : "pointer",
+                  transition: "all 0.15s ease",
+                }}
+                onMouseEnter={(e) => {
+                  if (saving) return;
+                  e.currentTarget.style.color = "#D97706";
+                  e.currentTarget.style.background = "rgba(255, 251, 235, 0.5)";
+                  e.currentTarget.style.borderColor = "#FBBF24";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.color = "#475569";
+                  e.currentTarget.style.background = "#F8FAFC";
+                  e.currentTarget.style.borderColor = "#CBD5E1";
+                }}
+              >
+                <Paperclip size={13} /> Upload File Lain
+              </button>
+            )}
 
             {files.length > 0 && (
               <div
+                // Area drop langsung ke daftar thumbnail (selain paste) untuk
+                // menambah evidence tanpa membuka picker.
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  if (!saving) setDragging(true);
+                }}
+                onDragLeave={() => setDragging(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setDragging(false);
+                  if (!saving) addFiles(e.dataTransfer.files);
+                }}
                 style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fill, minmax(92px, 1fr))",
+                  display: "flex",
+                  flexWrap: "wrap",
                   gap: "0.5rem",
-                  marginTop: "0.5rem",
+                  marginTop: "0.6rem",
+                  padding: dragging ? "0.4rem" : 0,
+                  borderRadius: 10,
+                  outline: dragging ? "2px dashed #FFC348" : "none",
+                  outlineOffset: 2,
+                  transition: "padding 0.15s ease",
                 }}
               >
                 {files.map((f) => (
                   <div
                     key={f.id}
                     style={{
-                      position: "relative",
-                      border: "1px solid #E2E8F0",
-                      borderRadius: 8,
-                      overflow: "hidden",
-                      background: "#fff",
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      gap: "0.25rem",
+                      width: 80,
                     }}
                   >
+                    {/* Thumbnail polos 80×80 tanpa wrapper kartu; `object-cover`
+                        membuat gambar memenuhi kotak tanpa terdistorsi. */}
                     <div
                       style={{
-                        height: 62,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        background: "#F1F5F9",
+                        position: "relative",
+                        width: 80,
+                        height: 80,
+                        borderRadius: 8,
+                        overflow: "hidden",
+                        border: "1px solid #E2E8F0",
+                        background: "#F8FAFC",
                       }}
                     >
                       {f.preview ? (
@@ -717,18 +813,67 @@ export function ReportGeneralBugModal({
                         <img
                           src={f.preview}
                           alt={f.file.name}
-                          style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                          style={{
+                            width: "100%",
+                            height: "100%",
+                            objectFit: "cover",
+                            display: "block",
+                          }}
                         />
                       ) : (
-                        <FileVideo size={20} color="#64748B" />
+                        <div
+                          style={{
+                            width: "100%",
+                            height: "100%",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}
+                        >
+                          <FileVideo size={24} color="#64748B" />
+                        </div>
+                      )}
+
+                      {/* Badge hapus melayang di pojok kanan-atas thumbnail. */}
+                      {!saving && (
+                        <button
+                          type="button"
+                          aria-label={`Hapus ${f.file.name}`}
+                          title={`Hapus ${f.file.name}`}
+                          onClick={() => removeFile(f.id)}
+                          style={{
+                            position: "absolute",
+                            top: 4,
+                            right: 4,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            padding: 4,
+                            border: "none",
+                            borderRadius: 999,
+                            background: "#F43F5E",
+                            color: "#fff",
+                            opacity: 0.9,
+                            boxShadow: "0 1px 4px rgba(15, 23, 42, 0.25)",
+                            cursor: "pointer",
+                          }}
+                          onMouseEnter={(e) => (e.currentTarget.style.opacity = "1")}
+                          onMouseLeave={(e) => (e.currentTarget.style.opacity = "0.9")}
+                        >
+                          <X size={12} />
+                        </button>
                       )}
                     </div>
+
+                    {/* Nama + ukuran file di bawah thumbnail. */}
                     <div
                       title={f.file.name}
                       style={{
-                        padding: "0.2rem 0.35rem",
-                        fontSize: "0.62rem",
-                        color: "#64748B",
+                        width: "100%",
+                        textAlign: "center",
+                        fontSize: "0.625rem",
+                        fontWeight: 600,
+                        color: "#475569",
                         overflow: "hidden",
                         textOverflow: "ellipsis",
                         whiteSpace: "nowrap",
@@ -736,31 +881,9 @@ export function ReportGeneralBugModal({
                     >
                       {f.file.name}
                     </div>
-                    {!saving && (
-                      <button
-                        type="button"
-                        aria-label={`Hapus ${f.file.name}`}
-                        onClick={() => removeFile(f.id)}
-                        style={{
-                          position: "absolute",
-                          top: 3,
-                          right: 3,
-                          width: 20,
-                          height: 20,
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          border: "none",
-                          borderRadius: 999,
-                          background: "rgba(15, 23, 42, 0.6)",
-                          color: "#fff",
-                          cursor: "pointer",
-                          padding: 0,
-                        }}
-                      >
-                        <X size={11} />
-                      </button>
-                    )}
+                    <div style={{ fontSize: "0.625rem", color: "#94A3B8" }}>
+                      {humanSize(f.file.size)}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -769,6 +892,77 @@ export function ReportGeneralBugModal({
           )}
 
         </div>
+
+        {/* Scroll cue — gradient fade + ikon panah, satu state visibility
+            (`canScrollMore`): keduanya tampil selama isi masih bisa di-scroll ke
+            bawah, dan meredup bersamaan begitu menyentuh dasar.
+            Keduanya absolut terhadap kartu modal → `bottom` diukur dari dasar
+            modal (footer ~68px), jadi pas tepat di atas footer. */}
+        <div
+          aria-hidden
+          style={{
+            position: "absolute",
+            bottom: 64,
+            left: 0,
+            right: 0,
+            height: 48,
+            background: "linear-gradient(to top, #fff, rgba(255, 255, 255, 0.8), transparent)",
+            pointerEvents: "none",
+            opacity: canScrollMore ? 1 : 0,
+            transition: "opacity 0.3s ease",
+          }}
+        />
+        <div
+          aria-hidden
+          style={{
+            position: "absolute",
+            bottom: 72,
+            left: "50%",
+            // `-translate-x-1/2` di wrapper supaya animasi bounce di dalamnya
+            // tidak menimpa transform pemusatan ini.
+            transform: "translateX(-50%)",
+            zIndex: 10,
+            pointerEvents: "none",
+            opacity: canScrollMore ? 1 : 0,
+            transition: "opacity 0.3s ease",
+          }}
+        >
+          <div
+            className="scroll-cue-bounce"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: 4,
+              borderRadius: 999,
+              background: "rgba(255, 255, 255, 0.8)",
+              backdropFilter: "blur(2px)",
+              WebkitBackdropFilter: "blur(2px)",
+              border: "1px solid rgba(226, 232, 240, 0.6)",
+              boxShadow: "0 1px 2px rgba(15, 23, 42, 0.06)",
+              color: "#64748B",
+              // Discreet: ikonnya sendiri 60% sesuai styling yang diminta.
+              opacity: 0.6,
+            }}
+          >
+            <ChevronDown size={16} />
+          </div>
+        </div>
+
+        {/* Divider inset footer — `margin: 0 1.5rem` (mx-6) supaya seimbang dengan
+            padding konten dan tidak full-bleed; zIndex 1 agar tetap terlihat di
+            atas layer scroll-cue yang turun sedikit ke area footer. Sama tipis &
+            halus dengan divider header (`#F1F5F9`). */}
+        <div
+          style={{
+            position: "relative",
+            zIndex: 1,
+            height: 1,
+            background: "#F1F5F9",
+            margin: "0 1.5rem",
+            flexShrink: 0,
+          }}
+        />
 
         {/* Footer */}
         <div
@@ -779,7 +973,6 @@ export function ReportGeneralBugModal({
             justifyContent: "flex-end",
             gap: "0.75rem",
             padding: "1rem 1.5rem",
-            borderTop: "1px solid #F1F5F9",
             background: "#fff",
           }}
         >

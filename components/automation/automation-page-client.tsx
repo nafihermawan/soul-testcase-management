@@ -1,6 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type MouseEvent as ReactMouseEvent,
+  type ReactNode,
+} from "react";
 import {
   CheckSquare,
   ChevronDown,
@@ -64,6 +72,9 @@ const PLATFORM_LABEL: Record<string, string> = {
   API: "API",
 };
 
+/** Urutan grup Platform di dropdown filter Suite. Platform di luar daftar ditaruh paling akhir. */
+const PLATFORM_GROUP_ORDER: string[] = ["WEB", "HARDWARE", "MOBILE", "API"];
+
 const DEFAULT_PER_PAGE = 25;
 
 const inputBase: CSSProperties = {
@@ -77,6 +88,22 @@ const inputBase: CSSProperties = {
 };
 
 /* ---------- Helpers ---------- */
+
+/**
+ * Urutkan opsi project: Platform dulu (A→Z), baru nama project. Project tanpa
+ * platform ditaruh paling akhir supaya item berplatform sama selalu berkumpul.
+ */
+function byPlatformThenName(
+  a: { name: string; platform: string | null },
+  b: { name: string; platform: string | null }
+): number {
+  if (a.platform !== b.platform) {
+    if (!a.platform) return 1;
+    if (!b.platform) return -1;
+    return a.platform.localeCompare(b.platform);
+  }
+  return a.name.localeCompare(b.name);
+}
 
 function formatDate(iso: string | null): string {
   if (!iso) return "—";
@@ -187,9 +214,9 @@ export function AutomationPageClient({
   };
 
   // Akumulasi daftar suite yang pernah terlihat (untuk filter dependent).
-  const [knownSuites, setKnownSuites] = useState<Map<string, { id: string; name: string; projectId: string }>>(
-    new Map()
-  );
+  const [knownSuites, setKnownSuites] = useState<
+    Map<string, { id: string; name: string; projectId: string; platform: string | null }>
+  >(new Map());
   useEffect(() => {
     if (!data) return;
     setKnownSuites((prev) => {
@@ -197,7 +224,12 @@ export function AutomationPageClient({
       const next = new Map(prev);
       for (const g of data.suiteGroups) {
         if (!next.has(g.suiteId)) {
-          next.set(g.suiteId, { id: g.suiteId, name: g.suiteName, projectId: g.projectId });
+          next.set(g.suiteId, {
+            id: g.suiteId,
+            name: g.suiteName,
+            projectId: g.projectId,
+            platform: g.platform,
+          });
           changed = true;
         }
       }
@@ -230,6 +262,30 @@ export function AutomationPageClient({
     const all = Array.from(knownSuites.values());
     return selProjects.size > 0 ? all.filter((s) => selProjects.has(s.projectId)) : all;
   }, [knownSuites, selProjects]);
+
+  /**
+   * Kelompokkan Suite per Platform untuk daftar filter: grup diurutkan sesuai
+   * PLATFORM_GROUP_ORDER (platform tak dikenal / kosong di akhir), dan di dalam
+   * tiap grup item diurutkan berdasarkan nama suite.
+   */
+  const suiteFilterGroups = useMemo(() => {
+    const groups = new Map<string, { platform: string | null; items: typeof availableSuites }>();
+    for (const s of availableSuites) {
+      const key = s.platform ?? "__none__";
+      const group = groups.get(key);
+      if (group) group.items.push(s);
+      else groups.set(key, { platform: s.platform, items: [s] });
+    }
+    const ordered = Array.from(groups.values()).sort((a, b) => {
+      const ia = a.platform ? PLATFORM_GROUP_ORDER.indexOf(a.platform) : -1;
+      const ib = b.platform ? PLATFORM_GROUP_ORDER.indexOf(b.platform) : -1;
+      const ra = ia === -1 ? Number.MAX_SAFE_INTEGER : ia;
+      const rb = ib === -1 ? Number.MAX_SAFE_INTEGER : ib;
+      return ra - rb;
+    });
+    for (const group of ordered) group.items.sort((a, b) => a.name.localeCompare(b.name));
+    return ordered;
+  }, [availableSuites]);
 
   const validSuiteIds = useMemo(() => new Set(availableSuites.map((s) => s.id)), [availableSuites]);
   useEffect(() => {
@@ -408,6 +464,9 @@ export function AutomationPageClient({
   const projectStats: AutomationProjectStat[] = data.projectStats.filter(
     (p) => selProjects.size === 0 || selProjects.has(p.projectId)
   );
+
+  // Opsi project untuk filter: platform dulu (A→Z), lalu nama (lihat byPlatformThenName).
+  const sortedProjects = [...data.projects].sort(byPlatformThenName);
 
   const headerSelectAll = (rows: AutomationRow[]) => {
     const selectable = rows.filter(isRowSelectable);
@@ -619,12 +678,14 @@ export function AutomationPageClient({
           selectedCount={selProjects.size}
           onClear={() => setSelProjects(new Set())}
         >
-          {data.projects.map((p) => (
-            <label key={p.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 4px", cursor: "pointer", fontSize: "0.85rem" }}>
-              <input type="checkbox" checked={selProjects.has(p.id)} onChange={() => toggleProject(p.id)} />
-              {p.name}
+          {sortedProjects.map((p) => (
+            <label key={p.id} style={filterOptionRow} {...filterOptionHover}>
+              <span style={filterOptionLeft}>
+                <input type="checkbox" checked={selProjects.has(p.id)} onChange={() => toggleProject(p.id)} />
+                <span style={filterOptionName}>{p.name}</span>
+              </span>
               {p.platform ? (
-                <span style={{ fontSize: "0.7rem", color: "#94A3B8", background: "#F1F5F9", borderRadius: 4, padding: "1px 5px" }}>{PLATFORM_LABEL[p.platform]}</span>
+                <span style={filterOptionBadge}>{PLATFORM_LABEL[p.platform]}</span>
               ) : null}
             </label>
           ))}
@@ -642,11 +703,23 @@ export function AutomationPageClient({
           selectedCount={selSuites.size}
           onClear={() => setSelSuites(new Set())}
         >
-          {availableSuites.map((s) => (
-            <label key={s.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 4px", cursor: "pointer", fontSize: "0.85rem" }}>
-              <input type="checkbox" checked={selSuites.has(s.id)} onChange={() => toggleSuite(s.id)} />
-              {s.name}
-            </label>
+          {suiteFilterGroups.map((group) => (
+            <div key={group.platform ?? "__none__"}>
+              <div style={filterGroupHeader}>
+                {group.platform ? PLATFORM_LABEL[group.platform] ?? group.platform : "Lainnya"}
+              </div>
+              {group.items.map((s) => (
+                <label key={s.id} style={filterOptionRow} {...filterOptionHover}>
+                  <span style={filterOptionLeft}>
+                    <input type="checkbox" checked={selSuites.has(s.id)} onChange={() => toggleSuite(s.id)} />
+                    <span style={filterOptionName}>{s.name}</span>
+                  </span>
+                  {s.platform ? (
+                    <span style={filterOptionBadge}>{PLATFORM_LABEL[s.platform]}</span>
+                  ) : null}
+                </label>
+              ))}
+            </div>
           ))}
           {availableSuites.length === 0 && (
             <div style={{ padding: "6px 4px", fontSize: "0.8rem", color: "#9CA3AF" }}>Tidak ada suite.</div>
@@ -994,6 +1067,65 @@ function summaryCard(key: string, label: string, value: number, color: string, b
   );
 }
 
+/* Item opsi di dalam popover filter: nama di kiri, badge platform di kanan. */
+const filterOptionRow: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 12,
+  width: "100%",
+  padding: "6px 8px",
+  borderRadius: 8,
+  cursor: "pointer",
+};
+
+const filterOptionLeft: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  minWidth: 0,
+};
+
+const filterOptionName: CSSProperties = {
+  fontSize: 12,
+  fontWeight: 500,
+  color: "#1E293B",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+};
+
+const filterOptionBadge: CSSProperties = {
+  flexShrink: 0,
+  fontSize: 10,
+  fontWeight: 600,
+  color: "#64748B",
+  background: "#F1F5F9",
+  padding: "2px 8px",
+  borderRadius: 9999,
+  border: "1px solid rgba(226, 232, 240, 0.6)",
+  lineHeight: "16px",
+};
+
+/* Sub-header kategori platform di dalam daftar opsi Suite. */
+const filterGroupHeader: CSSProperties = {
+  padding: "8px 8px 2px",
+  fontSize: 10,
+  fontWeight: 700,
+  color: "#94A3B8",
+  letterSpacing: "0.06em",
+  textTransform: "uppercase",
+};
+
+const filterOptionHover = {
+  onMouseEnter: (e: ReactMouseEvent<HTMLLabelElement>) => {
+    e.currentTarget.style.background = "#F8FAFC";
+  },
+  onMouseLeave: (e: ReactMouseEvent<HTMLLabelElement>) => {
+    e.currentTarget.style.background = "transparent";
+  },
+};
+
 function MultiChipFilter({
   label,
   icon,
@@ -1046,7 +1178,7 @@ function MultiChipFilter({
               borderRadius: 10,
               boxShadow: "0 10px 15px -3px rgba(0,0,0,0.1)",
               padding: "8px",
-              minWidth: 230,
+              minWidth: 300,
               maxHeight: 320,
               overflowY: "auto",
             }}

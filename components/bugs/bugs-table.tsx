@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ExternalLink, FileDown, Plus, Search, Trash2 } from "lucide-react";
 import { deleteBug, updateBugStatus } from "@/lib/actions/automation-bugs";
@@ -60,17 +60,20 @@ const BUGS_PER_PAGE = 25;
  * Lebar kolom beku ID (px) — sekaligus offset `left` kolom "Title & Linked TC"
  * yang ikut di-sticky. Dipakai di <colgroup> supaya lebarnya presisi.
  */
-const STICKY_ID_WIDTH = 130;
+const STICKY_ID_WIDTH = 110;
 
-/** Batas lebar kolom "Title & Linked TC" yang bisa ditarik (px). */
-const TITLE_DEFAULT_WIDTH = 320;
+/**
+ * Lebar minimum kolom "Title & Linked TC" — kolom ini sengaja TANPA lebar tetap
+ * supaya mengisi seluruh sisa ruang tabel, jadi tabel tidak "breakout" ke kanan.
+ */
 const TITLE_MIN_WIDTH = 280;
-const TITLE_MAX_WIDTH = 600;
 
-/** Total lebar kolom SELAIN Title (ID + kolom tetap) — dasar minWidth tabel.
- *  Kolom Created Date dipatok 112px (w-28) agar tidak terpotong tepi kanan. */
-const FIXED_COLUMNS_WIDTH =
-  STICKY_ID_WIDTH + 190 + 120 + 110 + 100 + 140 + 140 + 112 + 70;
+/**
+ * Total lebar kolom SELAIN Title (semua kolom tetap) — dasar minWidth tabel.
+ * Urutan: ID · Test Run · Module · Environment · Severity · Status ·
+ *         Created By · Created Date · Aksi.
+ */
+const FIXED_COLUMNS_WIDTH = 110 + 140 + 110 + 80 + 90 + 90 + 130 + 100 + 70;
 
 /**
  * Klasifikasi sumber bug. Field `sourceType` dari API dipakai kalau ada, tapi
@@ -160,41 +163,6 @@ export function BugsPageClient({
     setDraftEnv(envFilter);
     setDraftMonth(monthFilter);
   }, [sevFilter, statusFilter, envFilter, monthFilter]);
-
-  /**
-   * Lebar kolom "Title & Linked TC" (px) — bisa ditarik lewat resizer di border
-   * kanannya. Lebar ini menggerakkan <colgroup> sekaligus minWidth tabel, jadi
-   * saat kolom dilebarkan teks judul tampil penuh (ellipsis otomatis hilang).
-   */
-  const [titleWidth, setTitleWidth] = useState(TITLE_DEFAULT_WIDTH);
-  const [resizingTitle, setResizingTitle] = useState(false);
-  const [hoverTitleResizer, setHoverTitleResizer] = useState(false);
-  const titleResizeStart = useRef<{ x: number; width: number } | null>(null);
-
-  // Pantau geseran mouse selama drag; lepas saat mouseup (dan kunci kursor).
-  useEffect(() => {
-    if (!resizingTitle) return;
-    const onMove = (e: MouseEvent) => {
-      const s = titleResizeStart.current;
-      if (!s) return;
-      setTitleWidth(
-        Math.min(TITLE_MAX_WIDTH, Math.max(TITLE_MIN_WIDTH, s.width + (e.clientX - s.x)))
-      );
-    };
-    const onUp = () => setResizingTitle(false);
-    const prevCursor = document.body.style.cursor;
-    const prevSelect = document.body.style.userSelect;
-    document.body.style.cursor = "col-resize";
-    document.body.style.userSelect = "none";
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
-    return () => {
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
-      document.body.style.cursor = prevCursor;
-      document.body.style.userSelect = prevSelect;
-    };
-  }, [resizingTitle]);
 
   /** Kunci bulan lokal dari createdAt, mis. "2026-09". */
   const monthKeyOf = (iso: string): string => {
@@ -528,9 +496,10 @@ export function BugsPageClient({
               className="bugs-table"
               style={{
                 width: "100%",
-                // Lebar minimum tumbuh mengikuti titleWidth supaya saat kolom
-                // Title dilebarkan tabel ikut melebar, bukan menekan kolom lain.
-                minWidth: Math.max(1280, FIXED_COLUMNS_WIDTH + titleWidth),
+                // Semua kolom non-Title lebarnya dipatok <colgroup>; Title tanpa
+                // lebar tetap sehingga menyerap sisa ruang. minWidth menjaga
+                // kolom tetap tidak terhimpit di layar sempit (wrapper scroll).
+                minWidth: FIXED_COLUMNS_WIDTH + TITLE_MIN_WIDTH,
                 borderCollapse: "collapse",
                 // Seluruh teks tabel (th & td) dipatok 12px (text-xs); nilai
                 // ini jadi basis semua sel supaya seragam.
@@ -539,24 +508,25 @@ export function BugsPageClient({
               }}
             >
               {/* Lebar kolom tetap supaya offset `left` kolom beku presisi.
-                  Kolom Title diambil dari state (bisa di-resize). */}
+                  Kolom Title sengaja tanpa width (auto) — mengisi sisa tabel. */}
               <colgroup>
                 <col style={{ width: STICKY_ID_WIDTH }} />
-                <col style={{ width: titleWidth }} />
-                <col style={{ width: 190 }} />
-                <col style={{ width: 120 }} />
+                {/* Title & Linked TC — auto (tanpa width) */}
+                <col />
+                <col style={{ width: 140 }} />
                 <col style={{ width: 110 }} />
+                <col style={{ width: 80 }} />
+                <col style={{ width: 90 }} />
+                <col style={{ width: 90 }} />
+                <col style={{ width: 130 }} />
                 <col style={{ width: 100 }} />
-                <col style={{ width: 140 }} />
-                <col style={{ width: 140 }} />
-                <col style={{ width: 112 }} />
                 <col style={{ width: 70 }} />
               </colgroup>
               <thead>
                 <tr style={{ color: "#64748B", fontSize: 12, textAlign: "left", background: "#F8FAFC", borderBottom: "1px solid #E5E7EB", whiteSpace: "nowrap" }}>
                   <th
                     style={{
-                      padding: "0.6rem 1.25rem",
+                      padding: "0.6rem 0.5rem",
                       fontWeight: 600,
                       position: "sticky",
                       left: 0,
@@ -579,59 +549,16 @@ export function BugsPageClient({
                       boxShadow: "2px 0 5px -2px rgba(0, 0, 0, 0.1)",
                     }}
                   >
-                    Title & Linked TC
-                    {/* Resizer: garis tipis di border kanan kolom Title;
-                        menyala indigo saat hover/drag. `position: absolute`
-                        relatif ke th (sticky = positioned). */}
-                    <span
-                      role="separator"
-                      aria-orientation="vertical"
-                      aria-label="Ubah lebar kolom Title"
-                      title="Tarik untuk mengubah lebar kolom"
-                      onMouseDown={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        titleResizeStart.current = { x: e.clientX, width: titleWidth };
-                        setResizingTitle(true);
-                      }}
-                      onMouseEnter={() => setHoverTitleResizer(true)}
-                      onMouseLeave={() => setHoverTitleResizer(false)}
-                      style={{
-                        position: "absolute",
-                        top: 0,
-                        right: -4,
-                        width: 9,
-                        height: "100%",
-                        zIndex: 30,
-                        display: "flex",
-                        justifyContent: "center",
-                        cursor: "col-resize",
-                        userSelect: "none",
-                        touchAction: "none",
-                      }}
-                    >
-                      <span
-                        aria-hidden="true"
-                        style={{
-                          width: 2,
-                          height: "100%",
-                          // Garis default transparan (tak terlihat); muncul amber
-                          // saat area resizer di-hover atau sedang di-drag.
-                          background:
-                            resizingTitle || hoverTitleResizer ? "#F59E0B" : "transparent",
-                          transition: "background-color 200ms ease",
-                        }}
-                      />
-                    </span>
+                    Title &amp; Linked TC
                   </th>
                   <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600, textAlign: "left", position: "sticky", top: 0, zIndex: 20, background: "#F8FAFC" }}>Test Run</th>
-                  <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600, textAlign: "left", minWidth: 120, position: "sticky", top: 0, zIndex: 20, background: "#F8FAFC", whiteSpace: "nowrap" }}>Module</th>
+                  <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600, textAlign: "left", position: "sticky", top: 0, zIndex: 20, background: "#F8FAFC" }}>Module</th>
                   <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600, textAlign: "left", position: "sticky", top: 0, zIndex: 20, background: "#F8FAFC" }}>Environment</th>
                   <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600, textAlign: "left", position: "sticky", top: 0, zIndex: 20, background: "#F8FAFC" }}>Severity</th>
                   <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600, textAlign: "left", position: "sticky", top: 0, zIndex: 20, background: "#F8FAFC" }}>Status</th>
                   <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600, textAlign: "left", position: "sticky", top: 0, zIndex: 20, background: "#F8FAFC" }}>Created By</th>
                   <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600, textAlign: "left", position: "sticky", top: 0, zIndex: 20, background: "#F8FAFC" }}>Created Date</th>
-                  <th style={{ padding: "0.6rem 1.25rem", fontWeight: 600, textAlign: "center", position: "sticky", top: 0, zIndex: 20, background: "#F8FAFC" }}>Aksi</th>
+                  <th style={{ padding: "0.6rem 1rem 0.6rem 0", fontWeight: 600, textAlign: "right", position: "sticky", top: 0, zIndex: 20, background: "#F8FAFC" }}>Aksi</th>
                 </tr>
               </thead>
               <tbody>
@@ -649,7 +576,7 @@ export function BugsPageClient({
                       <td
                         className="bug-sticky-cell"
                         style={{
-                          padding: "0.6rem 1.25rem",
+                          padding: "0.6rem 0.5rem",
                           position: "sticky",
                           left: 0,
                           zIndex: 10,
@@ -732,11 +659,9 @@ export function BugsPageClient({
                             {b.run.name}
                           </Link>
                         ) : (
-                          // Temuan ad-hoc (tanpa Test Run) — label muted, bukan "-"
-                          // yang terkesan data kosong.
-                          <span style={{ fontSize: 12, fontWeight: 400, color: "#94A3B8" }}>
-                            Ad-hoc / General
-                          </span>
+                          // Temuan ad-hoc (tanpa Test Run) — placeholder dash,
+                          // seragam dengan kolom lain saat datanya kosong.
+                          <span style={{ color: "#94A3B8" }}>—</span>
                         )}
                       </td>
                       {/* Module / Suite — "—" muted bila bug tidak punya suite. */}
@@ -805,7 +730,7 @@ export function BugsPageClient({
                       <td style={{ padding: "0.6rem 0.5rem", textAlign: "left", color: "var(--text-muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                         {new Date(b.createdAt).toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" })}
                       </td>
-                      <td style={{ padding: "0.6rem 1.25rem", textAlign: "center" }}>
+                      <td style={{ padding: "0.6rem 1rem 0.6rem 0", textAlign: "right" }}>
                         {/* Ekspor laporan bug ringkas (PDF) — link evidence aktif. */}
                         <button
                           type="button"
@@ -837,8 +762,8 @@ export function BugsPageClient({
                             display: "inline-flex",
                             alignItems: "center",
                             justifyContent: "center",
-                            width: 30,
-                            height: 30,
+                            width: 24,
+                            height: 24,
                             borderRadius: 8,
                             border: "none",
                             background: "transparent",
@@ -849,7 +774,7 @@ export function BugsPageClient({
                           onMouseEnter={(e) => (e.currentTarget.style.color = "#D97706")}
                           onMouseLeave={(e) => (e.currentTarget.style.color = "#94A3B8")}
                         >
-                          <FileDown size={15} />
+                          <FileDown size={13} />
                         </button>
                         <button
                           type="button"
@@ -863,8 +788,8 @@ export function BugsPageClient({
                             display: "inline-flex",
                             alignItems: "center",
                             justifyContent: "center",
-                            width: 30,
-                            height: 30,
+                            width: 24,
+                            height: 24,
                             borderRadius: 8,
                             border: "none",
                             background: "transparent",
@@ -875,7 +800,7 @@ export function BugsPageClient({
                           onMouseEnter={(e) => (e.currentTarget.style.color = "#E11D48")}
                           onMouseLeave={(e) => (e.currentTarget.style.color = "#94A3B8")}
                         >
-                          <Trash2 size={15} />
+                          <Trash2 size={13} />
                         </button>
                       </td>
                     </tr>

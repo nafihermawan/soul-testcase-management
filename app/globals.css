@@ -349,6 +349,21 @@ button,
   }
 }
 
+/* Petunjuk scroll: panah kecil yang memantul halus (discreet) di dasar modal */
+@keyframes scrollCueBounce {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+.scroll-cue-bounce {
+  animation: scrollCueBounce 1.4s ease-in-out infinite;
+}
+
 /* Skeleton loader pulse */
 @keyframes skeletonPulse {
   0%,

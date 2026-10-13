@@ -41,13 +41,12 @@ const PLATFORM_LABEL: Record<string, string> = {
 /** File yang ditahan di klien sampai bug-nya jadi (attachment wajib punya owner). */
 type StagedFile = { id: string; file: File; /** Object URL untuk thumbnail gambar. */ preview: string | null };
 
+// Label form: Title Case apa adanya (tanpa uppercase/tracking).
 const labelStyle: React.CSSProperties = {
   display: "block",
   fontSize: "0.6875rem",
   fontWeight: 700,
   color: "#64748B",
-  textTransform: "uppercase",
-  letterSpacing: "0.05em",
   marginBottom: "0.3rem",
 };
 
@@ -159,6 +158,7 @@ export function ReportGeneralBugModal({
   const [suites, setSuites] = useState<SuiteOption[]>([]);
   const [suitesLoading, setSuitesLoading] = useState(true);
   const [description, setDescription] = useState("");
+  const [precondition, setPrecondition] = useState("");
   const [expectedResult, setExpectedResult] = useState("");
   const [externalLink, setExternalLink] = useState("");
   const [files, setFiles] = useState<StagedFile[]>([]);
@@ -312,6 +312,8 @@ export function ReportGeneralBugModal({
       res = await createBug({
         title: title.trim(),
         description: description.trim() || undefined,
+        // Precondition OPSIONAL — tidak divalidasi, hanya dikirim bila diisi.
+        precondition: precondition.trim() || undefined,
         expectedResult: expectedResult.trim() || undefined,
         severity: severity || undefined,
         // Auto-prefix https:// bila skema tidak diketik pengguna.
@@ -614,6 +616,29 @@ export function ReportGeneralBugModal({
               }}
             />
             <FieldError message={fieldErrors.description} />
+          </div>
+
+          {/* Precondition OPSIONAL — tanpa tanda bintang wajib. */}
+          <div>
+            <label htmlFor="general-bug-precondition" style={labelStyle}>
+              Precondition
+            </label>
+            <textarea
+              id="general-bug-precondition"
+              value={precondition}
+              onChange={(e) => setPrecondition(e.target.value)}
+              onKeyDown={(e) => handleListKeyDown(e, precondition, setPrecondition)}
+              disabled={saving}
+              rows={3}
+              placeholder="Jelaskan kondisi awal atau prasyarat sebelum bug direproduksi..."
+              style={{
+                ...fieldStyle,
+                height: "auto",
+                padding: "0.5rem 0.75rem",
+                resize: "vertical",
+                lineHeight: 1.55,
+              }}
+            />
           </div>
 
           <div>

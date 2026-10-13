@@ -319,6 +319,8 @@ model Bug {
   id          String    @id @default(cuid())
   title       String
   description String?
+  /** Prasyarat/kondisi awal sebelum bug direproduksi (opsional). */
+  precondition String?
   expectedResult String?
   status      BugStatus @default(OPEN)
   severity    String?

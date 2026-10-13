@@ -86,6 +86,8 @@ export async function removeAutomationLink(testCaseId: string): Promise<Automati
 export async function createBug(data: {
   title: string;
   description?: string;
+  /** Prasyarat/kondisi awal sebelum bug direproduksi (opsional). */
+  precondition?: string;
   expectedResult?: string;
   severity?: string;
   externalLink?: string;
@@ -172,6 +174,7 @@ export async function createBug(data: {
       data: {
         title,
         description: data.description?.trim() || null,
+        precondition: data.precondition?.trim() || null,
         expectedResult: data.expectedResult?.trim() || null,
         severity: data.severity?.trim() || null,
         environment: linkedEnvironment,

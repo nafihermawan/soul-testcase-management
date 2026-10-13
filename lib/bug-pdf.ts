@@ -7,9 +7,11 @@
  * sehingga hyperlink-nya hilang. Semua digambar sebagai teks/vektor — hasilnya
  * tajam dan file-nya kecil.
  *
- * Tata letak (atas → bawah): header dokumen, JUDUL BUG, metadata grid 2 kolom,
- * lalu section Precondition / Expected Result / Actual Result / Evidence —
- * masing-masing dengan label Title Case + garis pemisah persis di bawah label.
+ * Tata letak (atas → bawah): header dokumen, JUDUL BUG, metadata grid 2 kolom
+ * (termasuk Link Eksternal sebagai hyperlink), lalu section Precondition /
+ * Expected Result / Actual Result / Evidence — masing-masing dengan label Title
+ * Case + garis pemisah persis di bawah label. Expected Result & Actual Result
+ * dirender sebagai daftar poin (bullet/nomor) bila teksnya berisi baris list.
  *
  * Catatan: URL evidence adalah presigned URL (R2), jadi bisa dibuka tanpa login
  * sampai masa berlakunya habis.
@@ -30,6 +32,8 @@ export type BugPdfData = {
   precondition?: string | null;
   expectedResult?: string | null;
   actualResult?: string | null;
+  /** Link referensi eksternal (Jira/GitHub/Drive) — dirender sebagai hyperlink. */
+  externalLink?: string | null;
   runName?: string | null;
   environment?: string | null;
   moduleName?: string | null;
@@ -49,6 +53,9 @@ const FOOTER_Y = PAGE_H - 10;
 
 const INK = { title: "#0F172A", text: "#334155", muted: "#64748B", line: "#E2E8F0" };
 const LINK = "#1D4ED8";
+
+/** Indentasi gantung untuk item daftar (mm) — teks menjorok dari marker. */
+const LIST_INDENT = 4;
 
 /**
  * Jarak vertikal konsisten (padanan Tailwind): label section `pb-1 mb-2`,
@@ -142,6 +149,81 @@ function labeledSection(doc: Doc, label: string, text: string, y: number, maxLin
   return lineY + GAP.belowLine + lines.length * GAP.lineHeight + GAP.section;
 }
 
+/** Satu baris konten berformat: `marker` "•"/"1." untuk item daftar, "" untuk paragraf. */
+type RichLine = { marker: string; text: string };
+
+/**
+ * Pecah teks multi-baris jadi baris terstruktur: baris yang dimulai dengan
+ * `•` / `-` / `*` dianggap bullet, `1.` / `1)` dianggap item bernomor, sisanya
+ * paragraf biasa. Baris kosong dibuang (tidak menghasilkan spasi menggantung).
+ */
+function parseRichLines(raw: string | null | undefined): RichLine[] {
+  const out: RichLine[] = [];
+  for (const line of (raw ?? "").split(/\r?\n/)) {
+    const t = line.trim();
+    if (!t) continue;
+    const bullet = t.match(/^[•\-*]\s+(.*)$/);
+    if (bullet) {
+      out.push({ marker: "•", text: bullet[1].trim() });
+      continue;
+    }
+    const numbered = t.match(/^(\d+)[.)]\s+(.*)$/);
+    if (numbered) {
+      out.push({ marker: `${numbered[1]}.`, text: numbered[2].trim() });
+      continue;
+    }
+    out.push({ marker: "", text: t });
+  }
+  return out;
+}
+
+/**
+ * Section berlabel yang isinya daftar poin (bullet/nomor) dengan indentasi
+ * gantung — dipakai Expected Result & Actual Result supaya newline/`•` pada
+ * teks tidak diratakan jadi satu paragraf. Mengembalikan posisi y berikutnya.
+ */
+function labeledListSection(
+  doc: Doc,
+  label: string,
+  raw: string | null | undefined,
+  y: number,
+  maxLines: number
+): number {
+  setLabelStyle(doc);
+  doc.text(label, M, y);
+
+  const lineY = y + GAP.labelToLine;
+  doc.setDrawColor(INK.line);
+  doc.setLineWidth(0.2);
+  doc.line(M, lineY, PAGE_W - M, lineY);
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8.5);
+  doc.setTextColor(INK.text);
+
+  const items = parseRichLines(raw);
+  if (items.length === 0) items.push({ marker: "", text: "—" });
+
+  let cy = lineY + GAP.belowLine;
+  let used = 0;
+  for (const it of items) {
+    if (used >= maxLines) break;
+    const width = it.marker ? TEXT_W - LIST_INDENT : TEXT_W;
+    const lines = wrapLines(doc, it.text, width).slice(0, maxLines - used);
+    if (lines.length === 0) continue;
+    if (it.marker) {
+      doc.text(it.marker, M, cy);
+      doc.text(lines, M + LIST_INDENT, cy);
+    } else {
+      doc.text(lines, M, cy);
+    }
+    cy += lines.length * GAP.lineHeight;
+    used += lines.length;
+  }
+
+  return cy + GAP.section;
+}
+
 export async function downloadBugPdf(data: BugPdfData): Promise<void> {
   const { jsPDF } = await import("jspdf");
   const doc = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
@@ -185,9 +267,15 @@ export async function downloadBugPdf(data: BugPdfData): Promise<void> {
   y += titleLines.length * 5 + GAP.titleToMeta;
 
   // ---------- Metadata grid 2 kolom (key-value, tanpa badge) ----------
-  const metaRows: [string, string][][] = [
+  // Sel opsional boleh membawa `href` (mis. Link Eksternal) supaya nilainya
+  // dirender sebagai hyperlink yang bisa diklik.
+  type MetaCell = [label: string, value: string, href?: string | null];
+  const externalUrl = (data.externalLink ?? "").trim();
+  const metaRows: MetaCell[][] = [
     [
-      ["Test Run", flat(data.runName) || "—"],
+      // Temuan ad-hoc (tanpa Test Run) → label "Ad-hoc", bukan strip; nilainya
+      // tetap memakai gaya value metadata standar (bold, slate gelap).
+      ["Test Run", flat(data.runName) || "Ad-hoc"],
       ["Module", flat(data.moduleName) || "—"],
     ],
     [
@@ -202,11 +290,13 @@ export async function downloadBugPdf(data: BugPdfData): Promise<void> {
       ["Status", prettyEnum(data.status)],
       ["Severity", prettyEnum(data.severity)],
     ],
+    // Link Eksternal menempati kolom kiri (di bawah Status).
+    [["Link Eksternal", externalUrl || "—", externalUrl || null]],
   ];
   const colW = (CONTENT_W - GUTTER) / 2;
   const rowH = 10;
   metaRows.forEach((row, r) => {
-    row.forEach(([label, value], c) => {
+    row.forEach(([label, value, href], c) => {
       const x = M + c * (colW + GUTTER);
       const rowY = y + r * rowH;
       // Label Title Case (bukan uppercase), slate-500 semibold.
@@ -214,9 +304,17 @@ export async function downloadBugPdf(data: BugPdfData): Promise<void> {
       doc.text(label, x, rowY);
       doc.setFont("helvetica", "bold");
       doc.setFontSize(9);
-      doc.setTextColor(INK.text);
-      const oneLine = wrapLines(doc, value, colW - 2)[0];
-      doc.text(oneLine ?? "—", x, rowY + 4.2);
+      const allLines = wrapLines(doc, value, colW - 2);
+      // Nilai link dipotong satu baris (truncate) + "…" bila masih panjang.
+      const oneLine = href && allLines.length > 1 ? `${allLines[0]}…` : allLines[0];
+      if (href) {
+        // Hyperlink aktif — dibuka di tab/viewer baru.
+        doc.setTextColor(LINK);
+        doc.textWithLink(oneLine ?? "—", x, rowY + 4.2, { url: href });
+      } else {
+        doc.setTextColor(INK.text);
+        doc.text(oneLine ?? "—", x, rowY + 4.2);
+      }
     });
   });
   y += metaRows.length * rowH + GAP.section;
@@ -230,8 +328,8 @@ export async function downloadBugPdf(data: BugPdfData): Promise<void> {
     Math.max(2, Math.floor((FOOTER_Y - 8 - reserve - y) / GAP.lineHeight));
 
   y = labeledSection(doc, "Precondition", data.precondition ?? "", y, Math.min(5, maxLinesFor()));
-  y = labeledSection(doc, "Expected Result", data.expectedResult ?? "", y, Math.min(8, maxLinesFor()));
-  y = labeledSection(doc, "Actual Result", data.actualResult ?? "", y, maxLinesFor(22));
+  y = labeledListSection(doc, "Expected Result", data.expectedResult ?? "", y, Math.min(8, maxLinesFor()));
+  y = labeledListSection(doc, "Actual Result", data.actualResult ?? "", y, maxLinesFor(22));
 
   // ---------- Evidence: hyperlink nama file (tanpa URL mentah) ----------
   setLabelStyle(doc);

@@ -659,9 +659,12 @@ export function BugsPageClient({
                             {b.run.name}
                           </Link>
                         ) : (
-                          // Temuan ad-hoc (tanpa Test Run) — placeholder dash,
-                          // seragam dengan kolom lain saat datanya kosong.
-                          <span style={{ color: "#94A3B8" }}>—</span>
+                          // Temuan ad-hoc (Test Run null/kosong) — teks muted biasa
+                          // (bukan pill) supaya tidak mengalihkan fokus dari data
+                          // utama. Berlaku juga untuk baris di tab General Findings.
+                          <span style={{ fontSize: 12, fontWeight: 400, color: "#94A3B8" }}>
+                            Ad-hoc
+                          </span>
                         )}
                       </td>
                       {/* Module / Suite — "—" muted bila bug tidak punya suite. */}
@@ -744,6 +747,7 @@ export function BugsPageClient({
                               precondition: b.testCase?.precondition ?? null,
                               expectedResult: b.testCase?.expectedResult ?? b.expectedResult,
                               actualResult: b.description,
+                              externalLink: b.externalLink,
                               runName: b.run?.name ?? null,
                               environment: b.environment ?? b.run?.environment ?? null,
                               moduleName: b.suite?.name ?? null,

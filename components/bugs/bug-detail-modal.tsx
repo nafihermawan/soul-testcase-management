@@ -147,6 +147,7 @@ export function BugDetailModal({
       precondition: bug.testCase?.precondition ?? null,
       expectedResult: bug.testCase?.expectedResult ?? bug.expectedResult,
       actualResult: bug.description,
+      externalLink: bug.externalLink,
       runName: bug.run?.name ?? null,
       environment: bug.environment ?? bug.run?.environment ?? null,
       moduleName: bug.suite?.name ?? null,

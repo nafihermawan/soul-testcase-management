@@ -3207,6 +3207,7 @@ function ExecutionModal({
       precondition: item.testCase?.precondition ?? null,
       expectedResult: item.testCase?.expectedResult ?? null,
       actualResult: actualResult || item.actualResult,
+      externalLink: bug?.externalLink ?? null,
       runName: runName ?? null,
       environment,
       moduleName: item.testCase?.suite?.name ?? null,

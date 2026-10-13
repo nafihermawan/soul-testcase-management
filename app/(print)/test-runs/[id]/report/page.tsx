@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { runCodeOf } from "@/lib/format";
+import { getFormattedDate, runCodeOf, sanitizeFilename } from "@/lib/format";
 import { RUN_STATUS_LABEL, type RunStatusValue } from "@/lib/run-status";
 import { requireUser } from "@/lib/hierarchy";
 import { ReportActionBar } from "@/components/test-runs/report-action-bar";
@@ -141,7 +141,11 @@ export default async function RunReportPage({
         margin: "0 auto",
       }}
     >
-      <ReportActionBar detailUrl={`/test-runs/${run.id}`} fileName={`test-run-${runCode}`} />
+      {/* Nama file standar: TEST-RUN_<kode run>_<nama rapi>_<YYYYMMDD>.pdf */}
+      <ReportActionBar
+        detailUrl={`/test-runs/${run.id}`}
+        fileName={`TEST-RUN_${runCode}_${sanitizeFilename(run.name)}_${getFormattedDate()}`}
+      />
 
       {/* Document header */}
       <div

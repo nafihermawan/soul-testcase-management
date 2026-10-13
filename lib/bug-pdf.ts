@@ -17,6 +17,8 @@
  * sampai masa berlakunya habis.
  */
 
+import { getFormattedDate, sanitizeFilename } from "@/lib/format";
+
 export type BugPdfEvidence = {
   fileName: string;
   /** Presigned URL — buka tanpa login sampai kedaluwarsa. */
@@ -359,5 +361,8 @@ export async function downloadBugPdf(data: BugPdfData): Promise<void> {
     doc.text(`Halaman ${p}/${pageCount}`, PAGE_W - M, FOOTER_Y, { align: "right" });
   }
 
-  doc.save(`bug-${data.bugCode}-${new Date().toISOString().slice(0, 10)}.pdf`);
+  // Nama file standar: BUG-REPORT_<kode bug>_<judul rapi>_<YYYYMMDD>.pdf
+  doc.save(
+    `BUG-REPORT_${data.bugCode}_${sanitizeFilename(data.title)}_${getFormattedDate()}.pdf`
+  );
 }

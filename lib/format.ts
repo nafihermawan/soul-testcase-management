@@ -33,6 +33,32 @@ export function entityCode(prefix: string, id: string): string {
   return `${prefix.toLowerCase()}-${year}-${hash}`;
 }
 
+/* ---------- Nama file unduhan (PDF) ---------- */
+
+/**
+ * Rapikan teks menjadi potongan nama file: buang karakter khusus, ubah spasi
+ * jadi hyphen, batasi 40 karakter. Dipakai supaya nama file unduhan seragam
+ * dan aman (tidak ada `/`, `"`, `:` yang bikin nama file rusak).
+ */
+export function sanitizeFilename(text: string | null | undefined): string {
+  if (!text) return "";
+  return text
+    .trim()
+    .replace(/[^a-zA-Z0-9\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    // Sisakan satu hyphen di setiap ujung supaya hasilnya tetap rapi, termasuk
+    // saat pemotongan 40 karakter berhenti tepat di spasi.
+    .replace(/^-+|-+$/g, "")
+    .substring(0, 40)
+    .replace(/-+$/, "");
+}
+
+/** Stempel tanggal untuk nama file: YYYYMMDD (mis. 20261013). */
+export function getFormattedDate(date: Date = new Date()): string {
+  return date.toISOString().split("T")[0].replace(/-/g, "");
+}
+
 /* ---------- Run code: sprint-tanggal-kode unik ---------- */
 
 export type RunCodeInput = {

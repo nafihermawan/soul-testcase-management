@@ -326,15 +326,30 @@ export function BugsPageClient({
         })}
       </div>
 
-      {/* Control bar: pencarian, filter, dan aksi laporkan bug */}
+      {/* Card pembungkus toolbar + tabel. Toolbar ber-padding `px-4`, sedangkan
+          tabel full-bleed ke tepi card — inset horizontalnya datang dari sel
+          pertama (pl-4) & terakhir (pr-4), jadi keduanya tetap sejajar 16px. */}
+      <div
+        style={{
+          background: "#fff",
+          border: "1px solid rgba(226, 232, 240, 0.8)",
+          borderRadius: 12,
+          boxShadow: "0 1px 2px rgba(16, 24, 40, 0.04)",
+          overflow: "hidden",
+        }}
+      >
+      {/* Control bar: pencarian, filter, dan aksi laporkan bug.
+          px-4 py-3 (compact) — inset horizontalnya 16px, sama dengan inset sel
+          pertama & terakhir tabel sehingga isinya sejajar. */}
       <div
         style={{
           display: "flex",
           alignItems: "center",
           justifyContent: "flex-end",
-          gap: "0.5rem",
+          gap: "0.625rem",
+          padding: "12px 16px",
+          borderBottom: "1px solid #F1F5F9",
           flexWrap: "wrap",
-          marginBottom: "1rem",
         }}
       >
           <div
@@ -361,6 +376,16 @@ export function BugsPageClient({
           </div>
           <FilterModal
             title="Filter Bugs"
+            // Gaya tombol Filter khusus halaman ini: teks amber-600, border
+            // amber-300/80, px-3.5, shadow-sm. `height: 32` bawaan sengaja
+            // dipertahankan (bukan `py-2`) supaya tinggi tetap pas 32px walau
+            // badge jumlah filter muncul, jadi sejajar dengan search bar.
+            triggerStyle={{
+              padding: "0 14px",
+              color: "#D97706",
+              borderColor: "rgba(252, 211, 77, 0.8)",
+              boxShadow: "0 1px 2px rgba(15, 23, 42, 0.05)",
+            }}
             activeCount={
               (sevFilter ? 1 : 0) +
               (statusFilter ? 1 : 0) +
@@ -467,10 +492,6 @@ export function BugsPageClient({
       {visibleBugs.length === 0 ? (
         <div
           style={{
-            background: "#fff",
-            border: "1px solid #E5E7EB",
-            borderRadius: 12,
-            boxShadow: "0px 1px 2px rgba(16, 24, 40, 0.04)",
             padding: "3rem 1.5rem",
             textAlign: "center",
             color: "var(--text-muted)",
@@ -486,11 +507,9 @@ export function BugsPageClient({
       ) : (
         <div
           style={{
-            background: "#fff",
-            border: "1px solid #E5E7EB",
-            borderRadius: 12,
-            boxShadow: "0px 1px 2px rgba(16, 24, 40, 0.04)",
-            overflow: "hidden",
+            // Tanpa padding horizontal: inset kiri/kanan tabel datang dari sel
+            // pertama (pl-4) & terakhir (pr-4), jadi pas 16px seperti toolbar.
+            padding: "8px 0",
           }}
         >
           <div style={{ overflow: "auto", maxHeight: 620 }}>
@@ -528,7 +547,8 @@ export function BugsPageClient({
                 <tr style={{ color: "#64748B", fontSize: 12, textAlign: "left", background: "#F8FAFC", borderBottom: "1px solid #E5E7EB", whiteSpace: "nowrap" }}>
                   <th
                     style={{
-                      padding: "0.6rem 0.5rem",
+                      // pl-4: menyamai inset toolbar di atasnya.
+                      padding: "0.6rem 0.5rem 0.6rem 16px",
                       fontWeight: 600,
                       position: "sticky",
                       left: 0,
@@ -578,7 +598,8 @@ export function BugsPageClient({
                       <td
                         className="bug-sticky-cell"
                         style={{
-                          padding: "0.6rem 0.5rem",
+                          // pl-4: sel paling kiri sejajar dengan toolbar.
+                          padding: "0.6rem 0.5rem 0.6rem 16px",
                           position: "sticky",
                           left: 0,
                           zIndex: 10,
@@ -816,18 +837,23 @@ export function BugsPageClient({
             </table>
           </div>
           {visibleBugs.length > 0 && (
-            <HistoryPagination
-              total={visibleBugs.length}
-              page={currentPage}
-              perPage={BUGS_PER_PAGE}
-              baseUrl="/bugs"
-              label="Bug"
-              lockPerPage
-              onPageChange={setPage}
-            />
+            // Padding sendiri karena wrapper tabel kini tanpa padding horizontal.
+            <div style={{ padding: "0 16px" }}>
+              <HistoryPagination
+                total={visibleBugs.length}
+                page={currentPage}
+                perPage={BUGS_PER_PAGE}
+                baseUrl="/bugs"
+                label="Bug"
+                lockPerPage
+                onPageChange={setPage}
+              />
+            </div>
           )}
         </div>
       )}
+      </div>
+      {/* /Card pembungkus toolbar + tabel */}
 
       <ConfirmDialog
         open={deleteTarget !== null}

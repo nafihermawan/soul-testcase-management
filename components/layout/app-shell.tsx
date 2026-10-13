@@ -55,8 +55,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
         <main
           className="app-main"
-          // Padding dirapatkan lagi (p-4 -> p-3) agar card mendekati tepi layar.
-          style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "0.75rem", minWidth: 0 }}
+          // p-4: padding luar paling compact — card melebar penuh mengikuti area
+          // konten, tanpa sisa margin tebal di kiri/kanan.
+          style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "1rem", minWidth: 0 }}
         >
           {/* Identitas/role user dibagikan ke halaman lewat context supaya tiap
               halaman tidak perlu fetch /api/me sendiri lagi. */}

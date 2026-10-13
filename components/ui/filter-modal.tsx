@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { SlidersHorizontal, X } from "lucide-react";
 
@@ -17,12 +17,18 @@ export function FilterModal({
   onReset,
   onApply,
   children,
+  triggerStyle,
 }: {
   title: string;
   activeCount: number;
   onReset: () => void;
   onApply: () => void;
   children: ReactNode;
+  /** Override sebagian gaya tombol pemicu untuk halaman tertentu, tanpa
+   *  mengubah pemakai lain (Reports/Analytics/Dashboard/Run History).
+   *  Kalau `background`/`borderColor` di-override, nilai itu sekaligus dipakai
+   *  sebagai warna yang dipulihkan setelah hover. */
+  triggerStyle?: CSSProperties;
 }) {
   const [open, setOpen] = useState(false);
   // `mounted` menahan portal selama animasi keluar; `shown` adalah target
@@ -75,6 +81,12 @@ export function FilterModal({
     };
   }, [mounted]);
 
+  // Warna pulih setelah hover: ikut nilai override bila ada, supaya border/latar
+  // tidak "melompat" kembali ke default untuk halaman yang memakai `triggerStyle`.
+  const restoreBg = typeof triggerStyle?.background === "string" ? triggerStyle.background : "#fff";
+  const restoreBorder =
+    typeof triggerStyle?.borderColor === "string" ? triggerStyle.borderColor : "#FFC348";
+
   return (
     <>
       <button
@@ -97,6 +109,7 @@ export function FilterModal({
           borderRadius: 8,
           cursor: "pointer",
           transition: "background-color 0.15s ease, border-color 0.15s ease",
+          ...triggerStyle,
         }}
         onMouseEnter={(e) => {
           // amber-50/50 — tint kuning sangat tipis saat hover.
@@ -104,8 +117,8 @@ export function FilterModal({
           e.currentTarget.style.borderColor = "#FBBF24";
         }}
         onMouseLeave={(e) => {
-          e.currentTarget.style.background = "#fff";
-          e.currentTarget.style.borderColor = "#FFC348";
+          e.currentTarget.style.background = restoreBg;
+          e.currentTarget.style.borderColor = restoreBorder;
         }}
       >
         <SlidersHorizontal size={13} />

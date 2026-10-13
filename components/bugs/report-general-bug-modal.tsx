@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ChevronDown, FileVideo, Image as ImageIcon, Info, Paperclip, X } from "lucide-react";
+import { ChevronDown, FileVideo, Info, Paperclip, Trash2, X } from "lucide-react";
 import { createBug } from "@/lib/actions/automation-bugs";
 import { filesFromClipboard } from "@/components/attachments/attachments-panel";
 import { CustomSelect } from "@/components/ui/custom-select";
@@ -667,10 +667,49 @@ export function ReportGeneralBugModal({
               Hanya untuk QA: presign/confirm butuh role QA. */}
           {canAttach && (
           <div>
-            <span style={labelStyle}>Upload Evidence</span>
+            {/* Baris header: label di kiri, tombol "Tambah File" di kanan — tombol
+                hanya tampil saat SUDAH ada file (saat kosong, dropzone pemicunya). */}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: "0.5rem",
+              }}
+            >
+              <span style={labelStyle}>Upload Evidence</span>
+              {files.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!saving) inputRef.current?.click();
+                  }}
+                  disabled={saving}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.375rem",
+                    padding: 0,
+                    border: "none",
+                    background: "transparent",
+                    color: "#D97706",
+                    fontSize: "0.75rem",
+                    fontWeight: 600,
+                    cursor: saving ? "not-allowed" : "pointer",
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!saving) e.currentTarget.style.color = "#B45309";
+                  }}
+                  onMouseLeave={(e) => (e.currentTarget.style.color = "#D97706")}
+                >
+                  <Paperclip size={13} /> Tambah File
+                </button>
+              )}
+            </div>
+
             {/* Input file sengaja DI LUAR dropzone dan selalu ter-mount, supaya
-                tombol "Upload File Lain" tetap bisa membuka picker walau dropzone
-                besar sudah disembunyikan saat sudah ada file. */}
+                tombol "Tambah File" tetap bisa membuka picker walau dropzone
+                sudah disembunyikan saat ada file. */}
             <input
               ref={inputRef}
               type="file"
@@ -680,7 +719,7 @@ export function ReportGeneralBugModal({
               onChange={(e) => addFiles(e.target.files)}
             />
 
-            {/* Dropzone besar hanya tampil saat BELUM ada file. */}
+            {/* KONDISI 1 — belum ada file: dropzone besar jadi pemicu utama. */}
             {files.length === 0 && (
               <div
                 onDragOver={(e) => {
@@ -709,53 +748,14 @@ export function ReportGeneralBugModal({
                   transition: "border-color 0.15s ease, background-color 0.15s ease",
                 }}
               >
-                <ImageIcon size={20} color="#94A3B8" />
+                <Paperclip size={20} color="#94A3B8" />
                 <div style={{ fontSize: "0.75rem", fontWeight: 600, color: "#475569" }}>
-                  Tarik &amp; lepas file di sini, klik untuk memilih, atau tekan Ctrl+V untuk paste gambar
+                  Klik, Drag, atau Paste file di sini
                 </div>
                 <div style={{ fontSize: "0.68rem", color: "#94A3B8" }}>
-                  Gambar (JPG/PNG) atau video (MP4) · maks {MAX_MB} MB per file
+                  Gambar atau video · maks {MAX_MB} MB per file
                 </div>
               </div>
-            )}
-
-            {/* Sudah ada file: cukup tombol sekunder ringkas untuk menambah file
-                lain — paste (Ctrl+V) dan drag-drop langsung ke daftar tetap jalan. */}
-            {files.length > 0 && (
-              <button
-                type="button"
-                onClick={() => {
-                  if (!saving) inputRef.current?.click();
-                }}
-                disabled={saving}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "0.375rem",
-                  padding: "0.375rem 0.75rem",
-                  borderRadius: 8,
-                  border: "1px dashed #CBD5E1",
-                  background: "#F8FAFC",
-                  color: "#475569",
-                  fontSize: "0.75rem",
-                  fontWeight: 600,
-                  cursor: saving ? "not-allowed" : "pointer",
-                  transition: "all 0.15s ease",
-                }}
-                onMouseEnter={(e) => {
-                  if (saving) return;
-                  e.currentTarget.style.color = "#D97706";
-                  e.currentTarget.style.background = "rgba(255, 251, 235, 0.5)";
-                  e.currentTarget.style.borderColor = "#FBBF24";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.color = "#475569";
-                  e.currentTarget.style.background = "#F8FAFC";
-                  e.currentTarget.style.borderColor = "#CBD5E1";
-                }}
-              >
-                <Paperclip size={13} /> Upload File Lain
-              </button>
             )}
 
             {files.length > 0 && (
@@ -790,19 +790,17 @@ export function ReportGeneralBugModal({
                     style={{
                       display: "flex",
                       flexDirection: "column",
-                      alignItems: "center",
-                      gap: "0.25rem",
-                      width: 80,
+                      alignItems: "flex-start",
                     }}
                   >
-                    {/* Thumbnail polos 80×80 tanpa wrapper kartu; `object-cover`
-                        membuat gambar memenuhi kotak tanpa terdistorsi. */}
+                    {/* Card thumbnail 80×80, `object-cover` agar gambar memenuhi
+                        kotak tanpa terdistorsi. */}
                     <div
                       style={{
                         position: "relative",
                         width: 80,
                         height: 80,
-                        borderRadius: 8,
+                        borderRadius: 12,
                         overflow: "hidden",
                         border: "1px solid #E2E8F0",
                         background: "#F8FAFC",
@@ -834,7 +832,7 @@ export function ReportGeneralBugModal({
                         </div>
                       )}
 
-                      {/* Badge hapus melayang di pojok kanan-atas thumbnail. */}
+                      {/* Tombol hapus (trash) melayang di pojok kanan-atas. */}
                       {!saving && (
                         <button
                           type="button"
@@ -845,35 +843,35 @@ export function ReportGeneralBugModal({
                             position: "absolute",
                             top: 4,
                             right: 4,
+                            width: 28,
+                            height: 28,
                             display: "flex",
                             alignItems: "center",
                             justifyContent: "center",
-                            padding: 4,
                             border: "none",
                             borderRadius: 999,
                             background: "#F43F5E",
                             color: "#fff",
-                            opacity: 0.9,
-                            boxShadow: "0 1px 4px rgba(15, 23, 42, 0.25)",
+                            boxShadow: "0 4px 6px -1px rgba(15, 23, 42, 0.2)",
                             cursor: "pointer",
                           }}
-                          onMouseEnter={(e) => (e.currentTarget.style.opacity = "1")}
-                          onMouseLeave={(e) => (e.currentTarget.style.opacity = "0.9")}
+                          onMouseEnter={(e) => (e.currentTarget.style.background = "#E11D48")}
+                          onMouseLeave={(e) => (e.currentTarget.style.background = "#F43F5E")}
                         >
-                          <X size={12} />
+                          <Trash2 size={13} />
                         </button>
                       )}
                     </div>
 
-                    {/* Nama + ukuran file di bawah thumbnail. */}
+                    {/* Metadata file di bawah thumbnail (nama + ukuran). */}
                     <div
                       title={f.file.name}
                       style={{
-                        width: "100%",
-                        textAlign: "center",
-                        fontSize: "0.625rem",
-                        fontWeight: 600,
-                        color: "#475569",
+                        marginTop: 6,
+                        maxWidth: 100,
+                        fontSize: "0.75rem",
+                        fontWeight: 700,
+                        color: "#1E293B",
                         overflow: "hidden",
                         textOverflow: "ellipsis",
                         whiteSpace: "nowrap",
@@ -881,7 +879,7 @@ export function ReportGeneralBugModal({
                     >
                       {f.file.name}
                     </div>
-                    <div style={{ fontSize: "0.625rem", color: "#94A3B8" }}>
+                    <div style={{ fontSize: "0.75rem", color: "#94A3B8" }}>
                       {humanSize(f.file.size)}
                     </div>
                   </div>

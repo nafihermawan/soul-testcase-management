@@ -1,14 +1,22 @@
 "use client";
 
 import { useEffect } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { ExpressRunForm, PLATFORM_ENUM_TO_LABEL } from "@/components/test-runs/express-run";
 import { ErrorBlock, FormCardSkeleton, HeaderDetailSkeleton } from "@/components/ui/data-states";
 import { useApi } from "@/lib/client/use-api";
 import { useMe } from "@/lib/client/me-context";
 import type { BugDetailPayload, RunOptionsPayload } from "@/types/api";
 
-export function CreateRunView() {
+/**
+ * Query param halaman Create Express Run (dibaca di server page lalu diteruskan,
+ * sama seperti `ActiveRunsSearchParams` / `HistorySearchParams`). Sengaja TIDAK
+ * memakai `useSearchParams()` di komponen klien: hook itu memaksa halaman ini
+ * butuh Suspense boundary saat di-prerender, dan build produksi gagal tanpanya.
+ */
+export type CreateRunSearchParams = { bugId?: string };
+
+export function CreateRunView({ searchParams }: { searchParams?: CreateRunSearchParams }) {
   const router = useRouter();
   const { me, loading: meLoading } = useMe();
   const role = me?.role;
@@ -26,7 +34,7 @@ export function CreateRunView() {
   // Referensi bug: tombol "Test" di Bugs Tracker mengarah ke
   // `/test-runs/create?bugId=…`. Datanya diambil ulang di sini (bukan dari query)
   // supaya nilainya otoritatif, lalu dipakai untuk mengisi (prefill) form.
-  const bugId = useSearchParams().get("bugId");
+  const bugId = searchParams?.bugId;
   const bugRef = useApi<BugDetailPayload>(bugId ? `/api/bugs/${bugId}` : null);
   const bug = bugRef.data?.bug ?? null;
 
@@ -142,8 +150,8 @@ export function CreateRunView() {
             sejajar vertikal dengan input field, bukan full-width kartu. */}
         <div style={{ height: 1, background: "#E5E7EB", margin: "0 1.25rem" }} />
         <ExpressRunForm
-          // Remount saat referensi bug baru tersedia — jaring pengaman kalau
-          // `bugId` (dari useSearchParams) baru terisi setelah form sempat mount.
+          // Form membaca `prefill` hanya sekali di initial state, jadi re-init
+          // saat referensi bug-nya berubah (mis. navigasi ke bug lain).
           key={bug ? `bug-${bug.id}` : "new"}
           projectId=""
           projects={data.projects}

@@ -1,5 +1,12 @@
-import { CreateRunView } from "@/components/test-runs/create-run-view";
+import {
+  CreateRunView,
+  type CreateRunSearchParams,
+} from "@/components/test-runs/create-run-view";
 
-export default function CreateTestRunPage() {
-  return <CreateRunView />;
+export default function CreateTestRunPage({
+  searchParams,
+}: {
+  searchParams?: CreateRunSearchParams;
+}) {
+  return <CreateRunView searchParams={searchParams ?? {}} />;
 }

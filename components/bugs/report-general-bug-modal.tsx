@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ChevronDown, FileVideo, Info, Paperclip, Trash2, X } from "lucide-react";
+import { FileVideo, Info, Paperclip, Trash2, X } from "lucide-react";
+import { ScrollCue, useScrollCue } from "@/components/ui/scroll-cue";
 import { createBug } from "@/lib/actions/automation-bugs";
 import { filesFromClipboard } from "@/components/attachments/attachments-panel";
 import { CustomSelect } from "@/components/ui/custom-select";
@@ -172,24 +173,8 @@ export function ReportGeneralBugModal({
   const filesRef = useRef<StagedFile[]>([]);
   filesRef.current = files;
 
-  // Petunjuk scroll: ikon chevron melayang hanya tampil selama masih ada isi di
-  // bawah — fade-out otomatis begitu scroll menyentuh dasar.
-  const bodyRef = useRef<HTMLDivElement>(null);
-  const [canScrollMore, setCanScrollMore] = useState(false);
-  const updateScrollCue = useCallback(() => {
-    const el = bodyRef.current;
-    if (!el) return;
-    setCanScrollMore(el.scrollTop + el.clientHeight < el.scrollHeight - 10);
-  }, []);
-  // Ukur ulang tiap render (file/error/validasi bisa menambah tinggi isi)…
-  useEffect(() => {
-    updateScrollCue();
-  });
-  // …dan saat tinggi viewport berubah.
-  useEffect(() => {
-    window.addEventListener("resize", updateScrollCue);
-    return () => window.removeEventListener("resize", updateScrollCue);
-  }, [updateScrollCue]);
+  // Indikator scroll (gradient + chevron) — logikanya dipakai bersama di ScrollCue.
+  const cue = useScrollCue();
 
   const addFiles = useCallback((list: FileList | File[] | null) => {
     if (!list || list.length === 0) return;
@@ -469,8 +454,8 @@ export function ReportGeneralBugModal({
 
         {/* Body */}
         <div
-          ref={bodyRef}
-          onScroll={updateScrollCue}
+          ref={cue.ref}
+          onScroll={cue.onScroll}
           style={{
             flex: 1,
             minHeight: 0,
@@ -916,61 +901,8 @@ export function ReportGeneralBugModal({
 
         </div>
 
-        {/* Scroll cue — gradient fade + ikon panah, satu state visibility
-            (`canScrollMore`): keduanya tampil selama isi masih bisa di-scroll ke
-            bawah, dan meredup bersamaan begitu menyentuh dasar.
-            Keduanya absolut terhadap kartu modal → `bottom` diukur dari dasar
-            modal (footer ~68px), jadi pas tepat di atas footer. */}
-        <div
-          aria-hidden
-          style={{
-            position: "absolute",
-            bottom: 64,
-            left: 0,
-            right: 0,
-            height: 48,
-            background: "linear-gradient(to top, #fff, rgba(255, 255, 255, 0.8), transparent)",
-            pointerEvents: "none",
-            opacity: canScrollMore ? 1 : 0,
-            transition: "opacity 0.3s ease",
-          }}
-        />
-        <div
-          aria-hidden
-          style={{
-            position: "absolute",
-            bottom: 72,
-            left: "50%",
-            // `-translate-x-1/2` di wrapper supaya animasi bounce di dalamnya
-            // tidak menimpa transform pemusatan ini.
-            transform: "translateX(-50%)",
-            zIndex: 10,
-            pointerEvents: "none",
-            opacity: canScrollMore ? 1 : 0,
-            transition: "opacity 0.3s ease",
-          }}
-        >
-          <div
-            className="scroll-cue-bounce"
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              padding: 4,
-              borderRadius: 999,
-              background: "rgba(255, 255, 255, 0.8)",
-              backdropFilter: "blur(2px)",
-              WebkitBackdropFilter: "blur(2px)",
-              border: "1px solid rgba(226, 232, 240, 0.6)",
-              boxShadow: "0 1px 2px rgba(15, 23, 42, 0.06)",
-              color: "#64748B",
-              // Discreet: ikonnya sendiri 60% sesuai styling yang diminta.
-              opacity: 0.6,
-            }}
-          >
-            <ChevronDown size={16} />
-          </div>
-        </div>
+        {/* Indikator scroll (gradient fade + chevron kuning) — komponen bersama. */}
+        <ScrollCue visible={cue.canScrollMore} />
 
         {/* Divider inset footer — `margin: 0 1.5rem` (mx-6) supaya seimbang dengan
             padding konten dan tidak full-bleed; zIndex 1 agar tetap terlihat di

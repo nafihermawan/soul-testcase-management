@@ -7,6 +7,7 @@ import { ExternalLink, FileDown, Pencil, X } from "lucide-react";
 import { AttachmentsPanel } from "@/components/attachments/attachments-panel";
 import { EditBugModal } from "@/components/bugs/edit-bug-modal";
 import { Spinner } from "@/components/ui/feedback";
+import { ScrollCue, useScrollCue } from "@/components/ui/scroll-cue";
 import { downloadBugPdf } from "@/lib/bug-pdf";
 import { entityCode } from "@/lib/format";
 import type { BugDetailPayload, BugEditableFields, BugRow } from "@/types/api";
@@ -79,6 +80,9 @@ export function BugDetailModal({
   const [error, setError] = useState<string | null>(null);
   /** Edit Bug Modal sedang terbuka di atas modal ini. */
   const [editing, setEditing] = useState(false);
+
+  // Indikator scroll (gradient + chevron kuning) — komponen bersama.
+  const cue = useScrollCue();
 
   useEffect(() => {
     let cancelled = false;
@@ -188,6 +192,8 @@ export function BugDetailModal({
         <div
           onClick={(e) => e.stopPropagation()}
           style={{
+            // `relative` = acuan posisi layer scroll-cue di dasar kartu.
+            position: "relative",
             width: "100%",
             maxWidth: 672,
             maxHeight: "90vh",
@@ -325,7 +331,11 @@ export function BugDetailModal({
           </div>
 
           {/* Body (scrollable) */}
-          <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "0 1.5rem 1.25rem" }}>
+          <div
+            ref={cue.ref}
+            onScroll={cue.onScroll}
+            style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "0 1.5rem 1.25rem" }}
+          >
             {loading ? (
               <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem", padding: "3rem 0", color: "#64748B", fontSize: "0.8rem" }}>
                 <Spinner size={16} /> Memuat detail bug...
@@ -419,8 +429,20 @@ export function BugDetailModal({
             )}
           </div>
 
-          {/* Divider inset di atas footer — tidak full-bleed ke tepi modal. */}
-          <div style={{ flexShrink: 0, borderTop: "1px solid #F1F5F9", margin: "0 1.5rem" }} />
+          {/* Indikator scroll (gradient fade + chevron kuning) — komponen bersama. */}
+          <ScrollCue visible={cue.canScrollMore} />
+
+          {/* Divider inset di atas footer — tidak full-bleed ke tepi modal, dan
+              dinaikkan di atas layer scroll-cue supaya garisnya tetap terlihat. */}
+          <div
+            style={{
+              position: "relative",
+              zIndex: 1,
+              flexShrink: 0,
+              borderTop: "1px solid #F1F5F9",
+              margin: "0 1.5rem",
+            }}
+          />
 
           {/* Footer — [Export PDF] lalu [Edit] (Edit hanya untuk yang berhak). */}
           <div

@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ChevronDown, X } from "lucide-react";
+import { X } from "lucide-react";
+import { ScrollCue, useScrollCue } from "@/components/ui/scroll-cue";
 import { updateBug } from "@/lib/actions/automation-bugs";
 import {
   AttachmentsPanel,
@@ -100,23 +101,8 @@ export function EditBugModal({
   // Pemicu dialog file Evidence — tombolnya ditaruh di header section, bukan di panel.
   const evidenceRef = useRef<AttachmentsPanelHandle>(null);
 
-  // Scroll cue (gradient fade + chevron) — sama seperti modal "Laporkan Bug":
-  // tampil selama isi modal masih bisa di-scroll ke bawah, fade-out di dasar.
-  const bodyRef = useRef<HTMLDivElement>(null);
-  const [canScrollMore, setCanScrollMore] = useState(false);
-  const updateScrollCue = useCallback(() => {
-    const el = bodyRef.current;
-    if (!el) return;
-    setCanScrollMore(el.scrollTop + el.clientHeight < el.scrollHeight - 10);
-  }, []);
-  // Ukur ulang tiap render (field bisa berubah tinggi) dan saat viewport resize.
-  useEffect(() => {
-    updateScrollCue();
-  });
-  useEffect(() => {
-    window.addEventListener("resize", updateScrollCue);
-    return () => window.removeEventListener("resize", updateScrollCue);
-  }, [updateScrollCue]);
+  // Indikator scroll (gradient + chevron) — logikanya dipakai bersama di ScrollCue.
+  const cue = useScrollCue();
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -332,8 +318,8 @@ export function EditBugModal({
 
         {/* Body */}
         <div
-          ref={bodyRef}
-          onScroll={updateScrollCue}
+          ref={cue.ref}
+          onScroll={cue.onScroll}
           style={{
             flex: 1,
             minHeight: 0,
@@ -578,59 +564,8 @@ export function EditBugModal({
           </div>
         </div>
 
-        {/* Scroll cue — gradient fade + ikon chevron melayang, satu state
-            `canScrollMore` (samakan dengan modal "Laporkan Bug"). Absolut terhadap
-            kartu modal, jadi `bottom` diukur dari dasar kartu (footer ~67px). */}
-        <div
-          aria-hidden
-          style={{
-            position: "absolute",
-            bottom: 64,
-            left: 0,
-            right: 0,
-            height: 48,
-            background: "linear-gradient(to top, #fff, rgba(255, 255, 255, 0.8), transparent)",
-            pointerEvents: "none",
-            opacity: canScrollMore ? 1 : 0,
-            transition: "opacity 0.3s ease",
-          }}
-        />
-        <div
-          aria-hidden
-          style={{
-            position: "absolute",
-            bottom: 72,
-            left: "50%",
-            // `-translate-x-1/2` di wrapper agar animasi bounce di dalamnya tidak
-            // menimpa transform pemusatan ini.
-            transform: "translateX(-50%)",
-            zIndex: 10,
-            pointerEvents: "none",
-            opacity: canScrollMore ? 1 : 0,
-            transition: "opacity 0.3s ease",
-          }}
-        >
-          <div
-            className="scroll-cue-bounce"
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              padding: 4,
-              borderRadius: 999,
-              background: "rgba(255, 255, 255, 0.8)",
-              backdropFilter: "blur(2px)",
-              WebkitBackdropFilter: "blur(2px)",
-              border: "1px solid rgba(226, 232, 240, 0.6)",
-              boxShadow: "0 1px 2px rgba(15, 23, 42, 0.06)",
-              color: "#64748B",
-              // Discreet: ikonnya sendiri 60%.
-              opacity: 0.6,
-            }}
-          >
-            <ChevronDown size={16} />
-          </div>
-        </div>
+        {/* Indikator scroll (gradient fade + chevron kuning) — komponen bersama. */}
+        <ScrollCue visible={cue.canScrollMore} />
 
         {/* Divider inset + footer — di atas layer scroll-cue supaya garis pemisah
             tetap terlihat utuh. */}

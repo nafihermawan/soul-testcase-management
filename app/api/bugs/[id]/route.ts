@@ -33,6 +33,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     id: bug.id,
     title: bug.title,
     description: bug.description,
+    precondition: bug.precondition,
     status: bug.status,
     severity: bug.severity,
     environment: bug.environment,

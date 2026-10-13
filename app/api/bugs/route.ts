@@ -57,6 +57,7 @@ export async function GET(req: NextRequest) {
       id: b.id,
       title: b.title,
       description: b.description,
+      precondition: b.precondition,
       status: normalizeBugStatus(b.status),
       severity: b.severity,
       environment: b.environment,

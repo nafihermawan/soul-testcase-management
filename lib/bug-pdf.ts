@@ -127,28 +127,6 @@ function setLabelStyle(doc: Doc) {
   doc.setTextColor(INK.muted);
 }
 
-/**
- * Section berlabel: label Title Case, garis pemisah PERSIS di bawah label,
- * lalu isi teks. Mengembalikan posisi y berikutnya (dengan jarak `mb-4`).
- */
-function labeledSection(doc: Doc, label: string, text: string, y: number, maxLines = 8): number {
-  setLabelStyle(doc);
-  doc.text(label, M, y);
-
-  const lineY = y + GAP.labelToLine;
-  doc.setDrawColor(INK.line);
-  doc.setLineWidth(0.2);
-  doc.line(M, lineY, PAGE_W - M, lineY);
-
-  const lines = wrapLines(doc, flat(text) || "—", TEXT_W).slice(0, maxLines);
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8.5);
-  doc.setTextColor(INK.text);
-  doc.text(lines, M, lineY + GAP.belowLine);
-
-  return lineY + GAP.belowLine + lines.length * GAP.lineHeight + GAP.section;
-}
-
 /** Satu baris konten berformat: `marker` "•"/"1." untuk item daftar, "" untuk paragraf. */
 type RichLine = { marker: string; text: string };
 
@@ -327,7 +305,9 @@ export async function downloadBugPdf(data: BugPdfData): Promise<void> {
   const maxLinesFor = (reserve = 0) =>
     Math.max(2, Math.floor((FOOTER_Y - 8 - reserve - y) / GAP.lineHeight));
 
-  y = labeledSection(doc, "Precondition", data.precondition ?? "", y, Math.min(5, maxLinesFor()));
+  // Precondition pakai renderer daftar (bukan paragraf `flat()`) supaya baris baru
+  // dan bullet tetap terbaca — padanan `whitespace-pre-line` di PDF.
+  y = labeledListSection(doc, "Precondition", data.precondition ?? "", y, Math.min(5, maxLinesFor()));
   y = labeledListSection(doc, "Expected Result", data.expectedResult ?? "", y, Math.min(8, maxLinesFor()));
   y = labeledListSection(doc, "Actual Result", data.actualResult ?? "", y, maxLinesFor(22));
 

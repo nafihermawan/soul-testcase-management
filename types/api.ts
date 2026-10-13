@@ -111,6 +111,8 @@ export type BugRow = {
   id: string;
   title: string;
   description: string | null;
+  /** Prasyarat/kondisi awal sebelum bug direproduksi (opsional). */
+  precondition: string | null;
   status: BugStatus;
   severity: string | null;
   /** Tempat bug ditemukan: DEV | STG | PRE-PROD | PROD; null = belum diketahui. */
@@ -160,6 +162,8 @@ export type BugEditableFields = {
   /** Suite hasil perubahan — dipakai untuk patch tampilan detail/daftar. */
   suite?: { id: string; name: string } | null;
   expectedResult?: string | null;
+  /** Prasyarat/kondisi awal sebelum bug direproduksi (opsional). */
+  precondition?: string | null;
   externalLink: string | null;
 };
 

@@ -133,6 +133,11 @@ export function BugDetailModal({
   const expectedText =
     bug?.expectedResult?.trim() || bug?.testCase?.expectedResult?.trim() || "";
 
+  // Precondition milik bug (kolom `Bug.precondition`); kalau kosong, pakai milik
+  // Test Case terkait. Satu aturan yang sama dipakai tampilan detail & PDF.
+  const preconditionText =
+    bug?.precondition?.trim() || bug?.testCase?.precondition?.trim() || "";
+
   /**
    * Ekspor laporan bug ringkas (PDF). Hyperlink evidence memakai URL presigned
    * R2, jadi bisa dibuka tanpa login sampai masa berlakunya habis.
@@ -144,7 +149,7 @@ export function BugDetailModal({
       title: bug.title,
       severity: bug.severity,
       status: bug.status,
-      precondition: bug.testCase?.precondition ?? null,
+      precondition: preconditionText || null,
       expectedResult: bug.testCase?.expectedResult ?? bug.expectedResult,
       actualResult: bug.description,
       externalLink: bug.externalLink,
@@ -337,6 +342,18 @@ export function BugDetailModal({
                   <p style={bodyTextStyle}>
                     {bug.description?.trim() ? bug.description : "Tidak ada deskripsi."}
                   </p>
+                </div>
+
+                {/* Precondition — prasyarat/kondisi awal sebelum bug direproduksi.
+                    `bodyTextStyle` sudah `white-space: pre-wrap` sehingga baris
+                    baru (\n) tampil rapi. */}
+                <div style={{ marginBottom: "1.25rem" }}>
+                  <div style={labelStyle}>Precondition</div>
+                  {preconditionText ? (
+                    <p style={bodyTextStyle}>{preconditionText}</p>
+                  ) : (
+                    <p style={{ ...bodyTextStyle, color: "#94A3B8" }}>—</p>
+                  )}
                 </div>
 
                 {/* Expected Result — milik bug, fallback ke Test Case terkait. */}

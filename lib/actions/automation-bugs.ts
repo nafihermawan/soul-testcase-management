@@ -28,6 +28,19 @@ function handleError(error: unknown): AutomationBugActionState {
   };
 }
 
+/**
+ * Error kontrol-flow Next.js (`redirect()` / `notFound()`) melempar error khusus
+ * ber-`digest` NEXT_REDIRECT / NEXT_NOT_FOUND yang HARUS diteruskan ke framework.
+ * Kalau ikut ditangkap catch biasa, role-gate (mis. redirect ke /settings) rusak.
+ */
+function isNextControlFlowError(error: unknown): boolean {
+  const digest = (error as { digest?: unknown } | null)?.digest;
+  return (
+    typeof digest === "string" &&
+    (digest.startsWith("NEXT_REDIRECT") || digest === "NEXT_NOT_FOUND")
+  );
+}
+
 /* ============ Automation Link ============ */
 
 /** Simpan/link automation ke TestCase (manual dari halaman detail TC). */
@@ -99,13 +112,16 @@ export async function createBug(data: {
    *  DIABAIKAN — server menurunkannya dari environment TestRun. */
   environment?: string | null;
 }): Promise<AutomationBugActionState> {
-  const user = await requireRole("DEVELOPER");
   const title = data.title.trim();
   if (!title) {
     return { error: "Judul bug wajib diisi.", field: "title" };
   }
 
   try {
+    // Role-guard di DALAM try: `requireRole` memakai `redirect()` yang melempar
+    // error kontrol-flow, dan hal tak terduga darinya (mis. sesi gagal dibaca)
+    // harus jadi pesan JSON yang jelas, bukan unhandled exception server action.
+    const user = await requireRole("DEVELOPER");
     // Deteksi mention @TC-ID di deskripsi -> cari TestCase, link otomatis.
     let linkedTestCaseId = data.testCaseId || null;
     if (!linkedTestCaseId && data.description) {
@@ -229,6 +245,7 @@ export async function createBug(data: {
 
     return { success: true, bugId: bug.id };
   } catch (error) {
+    if (isNextControlFlowError(error)) throw error;
     return handleError(error);
   }
 }
@@ -255,6 +272,8 @@ export async function updateBug(data: {
   bugId: string;
   title: string;
   description?: string;
+  /** Prasyarat/kondisi awal sebelum bug direproduksi (opsional). */
+  precondition?: string;
   severity?: string;
   expectedResult?: string;
   externalLink?: string;
@@ -262,7 +281,6 @@ export async function updateBug(data: {
   /** Suite terpilih — project diturunkan dari sini supaya tidak bertentangan. */
   suiteId?: string | null;
 }): Promise<AutomationBugActionState> {
-  await requireRole("DEVELOPER");
   const title = data.title.trim();
   if (!title) {
     return { error: "Judul bug wajib diisi.", field: "title" };
@@ -274,6 +292,8 @@ export async function updateBug(data: {
   }
 
   try {
+    // Role-guard di DALAM try — sama seperti createBug (lihat catatannya).
+    await requireRole("DEVELOPER");
     const linkedSuiteId = data.suiteId?.trim() || null;
     let linkedProjectId: string | null = null;
     if (linkedSuiteId) {
@@ -290,6 +310,7 @@ export async function updateBug(data: {
       data: {
         title,
         description: data.description?.trim() || null,
+        precondition: data.precondition?.trim() || null,
         severity: data.severity?.trim() || null,
         expectedResult: data.expectedResult?.trim() || null,
         // Link eksternal opsional; skema https:// ditambahkan otomatis.
@@ -304,6 +325,7 @@ export async function updateBug(data: {
     revalidatePath(`/bugs`);
     return { success: true, bugId: bug.id };
   } catch (error) {
+    if (isNextControlFlowError(error)) throw error;
     return handleError(error);
   }
 }

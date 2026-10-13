@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { X } from "lucide-react";
+import { ChevronDown, X } from "lucide-react";
 import { updateBug } from "@/lib/actions/automation-bugs";
 import {
   AttachmentsPanel,
@@ -88,6 +88,7 @@ export function EditBugModal({
   const [environment, setEnvironment] = useState(bug.environment ?? "");
   const [suiteId, setSuiteId] = useState(bug.suite?.id ?? "");
   const [description, setDescription] = useState(bug.description ?? "");
+  const [precondition, setPrecondition] = useState(bug.precondition ?? "");
   const [expectedResult, setExpectedResult] = useState(bug.expectedResult ?? "");
   const [externalLink, setExternalLink] = useState(bug.externalLink ?? "");
   const [suites, setSuites] = useState<SuiteOption[]>([]);
@@ -98,6 +99,24 @@ export function EditBugModal({
   const { toast, showToast, dismissToast } = useToast();
   // Pemicu dialog file Evidence — tombolnya ditaruh di header section, bukan di panel.
   const evidenceRef = useRef<AttachmentsPanelHandle>(null);
+
+  // Scroll cue (gradient fade + chevron) — sama seperti modal "Laporkan Bug":
+  // tampil selama isi modal masih bisa di-scroll ke bawah, fade-out di dasar.
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const [canScrollMore, setCanScrollMore] = useState(false);
+  const updateScrollCue = useCallback(() => {
+    const el = bodyRef.current;
+    if (!el) return;
+    setCanScrollMore(el.scrollTop + el.clientHeight < el.scrollHeight - 10);
+  }, []);
+  // Ukur ulang tiap render (field bisa berubah tinggi) dan saat viewport resize.
+  useEffect(() => {
+    updateScrollCue();
+  });
+  useEffect(() => {
+    window.addEventListener("resize", updateScrollCue);
+    return () => window.removeEventListener("resize", updateScrollCue);
+  }, [updateScrollCue]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -163,6 +182,8 @@ export function EditBugModal({
       suite: selectedSuite
         ? { id: selectedSuite.id, name: selectedSuite.name }
         : bug.suite,
+      // Precondition OPSIONAL — dikirim apa adanya (boleh kosong).
+      precondition: precondition.trim(),
       expectedResult: expectedResult.trim(),
       // Auto-prefix https:// bila skema tidak diketik pengguna.
       externalLink: normalizeUrl(externalLink),
@@ -175,16 +196,24 @@ export function EditBugModal({
         bugId: bug.id,
         title: patch.title,
         description: patch.description ?? undefined,
+        precondition: patch.precondition ?? undefined,
         severity: patch.severity ?? undefined,
         expectedResult: patch.expectedResult ?? undefined,
         externalLink: patch.externalLink ?? undefined,
         environment: patch.environment ?? null,
         suiteId: patch.suiteId ?? null,
       });
-    } catch {
-      // Server action gagal di level jaringan (offline / server tak terjangkau).
+    } catch (error) {
+      // Server action gagal di level TRANSPORT: offline, atau action id basi
+      // (dev server belum di-restart setelah build/regenerate). Sebelumnya semua
+      // kasus ini dilaporkan "koneksi terputus", padahal penyebabnya bisa lain.
+      console.error("updateBug gagal:", error);
       setPending(false);
-      showToast("Koneksi internet terputus. Periksa jaringan Anda.", "error", 5000);
+      showToast(
+        "Gagal menghubungi server. Hard refresh halaman; kalau masih gagal, restart dev server lalu coba lagi.",
+        "error",
+        6000
+      );
       return;
     }
     setPending(false);
@@ -227,6 +256,8 @@ export function EditBugModal({
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
+          // `relative` = acuan posisi layer scroll-cue di dasar kartu.
+          position: "relative",
           width: "100%",
           maxWidth: 560,
           maxHeight: "90vh",
@@ -301,6 +332,8 @@ export function EditBugModal({
 
         {/* Body */}
         <div
+          ref={bodyRef}
+          onScroll={updateScrollCue}
           style={{
             flex: 1,
             minHeight: 0,
@@ -427,7 +460,27 @@ export function EditBugModal({
             <FieldError message={fieldErrors.description} />
           </div>
 
-          {/* 5. Expected Result (mandatory) */}
+          {/* 5. Precondition (opsional) — tanpa tanda bintang wajib. */}
+          <div>
+            <label htmlFor="edit-bug-precondition" style={labelStyle}>
+              Precondition
+            </label>
+            <textarea
+              id="edit-bug-precondition"
+              value={precondition}
+              onChange={(e) => setPrecondition(e.target.value)}
+              disabled={pending}
+              rows={3}
+              placeholder="Jelaskan kondisi awal atau prasyarat sebelum bug direproduksi..."
+              style={{
+                ...fieldStyle,
+                resize: "vertical",
+                lineHeight: 1.55,
+              }}
+            />
+          </div>
+
+          {/* 6. Expected Result (mandatory) */}
           <div>
             <label htmlFor="edit-bug-expected" style={labelStyle}>
               Expected Result <span style={{ color: "#E11D48" }}>*</span>
@@ -452,7 +505,7 @@ export function EditBugModal({
             <FieldError message={fieldErrors.expectedResult} />
           </div>
 
-          {/* 6. Link Eksternal (opsional) */}
+          {/* 7. Link Eksternal (opsional) */}
           <div>
             <label htmlFor="edit-bug-link" style={labelStyle}>
               Link Eksternal
@@ -472,7 +525,7 @@ export function EditBugModal({
             <FieldError message={fieldErrors.externalLink} />
           </div>
 
-          {/* 7. Evidence (Lampiran) — opsional */}
+          {/* 8. Evidence (Lampiran) — opsional */}
           <div>
             {/* Header inline: label kiri + tombol Tambah File kanan. Pemicu file
                 diserahkan ke header (hideTrigger) agar panel hanya menampilkan
@@ -525,8 +578,71 @@ export function EditBugModal({
           </div>
         </div>
 
-        {/* Divider inset + footer */}
-        <div style={{ flexShrink: 0, borderTop: "1px solid #F1F5F9", margin: "0 1.5rem" }} />
+        {/* Scroll cue — gradient fade + ikon chevron melayang, satu state
+            `canScrollMore` (samakan dengan modal "Laporkan Bug"). Absolut terhadap
+            kartu modal, jadi `bottom` diukur dari dasar kartu (footer ~67px). */}
+        <div
+          aria-hidden
+          style={{
+            position: "absolute",
+            bottom: 64,
+            left: 0,
+            right: 0,
+            height: 48,
+            background: "linear-gradient(to top, #fff, rgba(255, 255, 255, 0.8), transparent)",
+            pointerEvents: "none",
+            opacity: canScrollMore ? 1 : 0,
+            transition: "opacity 0.3s ease",
+          }}
+        />
+        <div
+          aria-hidden
+          style={{
+            position: "absolute",
+            bottom: 72,
+            left: "50%",
+            // `-translate-x-1/2` di wrapper agar animasi bounce di dalamnya tidak
+            // menimpa transform pemusatan ini.
+            transform: "translateX(-50%)",
+            zIndex: 10,
+            pointerEvents: "none",
+            opacity: canScrollMore ? 1 : 0,
+            transition: "opacity 0.3s ease",
+          }}
+        >
+          <div
+            className="scroll-cue-bounce"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: 4,
+              borderRadius: 999,
+              background: "rgba(255, 255, 255, 0.8)",
+              backdropFilter: "blur(2px)",
+              WebkitBackdropFilter: "blur(2px)",
+              border: "1px solid rgba(226, 232, 240, 0.6)",
+              boxShadow: "0 1px 2px rgba(15, 23, 42, 0.06)",
+              color: "#64748B",
+              // Discreet: ikonnya sendiri 60%.
+              opacity: 0.6,
+            }}
+          >
+            <ChevronDown size={16} />
+          </div>
+        </div>
+
+        {/* Divider inset + footer — di atas layer scroll-cue supaya garis pemisah
+            tetap terlihat utuh. */}
+        <div
+          style={{
+            position: "relative",
+            zIndex: 1,
+            flexShrink: 0,
+            borderTop: "1px solid #F1F5F9",
+            margin: "0 1.5rem",
+          }}
+        />
         <div
           style={{
             flexShrink: 0,

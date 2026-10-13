@@ -29,6 +29,8 @@ export type BugRow = {
   createdAt: string;
   /** Hasil yang diharapkan (diisi reporter) — dipakai laporan PDF bug. */
   expectedResult?: string | null;
+  /** Prasyarat bug (kolom `Bug.precondition`) — dipakai laporan PDF bug. */
+  precondition?: string | null;
   testCase: {
     id: string;
     tcId: string;
@@ -744,7 +746,7 @@ export function BugsPageClient({
                               title: b.title,
                               severity: b.severity,
                               status: b.status,
-                              precondition: b.testCase?.precondition ?? null,
+                              precondition: b.precondition ?? b.testCase?.precondition ?? null,
                               expectedResult: b.testCase?.expectedResult ?? b.expectedResult,
                               actualResult: b.description,
                               externalLink: b.externalLink,

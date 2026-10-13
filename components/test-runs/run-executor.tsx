@@ -557,22 +557,43 @@ export function RunExecutor({
           padding: 24,
         }}
       >
-        {/* Row 1: Title + badges (kiri) | Status pill (kanan) */}
+        {/* Row 1: Judul (kiri, boleh melipat) | aksi (kanan, tidak menyusut) */}
         <div
           style={{
             display: "flex",
-            alignItems: "center",
+            // `flex-start` + TANPA `flexWrap`: judul panjang melipat di kolomnya
+            // sendiri, tombol aksi tidak pernah terdorong ke baris bawah.
+            alignItems: "flex-start",
             justifyContent: "space-between",
-            flexWrap: "wrap",
-            gap: "0.75rem",
+            gap: "1rem",
+            marginBottom: "0.75rem",
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-            <div style={{ fontSize: 22, fontWeight: 700, color: "#111827", lineHeight: 1.3 }}>
+          <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 12 }}>
+            <div
+              style={{
+                minWidth: 0,
+                fontSize: 22,
+                fontWeight: 700,
+                color: "#111827",
+                lineHeight: 1.3,
+                // Kata panjang tanpa spasi pun tetap dipatahkan, tidak melebar.
+                overflowWrap: "break-word",
+              }}
+            >
               {runName}
             </div>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "0.5rem",
+              // Tombol mempertahankan ukuran aslinya di sisi kanan.
+              flexShrink: 0,
+              whiteSpace: "nowrap",
+            }}
+          >
             {/* Aksi sekunder: buka modal Edit Run, tepat di kiri Complete Run.
                 Base style kedua tombol sengaja identik (tinggi, radius, padding,
                 font) — bedanya hanya warna/border. */}
@@ -673,19 +694,22 @@ export function RunExecutor({
           </div>
         </div>
 
-        {/* Row 2: Overall Execution Bar */}
-        <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 14, flexWrap: "wrap" }}>
-          <span style={{ fontSize: 14, fontWeight: 600, color: "#6B7280" }}>
+        {/* Row 2: Overall Execution Bar — jaraknya diatur `marginBottom` Row 1. */}
+        <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap" }}>
+          <span style={{ fontSize: 12, fontWeight: 500, color: "#64748B" }}>
             Total: {items.length} TC
           </span>
-          <span style={{ fontSize: 14, color: "#047857", fontWeight: 600 }}>
-            | Passed: {passed}
+          <span style={{ margin: "0 0.5rem", fontSize: 12, color: "#CBD5E1" }}>|</span>
+          <span style={{ fontSize: 12, fontWeight: 500, color: "#059669" }}>
+            Passed: {passed}
           </span>
-          <span style={{ fontSize: 14, color: "#BE123C", fontWeight: 600 }}>
-            | Failed: {failed}
+          <span style={{ margin: "0 0.5rem", fontSize: 12, color: "#CBD5E1" }}>|</span>
+          <span style={{ fontSize: 12, fontWeight: 500, color: "#E11D48" }}>
+            Failed: {failed}
           </span>
-          <span style={{ fontSize: 14, color: "#6B7280", fontWeight: 600 }}>
-            | Untested: {untested}
+          <span style={{ margin: "0 0.5rem", fontSize: 12, color: "#CBD5E1" }}>|</span>
+          <span style={{ fontSize: 12, fontWeight: 500, color: "#64748B" }}>
+            Untested: {untested}
           </span>
           <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6 }}>
             <button

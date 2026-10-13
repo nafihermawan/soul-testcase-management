@@ -12,9 +12,34 @@ export type TestRunActionState = {
 
 type ResultStatus = "PASS" | "FAIL" | "BLOCKED" | "SKIPPED" | "NOT_RUN";
 
+/**
+ * Error tak terduga di server. Kode error yang lazim (Prisma `P2003`/`P2002`
+ * maupun SQLSTATE dari driver `pg` — app ini pakai adapter @prisma/adapter-pg)
+ * dipetakan ke pesan yang bisa ditindaklanjuti. Di luar produksi pesan aslinya
+ * ikut disertakan supaya penyebabnya langsung kelihatan, bukan "terjadi
+ * kesalahan" yang tidak menjelaskan apa pun.
+ */
 function handleError(error: unknown): TestRunActionState {
-  console.error(error);
-  return { error: "Terjadi kesalahan. Coba lagi." };
+  console.error("test-runs action error:", error);
+  const code = (error as { code?: unknown } | null)?.code;
+
+  if (code === "P2003" || code === "23503") {
+    return { error: "Project / suite / test case yang dipilih tidak valid di database." };
+  }
+  if (code === "P2002" || code === "23505") {
+    return { error: "Data sudah ada (duplikat)." };
+  }
+  if (code === "P2025") return { error: "Data yang ingin diubah tidak ditemukan." };
+  if (code === "23502") return { error: "Ada kolom wajib yang belum terisi." };
+  if (code === "22P02") return { error: "Format nilai tidak valid untuk kolom database." };
+
+  const detail = error instanceof Error ? error.message : String(error);
+  return {
+    error:
+      process.env.NODE_ENV === "production"
+        ? "Terjadi kesalahan. Coba lagi."
+        : `Terjadi kesalahan: ${detail}`,
+  };
 }
 
 /** Kumpulkan semua TestCase di dalam suite (termasuk semua sub-suite rekursif). */
@@ -50,6 +75,8 @@ export async function createTestRun(
     activityType?: string;
     environment?: string;
     platforms?: string[];
+    /** Bug asal (General Finding) — run dibuat dari tombol "Test" di Bugs Tracker. */
+    sourceBugId?: string | null;
   }
 ): Promise<TestRunActionState & { runId?: string }> {
   const user = await requireRole("QA");
@@ -74,11 +101,23 @@ export async function createTestRun(
       select: { id: true, title: true },
     });
 
+    // Rujukan bug opsional: divalidasi dulu supaya id yang salah tidak
+    // menggagalkan pembuatan run (FK-nya jadi null, bukan error).
+    let sourceBugId: string | null = null;
+    if (opts?.sourceBugId?.trim()) {
+      const bug = await prisma.bug.findUnique({
+        where: { id: opts.sourceBugId.trim() },
+        select: { id: true },
+      });
+      sourceBugId = bug?.id ?? null;
+    }
+
     const run = await prisma.testRun.create({
       data: {
         name: runName,
         projectId,
         status: "IN_PROGRESS",
+        sourceBugId,
         activityType: opts?.activityType?.trim() || null,
         platforms:
           opts?.platforms && opts.platforms.length > 0
@@ -346,23 +385,56 @@ export async function setRunAssignees(
 }
 
 /**
- * Tandai run selesai. */
+ * Bug asal run (kalau run dibuat dari tombol "Test" di General Findings) yang
+ * perlu ditutup ketika run-nya selesai. `null` bila run tidak punya sumber bug
+ * atau bug-nya sudah CLOSED (idempoten — `resolvedAt` tidak di-reset).
+ */
+async function sourceBugToClose(runId: string): Promise<{ id: string } | null> {
+  const run = await prisma.testRun.findUnique({
+    where: { id: runId },
+    select: { sourceBug: { select: { id: true, status: true } } },
+  });
+  const bug = run?.sourceBug;
+  if (!bug || bug.status === "CLOSED") return null;
+  return { id: bug.id };
+}
+
+/** Operasi auto-close bug asal untuk digabung ke `$transaction([...])`. */
+function closeSourceBugOp(bug: { id: string } | null) {
+  return bug
+    ? [
+        prisma.bug.update({
+          where: { id: bug.id },
+          data: { status: "CLOSED" as const, resolvedAt: new Date() },
+        }),
+      ]
+    : [];
+}
+
+/**
+ * Tandai run selesai. Run yang dibuat dari sebuah bug (re-test General Finding)
+ * sekaligus menutup bug asalnya — re-test-nya sudah dijalankan. */
 export async function completeRun(
   runId: string,
   overallNotes?: string
 ): Promise<TestRunActionState> {
   await requireRole("QA");
   try {
-    await prisma.testRun.update({
-      where: { id: runId },
-      data: {
-        status: "COMPLETED",
-        completedAt: new Date(),
-        overallNotes: overallNotes?.trim() || null,
-      },
-    });
+    const bug = await sourceBugToClose(runId);
+    await prisma.$transaction([
+      prisma.testRun.update({
+        where: { id: runId },
+        data: {
+          status: "COMPLETED",
+          completedAt: new Date(),
+          overallNotes: overallNotes?.trim() || null,
+        },
+      }),
+      ...closeSourceBugOp(bug),
+    ]);
     revalidatePath(`/test-runs/${runId}`);
     revalidatePath("/test-runs");
+    if (bug) revalidatePath("/bugs");
     return { success: true };
   } catch (error) {
     return handleError(error);
@@ -376,6 +448,7 @@ export async function completeRunWithSkip(
 ): Promise<TestRunActionState> {
   await requireRole("QA");
   try {
+    const bug = await sourceBugToClose(runId);
     await prisma.$transaction([
       prisma.testRunResult.updateMany({
         where: { runId, status: "NOT_RUN" },
@@ -389,9 +462,12 @@ export async function completeRunWithSkip(
           overallNotes: overallNotes?.trim() || null,
         },
       }),
+      // Sama seperti completeRun: run re-test yang selesai menutup bug asalnya.
+      ...closeSourceBugOp(bug),
     ]);
     revalidatePath(`/test-runs/${runId}`);
     revalidatePath("/test-runs");
+    if (bug) revalidatePath("/bugs");
     return { success: true };
   } catch (error) {
     return handleError(error);

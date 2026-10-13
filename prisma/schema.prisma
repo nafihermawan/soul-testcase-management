@@ -239,6 +239,8 @@ model TestRun {
   completedAt  DateTime?
   /** Rangkuman pengujian makro yang diisi QA di Completion Summary Modal. */
   overallNotes String?
+  /** Bug asal (General Finding) yang di-re-test oleh run ini. */
+  sourceBugId  String?
 
   project Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
   createdBy User?         @relation("RunCreator", fields: [createdById], references: [id], onDelete: SetNull)
@@ -246,6 +248,9 @@ model TestRun {
   /** Assignee banyak-orang (sumber utama kolom Assignee di Active Runs). */
   assignees TestRunAssignee[]
   results   TestRunResult[]
+  // Bug yang jadi sumber run ini (tombol "Test" di Bugs Tracker). SetNull: hapus
+  // bug tidak boleh menghapus riwayat run.
+  sourceBug Bug?            @relation("RunSourceBug", fields: [sourceBugId], references: [id], onDelete: SetNull)
 
   @@index([projectId, createdAt])
   // Agregasi/antrian per tester: "run apa saja yang di-assign ke QA ini".
@@ -254,6 +259,8 @@ model TestRun {
   // (COMPLETED, urut completedAt).
   @@index([status])
   @@index([status, completedAt])
+  // Dipakai auto-close: "bug ini sudah punya run re-test?"
+  @@index([sourceBugId])
 }
 
 /**
@@ -347,6 +354,8 @@ model Bug {
   createdBy     User?          @relation(fields: [createdById], references: [id], onDelete: SetNull)
 
   attachments   Attachment[]
+  /** Run re-test (Express Run) yang dibuat dari bug ini. */
+  sourceRuns    TestRun[]      @relation("RunSourceBug")
 
   @@index([testCaseId, createdAt])
   @@index([testRunResultId, createdAt])

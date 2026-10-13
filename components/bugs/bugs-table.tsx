@@ -2,9 +2,13 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ExternalLink, FileDown, Plus, Search, Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ExternalLink, FileText, Play, Plus, Search, Trash2 } from "lucide-react";
 import { deleteBug, updateBugStatus } from "@/lib/actions/automation-bugs";
-import { downloadBugPdf } from "@/lib/bug-pdf";
+import {
+  RowActionsMenu,
+  type RowAction,
+} from "@/components/settings/row-actions-menu";
 import { ConfirmDialog, Toast, useToast } from "@/components/ui/feedback";
 import { FilterModal } from "@/components/ui/filter-modal";
 import { CustomSelect, filterLabelStyle } from "@/components/ui/custom-select";
@@ -75,7 +79,8 @@ const TITLE_MIN_WIDTH = 280;
  * Urutan: ID · Test Run · Module · Environment · Severity · Status ·
  *         Created By · Created Date · Aksi.
  */
-const FIXED_COLUMNS_WIDTH = 110 + 140 + 110 + 80 + 90 + 90 + 130 + 100 + 70;
+// Kolom Aksi: satu tombol kebab (~29px) di tengah dengan px-4.
+const FIXED_COLUMNS_WIDTH = 110 + 140 + 110 + 80 + 90 + 90 + 130 + 100 + 72;
 
 /**
  * Klasifikasi sumber bug. Field `sourceType` dari API dipakai kalau ada, tapi
@@ -122,6 +127,7 @@ export function BugsPageClient({
   /** Upload evidence butuh role QA — server action-nya akan redirect kalau bukan. */
   canAttach?: boolean;
 }) {
+  const router = useRouter();
   const [deleteTarget, setDeleteTarget] = useState<BugRow | null>(null);
   const [deletePending, setDeletePending] = useState(false);
   /** Bug yang detailnya sedang dibuka di modal (klik baris tabel). */
@@ -199,6 +205,37 @@ export function BugsPageClient({
     { key: "EXECUTION", label: "Test Run Bugs" },
     { key: "GENERAL_FINDING", label: "General Findings" },
   ];
+
+  // Aksi "Test" (buat Express Run untuk re-test) hanya relevan untuk temuan
+  // General Finding: tampil di tab General Findings (semua baris) & tab Semua Bug
+  // (hanya baris ad-hoc). Di tab Test Run Bugs tidak pernah tampil.
+  const testActionEnabled = tab !== "EXECUTION";
+
+  /** Isi dropdown (kebab) kolom Aksi untuk satu baris bug. */
+  const rowActionsFor = (b: BugRow): RowAction[] => {
+    const actions: RowAction[] = [];
+    if (testActionEnabled && sourceTypeOf(b) === "GENERAL_FINDING") {
+      actions.push({
+        label: "Test (Express Run)",
+        icon: <Play size={15} />,
+        iconColor: "#F59E0B",
+        onClick: () => router.push(`/test-runs/create?bugId=${b.id}`),
+      });
+    }
+    // Buka modal Detail Bug — di sana ada tombol "Export PDF".
+    actions.push({
+      label: "Detail / Export",
+      icon: <FileText size={15} />,
+      onClick: () => setDetailBugId(b.id),
+    });
+    actions.push({
+      label: "Hapus Bug",
+      icon: <Trash2 size={15} />,
+      destructive: true,
+      onClick: () => setDeleteTarget(b),
+    });
+    return actions;
+  };
 
   // Balik ke halaman 1 saat tab / pencarian / filter berubah supaya tidak
   // mendarat di halaman yang sudah kosong.
@@ -541,7 +578,7 @@ export function BugsPageClient({
                 <col style={{ width: 90 }} />
                 <col style={{ width: 130 }} />
                 <col style={{ width: 100 }} />
-                <col style={{ width: 70 }} />
+                <col style={{ width: 72 }} />
               </colgroup>
               <thead>
                 <tr style={{ color: "#64748B", fontSize: 12, textAlign: "left", background: "#F8FAFC", borderBottom: "1px solid #E5E7EB", whiteSpace: "nowrap" }}>
@@ -580,7 +617,7 @@ export function BugsPageClient({
                   <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600, textAlign: "left", position: "sticky", top: 0, zIndex: 20, background: "#F8FAFC" }}>Status</th>
                   <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600, textAlign: "left", position: "sticky", top: 0, zIndex: 20, background: "#F8FAFC" }}>Created By</th>
                   <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600, textAlign: "left", position: "sticky", top: 0, zIndex: 20, background: "#F8FAFC" }}>Created Date</th>
-                  <th style={{ padding: "0.6rem 1rem 0.6rem 0", fontWeight: 600, textAlign: "right", position: "sticky", top: 0, zIndex: 20, background: "#F8FAFC" }}>Aksi</th>
+                  <th style={{ padding: "0.6rem 16px", fontWeight: 600, textAlign: "center", position: "sticky", top: 0, zIndex: 20, background: "#F8FAFC" }}>Aksi</th>
                 </tr>
               </thead>
               <tbody>
@@ -756,79 +793,23 @@ export function BugsPageClient({
                       <td style={{ padding: "0.6rem 0.5rem", textAlign: "left", color: "var(--text-muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                         {new Date(b.createdAt).toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" })}
                       </td>
-                      <td style={{ padding: "0.6rem 1rem 0.6rem 0", textAlign: "right" }}>
-                        {/* Ekspor laporan bug ringkas (PDF) — link evidence aktif. */}
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            void downloadBugPdf({
-                              bugCode: entityCode("BUG", b.id),
-                              title: b.title,
-                              severity: b.severity,
-                              status: b.status,
-                              precondition: b.precondition ?? b.testCase?.precondition ?? null,
-                              expectedResult: b.testCase?.expectedResult ?? b.expectedResult,
-                              actualResult: b.description,
-                              externalLink: b.externalLink,
-                              runName: b.run?.name ?? null,
-                              environment: b.environment ?? b.run?.environment ?? null,
-                              moduleName: b.suite?.name ?? null,
-                              reporter: b.createdBy?.name ?? null,
-                              createdAt: b.createdAt,
-                              evidence: (b.attachments ?? []).map((a) => ({
-                                fileName: a.fileName,
-                                url: a.url,
-                                mimeType: a.mimeType,
-                              })),
-                            });
-                          }}
-                          title="Download PDF Bug"
-                          aria-label="Download PDF Bug"
+                      <td
+                        // Klik di area aksi tidak boleh ikut membuka modal detail
+                        // (baris tabel punya onClick sendiri).
+                        onClick={(e) => e.stopPropagation()}
+                        style={{ padding: "0.6rem 16px", textAlign: "center" }}
+                      >
+                        <div
                           style={{
-                            display: "inline-flex",
+                            display: "flex",
                             alignItems: "center",
                             justifyContent: "center",
-                            width: 24,
-                            height: 24,
-                            borderRadius: 8,
-                            border: "none",
-                            background: "transparent",
-                            color: "#94A3B8",
-                            cursor: "pointer",
-                            transition: "color 0.15s ease",
                           }}
-                          onMouseEnter={(e) => (e.currentTarget.style.color = "#D97706")}
-                          onMouseLeave={(e) => (e.currentTarget.style.color = "#94A3B8")}
                         >
-                          <FileDown size={13} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setDeleteTarget(b);
-                          }}
-                          title="Hapus bug"
-                          aria-label="Hapus bug"
-                          style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            width: 24,
-                            height: 24,
-                            borderRadius: 8,
-                            border: "none",
-                            background: "transparent",
-                            color: "#94A3B8",
-                            cursor: "pointer",
-                            transition: "color 0.15s ease",
-                          }}
-                          onMouseEnter={(e) => (e.currentTarget.style.color = "#E11D48")}
-                          onMouseLeave={(e) => (e.currentTarget.style.color = "#94A3B8")}
-                        >
-                          <Trash2 size={13} />
-                        </button>
+                          {/* Semua aksi (Test/Express Run · Detail-Export · Hapus)
+                              dibungkus satu kebab menu. */}
+                          <RowActionsMenu actions={rowActionsFor(b)} />
+                        </div>
                       </td>
                     </tr>
                   );

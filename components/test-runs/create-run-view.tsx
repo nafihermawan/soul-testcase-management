@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { ExpressRunForm } from "@/components/test-runs/express-run";
+import { useRouter, useSearchParams } from "next/navigation";
+import { ExpressRunForm, PLATFORM_ENUM_TO_LABEL } from "@/components/test-runs/express-run";
 import { ErrorBlock, FormCardSkeleton, HeaderDetailSkeleton } from "@/components/ui/data-states";
 import { useApi } from "@/lib/client/use-api";
 import { useMe } from "@/lib/client/me-context";
-import type { RunOptionsPayload } from "@/types/api";
+import type { BugDetailPayload, RunOptionsPayload } from "@/types/api";
 
 export function CreateRunView() {
   const router = useRouter();
@@ -22,6 +22,23 @@ export function CreateRunView() {
   // Payload langsung diminta tanpa menunggu role; server tetap menolak (403)
   // bila role tidak berhak, dan halaman mengalihkan user.
   const { data, error, loading, reload } = useApi<RunOptionsPayload>("/api/test-runs/options");
+
+  // Referensi bug: tombol "Test" di Bugs Tracker mengarah ke
+  // `/test-runs/create?bugId=…`. Datanya diambil ulang di sini (bukan dari query)
+  // supaya nilainya otoritatif, lalu dipakai untuk mengisi (prefill) form.
+  const bugId = useSearchParams().get("bugId");
+  const bugRef = useApi<BugDetailPayload>(bugId ? `/api/bugs/${bugId}` : null);
+  const bug = bugRef.data?.bug ?? null;
+
+  // Hierarki pengetesan bug: project-nya (fallback ke project pemilik suite-nya,
+  // untuk baris lama yang projectId-nya kosong), lalu label Platform-nya.
+  const bugSuiteId = bug?.suite?.id;
+  const bugSuite = bugSuiteId ? data?.suites.find((s) => s.id === bugSuiteId) : undefined;
+  const bugProjectId = bug?.project?.id ?? bugSuite?.projectId;
+  const bugProject = bugProjectId ? data?.projects.find((p) => p.id === bugProjectId) : undefined;
+  const bugPlatformLabel = bugProject?.platform
+    ? PLATFORM_ENUM_TO_LABEL[bugProject.platform]
+    : undefined;
 
   if (meLoading || !me || blocked) {
     return (
@@ -39,7 +56,10 @@ export function CreateRunView() {
     );
   }
 
-  if (loading || !data) {
+  // Form hanya boleh di-MOUNT setelah opsi run DAN detail bug selesai dimuat.
+  // `ExpressRunForm` membaca `prefill` sekali di initial state, jadi kalau form
+  // ter-mount sebelum bug tiba, semua field akan tetap kosong.
+  if (loading || !data || (bugId && bugRef.loading)) {
     return (
       <main style={{ fontFamily: "var(--font-sans)", width: "100%" }}>
         <HeaderDetailSkeleton />
@@ -121,7 +141,32 @@ export function CreateRunView() {
         {/* Garis pemisah di-inset mengikuti padding body form (1.25rem) supaya
             sejajar vertikal dengan input field, bukan full-width kartu. */}
         <div style={{ height: 1, background: "#E5E7EB", margin: "0 1.25rem" }} />
-        <ExpressRunForm projectId="" projects={data.projects} />
+        <ExpressRunForm
+          // Remount saat referensi bug baru tersedia — jaring pengaman kalau
+          // `bugId` (dari useSearchParams) baru terisi setelah form sempat mount.
+          key={bug ? `bug-${bug.id}` : "new"}
+          projectId=""
+          projects={data.projects}
+          prefill={
+            bug
+              ? {
+                  // Run Name: prefix `[Bug Test]` + judul bug (tetap bisa diedit).
+                  name: `[Bug Test] ${bug.title}`,
+                  // Flow re-test dari bug → Tipe Activity default "Bug Fix".
+                  activityType: "Bug Fix",
+                  environment: bug.environment ?? undefined,
+                  // Salin referensi Task/Card Link bug (mis. Jira/ClickUp/Drive).
+                  taskLink: bug.externalLink ?? undefined,
+                  // Hierarki pengetesan ikut terisi: Platform → Project → Suite,
+                  // sehingga kolom kanan langsung memuat TC suite tersebut.
+                  platforms: bugPlatformLabel ? [bugPlatformLabel] : undefined,
+                  projectIds: bugProjectId ? [bugProjectId] : undefined,
+                  suiteId: bug.suite?.id ?? undefined,
+                  sourceBugId: bug.id,
+                }
+              : undefined
+          }
+        />
       </div>
     </main>
   );

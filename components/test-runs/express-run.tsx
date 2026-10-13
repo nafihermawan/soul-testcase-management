@@ -51,6 +51,23 @@ type Props = {
   /** Nilai awal — dipakai mode edit untuk pre-fill seluruh field. */
   initial?: ExpressRunInitial;
   /**
+   * Prefill saat MEMBUAT run baru dari sebuah referensi (mis. tombol "Test" di
+   * Bugs Tracker untuk re-test General Finding). Tidak dipakai saat mode edit.
+   */
+  prefill?: {
+    name?: string;
+    activityType?: string;
+    environment?: string;
+    /** Label Platform (mis. "Web") — mengisi checkbox Platform. */
+    platforms?: string[];
+    projectIds?: string[];
+    /** Suite yang langsung dibuka di kolom kiri (TC-nya ikut termuat). */
+    suiteId?: string;
+    taskLink?: string;
+    /** Bug asal — disimpan ke `TestRun.sourceBugId` supaya bisa auto-close. */
+    sourceBugId?: string;
+  };
+  /**
    * Bila diberikan, dipanggil setelah simpan sukses dan MENGGANTIKAN navigasi
    * bawaan — dipakai saat form dirender di dalam modal.
    */
@@ -77,8 +94,9 @@ const ACTIVITY_OPTIONS = [
 
 const PLATFORM_OPTIONS = ["Web", "Mobile", "Hardware", "API"];
 
-/** Project.platform (enum) -> label Platform di form, untuk cascading. */
-const PLATFORM_ENUM_TO_LABEL: Record<string, string> = {
+/** Project.platform (enum) -> label Platform di form, untuk cascading.
+ *  Diekspor supaya pemanggil (mis. prefill dari bug) memakai pemetaan yang sama. */
+export const PLATFORM_ENUM_TO_LABEL: Record<string, string> = {
   WEB: "Web",
   MOBILE: "Mobile",
   HARDWARE: "Hardware",
@@ -198,6 +216,7 @@ export function ExpressRunForm({
   mode = "create",
   runId,
   initial,
+  prefill,
   onSaved,
 }: Props) {
   const router = useRouter();
@@ -211,21 +230,26 @@ export function ExpressRunForm({
           ? initial.projectIds
           : projectId
             ? [projectId]
-            : []
+            : prefill?.projectIds ?? []
       )
   );
   // Global selection (persisten lintas suite/project)
   const [selectedTCs, setSelectedTCs] = useState<Set<string>>(
     () => new Set(initial?.testCaseIds ?? [])
   );
-  // Suite aktif yang sedang dilihat di kolom kiri
-  const [activeSuiteId, setActiveSuiteId] = useState<string | null>(null);
-  const [runName, setRunName] = useState(initial?.name ?? "");
-  const [activityType, setActivityType] = useState(initial?.activityType ?? "");
-  const [platforms, setPlatforms] = useState<Set<string>>(new Set(initial?.platforms ?? []));
-  const [environment, setEnvironment] = useState(initial?.environment ?? "");
+  // Suite aktif yang sedang dilihat di kolom kiri. Diisi dari prefill (mis. dari
+  // bug) supaya kolom kanan langsung memuat test case suite tersebut.
+  const [activeSuiteId, setActiveSuiteId] = useState<string | null>(prefill?.suiteId ?? null);
+  const [runName, setRunName] = useState(initial?.name ?? prefill?.name ?? "");
+  const [activityType, setActivityType] = useState(
+    initial?.activityType ?? prefill?.activityType ?? ""
+  );
+  const [platforms, setPlatforms] = useState<Set<string>>(
+    new Set(initial?.platforms ?? prefill?.platforms ?? [])
+  );
+  const [environment, setEnvironment] = useState(initial?.environment ?? prefill?.environment ?? "");
   const [sprint, setSprint] = useState(initial?.sprint ?? "");
-  const [taskLink, setTaskLink] = useState(initial?.taskLink ?? "");
+  const [taskLink, setTaskLink] = useState(initial?.taskLink ?? prefill?.taskLink ?? "");
   const [suiteQuery, setSuiteQuery] = useState("");
   const [tcQuery, setTcQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -581,7 +605,8 @@ export function ExpressRunForm({
               runName,
               selectedSuiteIds,
               Array.from(selectedTCs),
-              payload
+              // `sourceBugId` hanya untuk create (edit tidak mengubah asal run).
+              { ...payload, sourceBugId: prefill?.sourceBugId }
             );
       if (res.success && res.runId) {
         // Dirender di dalam modal: serahkan ke pemanggil, jangan navigasi.
@@ -602,8 +627,14 @@ export function ExpressRunForm({
         setPending(false);
       }
     } catch (e) {
-      console.error(e);
-      setError("Terjadi kesalahan.");
+      // Server action gagal (transport / action id basi). Pesan aslinya
+      // ditampilkan saat dev supaya tidak cuma "Terjadi kesalahan".
+      console.error("Create Express Run Error:", e);
+      setError(
+        process.env.NODE_ENV === "production"
+          ? "Terjadi kesalahan. Coba lagi."
+          : `Terjadi kesalahan: ${e instanceof Error ? e.message : String(e)}`
+      );
       setPending(false);
     }
   };

@@ -11,6 +11,8 @@ export type RowAction = {
   href?: string;
   onClick?: () => void;
   destructive?: boolean;
+  /** Warna khusus untuk ikon item ini (mis. amber untuk aksi "Test"). */
+  iconColor?: string;
 };
 
 const menuItemStyle = (destructive?: boolean): React.CSSProperties => ({
@@ -128,7 +130,9 @@ export function RowActionsMenu({ actions }: { actions: RowAction[] }) {
                       width: 16,
                       height: 16,
                       flexShrink: 0,
-                      color: action.destructive ? "#DC2626" : "var(--text-secondary)",
+                      color:
+                        action.iconColor ??
+                        (action.destructive ? "#DC2626" : "var(--text-secondary)"),
                     }}
                   >
                     {action.icon}

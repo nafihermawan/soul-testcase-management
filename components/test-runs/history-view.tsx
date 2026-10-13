@@ -382,6 +382,10 @@ export function HistoryView({ searchParams }: { searchParams: HistorySearchParam
                         <RunRowActions
                           runId={run.id}
                           runName={run.name}
+                          // Run History isinya run COMPLETED — di sini "Re-run"
+                          // relevan (mengembalikannya ke Active Runs).
+                          allowReRun
+                          onReRun={() => removeRunLocally(run.id)}
                           onDeleted={() => removeRunLocally(run.id)}
                         />
                       ) : undefined

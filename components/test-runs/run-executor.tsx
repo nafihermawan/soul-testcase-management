@@ -3303,7 +3303,11 @@ function ExecutionModal({
           width: "100%",
           // max-w-6xl (sebelumnya 1024 = max-w-5xl) supaya isi dua kolom lebih lega.
           maxWidth: 1152,
-          maxHeight: "90vh",
+          // Tinggi DIPATOK 85vh (sebelumnya hanya `maxHeight` 90vh, jadi ikut
+          // menyusut kalau isinya pendek); `minHeight` menjaga modal tetap
+          // proporsional dan kedua kolomnya memakai tinggi penuh.
+          height: "85vh",
+          minHeight: 600,
           display: "grid",
           // Tiga track: kolom kiri (persen, bisa di-resize) — divider — kanan.
           gridTemplateColumns: `${splitPct}% ${SPLIT_DIVIDER_W}px minmax(0, 1fr)`,
@@ -3597,7 +3601,7 @@ function ExecutionModal({
           }}
         >
           {/* Judul panel eksekusi — tetap di atas, tidak ikut scroll. */}
-          <div style={{ flexShrink: 0, padding: "1.25rem 1.25rem 0" }}>
+          <div style={{ flexShrink: 0, padding: "1.5rem 1.5rem 0" }}>
             <h4
               style={{
                 ...sectionLabel,
@@ -3635,7 +3639,7 @@ function ExecutionModal({
               flex: 1,
               minHeight: 0,
               overflowY: "auto",
-              padding: "0.9rem 1.25rem 1.25rem",
+              padding: "0.9rem 1.5rem 1.5rem",
               display: "flex",
               flexDirection: "column",
               gap: "0.9rem",
@@ -4006,15 +4010,17 @@ function ExecutionModal({
           {/* Blok bawah panel: pilihan status eksekusi + tombol Simpan, diam di
               dasar panel (bukan ikut scroll). Blok ini selalu tampil supaya
               status tetap terlihat saat read-only; tombol Simpan hanya dirender
-              saat punya hak edit. Tanpa garis pemisah di atas tombol simpan. */}
+              saat punya hak edit. Diberi garis pemisah tipis di atasnya supaya
+              batas dengan isi yang men-scroll jelas. */}
           <div
             style={{
               flexShrink: 0,
               display: "flex",
               flexDirection: "column",
               gap: "0.75rem",
-              padding: "0.9rem 1.25rem",
+              padding: "0.9rem 1.5rem",
               background: "#fff",
+              borderTop: "1px solid #F1F5F9",
             }}
           >
             <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>

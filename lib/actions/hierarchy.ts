@@ -194,16 +194,26 @@ export async function updateSuite(formData: FormData): Promise<HierarchyActionSt
   }
 }
 
-export async function deleteSuite(formData: FormData): Promise<void> {
+export async function deleteSuite(formData: FormData): Promise<{ error?: string }> {
   await requireRole("QA");
   const id = String(formData.get("id") ?? "");
-  if (!id) return;
+  if (!id) return {};
   try {
+    // Bug kini WAJIB menunjuk suite (FK ON DELETE RESTRICT): suite yang masih
+    // dipakai bug tidak boleh hilang. Beri pesan jelas, bukan gagal senyap.
+    const bugCount = await prisma.bug.count({ where: { suiteId: id } });
+    if (bugCount > 0) {
+      return {
+        error: `Suite ini masih dipakai oleh ${bugCount} bug. Pindahkan atau hapus bug-nya dulu.`,
+      };
+    }
     await prisma.suite.delete({ where: { id } });
     revalidatePath("/");
     revalidatePath("/settings");
+    return {};
   } catch (error) {
     console.error(error);
+    return { error: "Gagal menghapus suite." };
   }
 }
 

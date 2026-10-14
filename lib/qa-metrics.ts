@@ -89,6 +89,30 @@ export function passRateOf(c: ExecutionCounts): number | null {
   return pct(c.passed, c.executed);
 }
 
+/* ---------- PROGRESS EKSEKUSI (definisi TUNGGAL untuk semua permukaan) ---------- */
+
+/**
+ * Jumlah TC yang sudah "ditangani" = punya status akhir (PASS/FAIL/BLOCKED/SKIPPED).
+ * `SKIPPED` dihitung tertangani; `NOT_RUN` belum.
+ */
+export function executedCount(c: ExecutionCounts): number {
+  return c.passed + c.failed + c.blocked + c.skipped;
+}
+
+/**
+ * Progress eksekusi: TC tertangani / total. 100% berarti setiap TC sudah punya
+ * status akhir. SATU-SATUNYA definisi progress — jangan hitung sendiri di
+ * komponen/route; impor dari sini agar semua permukaan konsisten.
+ */
+export function executionProgress(c: ExecutionCounts): number | null {
+  return pct(executedCount(c), c.total);
+}
+
+/** Sisa TC yang belum ditangani (NOT_RUN) — prasyarat run boleh ditutup. */
+export function remainingCount(c: ExecutionCounts): number {
+  return c.notRun;
+}
+
 export function formatPct(value: number | null): string {
   return value === null ? "—" : `${value}%`;
 }
@@ -175,11 +199,24 @@ export const ACTIVE_BUG_STATUSES = ["OPEN", "IN_PROGRESS"] as const;
 export const RETEST_BUG_STATUS = "RESOLVED";
 
 /**
- * SLA bug: OPEN/IN_PROGRESS dengan severity CRITICAL/HIGH yang durasi bukanya
- * melewati `BUG_SLA_DAYS`. Ubah ambangnya di satu tempat ini saja.
+ * SLA bug per severity (dalam hari). Critical lebih ketat dari High.
+ * Ubah ambangnya di sini saja — dipakai bersama oleh card Dashboard dan
+ * tabel Bugs Tracker supaya badge "Overdue" selalu konsisten.
  */
-export const BUG_SLA_DAYS = 7;
+export const BUG_SLA_DAYS_BY_SEVERITY: Record<string, number> = {
+  CRITICAL: 2,
+  HIGH: 7,
+};
 
+/** Ambang SLA (hari) untuk sebuah severity; null = severity ini tanpa SLA. */
+export function bugSlaDays(severity: string | null | undefined): number | null {
+  return BUG_SLA_DAYS_BY_SEVERITY[(severity ?? "").toUpperCase()] ?? null;
+}
+
+/**
+ * Overdue = bug masih AKTIF (OPEN/IN_PROGRESS) DAN usianya melewati SLA
+ * severity-nya: (now − createdAt) > SLA hari. Bug Medium/Low tak punya SLA.
+ */
 export function isBugOverdue(
   createdAtIso: string,
   status: string,
@@ -187,8 +224,9 @@ export function isBugOverdue(
   now: Date = new Date()
 ): boolean {
   if (!(ACTIVE_BUG_STATUSES as readonly string[]).includes(status)) return false;
-  if (severityRank(severity) > 1) return false;
-  return ageInDays(createdAtIso, now) > BUG_SLA_DAYS;
+  const sla = bugSlaDays(severity);
+  if (sla === null) return false;
+  return ageInDays(createdAtIso, now) > sla;
 }
 
 /* ---------- Komposisi inventaris Test Case (Reports) ---------- */

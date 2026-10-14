@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Card, PanelHeader } from "@/components/ui";
 import { EmptyState } from "@/components/dashboard/empty-state";
 import { firstUrlOf } from "@/lib/format";
-import { formatPct, pct } from "@/lib/qa-metrics";
+import { executionProgress, formatPct, pct } from "@/lib/qa-metrics";
 import type { DashboardSuiteCoverageItem } from "@/types/api";
 import { ArrowDown, ArrowUp, ExternalLink, FolderTree } from "lucide-react";
 
@@ -36,7 +36,7 @@ function sortValue(s: DashboardSuiteCoverageItem, key: SortKey): string | number
     case "passRate":
       return pct(s.counts.passed, s.counts.executed);
     case "coverage":
-      return pct(s.counts.executed, s.total);
+      return executionProgress(s.counts);
     case "lastExecutedAt":
       return s.lastExecutedAt ? new Date(s.lastExecutedAt).getTime() : null;
   }
@@ -188,7 +188,7 @@ export function CoverageBySuite({ suites }: { suites: DashboardSuiteCoverageItem
             </thead>
             <tbody>
               {rows.map((s) => {
-                const cov = pct(s.counts.executed, s.total);
+                const cov = executionProgress(s.counts);
                 const rate = pct(s.counts.passed, s.counts.executed);
                 const docHref = firstUrlOf(s.docUrl);
                 return (

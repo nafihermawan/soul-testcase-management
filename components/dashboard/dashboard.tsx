@@ -13,6 +13,7 @@ import {
   RETEST_BUG_STATUS,
   withinPeriod,
   severityRank,
+  executionProgress,
   PERIOD_OPTIONS,
 } from "@/lib/qa-metrics";
 import {
@@ -131,7 +132,7 @@ export function Dashboard({
       totalTC: total,
       tested: counts.executed,
       execCounts: counts,
-      coveragePct: pct(counts.executed, total),
+      coveragePct: executionProgress(counts),
       passRate: passRateOf(counts),
     };
   }, [filteredSuites]);
@@ -453,8 +454,9 @@ export function Dashboard({
                 padding: "0.9rem 1rem",
                 borderTop: "1px solid var(--border)",
                 display: "flex",
+                alignItems: "center",
                 gap: "0.5rem",
-                flexWrap: "wrap",
+                flexWrap: "nowrap",
               }}
             >
               {/* Primary CTA: Start Testing (amber solid) */}
@@ -470,6 +472,7 @@ export function Dashboard({
                   fontSize: 12,
                   fontWeight: 600,
                   textDecoration: "none",
+                  whiteSpace: "nowrap",
                   transition: "background-color 0.15s ease",
                 }}
                 onMouseEnter={(e) => (e.currentTarget.style.background = "#D97706")}
@@ -488,7 +491,7 @@ export function Dashboard({
                   style={{
                     display: "inline-flex",
                     alignItems: "center",
-                    padding: "0.375rem 0.875rem",
+                    padding: "0.375rem 0.75rem",
                     borderRadius: 8,
                     border: "1px solid #FCD34D",
                     background: "#fff",
@@ -497,6 +500,7 @@ export function Dashboard({
                     fontWeight: 500,
                     textDecoration: "none",
                     boxShadow: "0 1px 2px rgba(15, 23, 42, 0.05)",
+                    whiteSpace: "nowrap",
                     transition: "background-color 0.15s ease",
                   }}
                   onMouseEnter={(e) => {

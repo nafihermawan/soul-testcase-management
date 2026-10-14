@@ -5,7 +5,7 @@ import { runCodeOf } from "@/lib/format";
 import {
   emptyCounts,
   passRateOf,
-  pct,
+  executionProgress,
   severityRank,
   type ExecutionCounts,
   type RunResultStatus,
@@ -105,7 +105,7 @@ export async function GET() {
       completedAt: run.completedAt?.toISOString() ?? null,
       createdAt: run.createdAt.toISOString(),
       counts,
-      progressPct: pct(counts.executed, counts.total),
+      progressPct: executionProgress(counts),
       openBugs: bugs.total,
       criticalHighBugs: bugs.criticalHigh,
     };

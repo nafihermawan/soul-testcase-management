@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Card, PanelHeader } from "@/components/ui";
 import { EmptyState } from "@/components/dashboard/empty-state";
-import { BUG_SLA_DAYS, RETEST_BUG_STATUS, ageInDays, formatAge, isBugOverdue, severityRank } from "@/lib/qa-metrics";
+import { ageInDays, bugSlaDays, formatAge, isBugOverdue, severityRank } from "@/lib/qa-metrics";
 import type { DashboardBugItem } from "@/types/api";
 import { Bug as BugIcon } from "lucide-react";
 
@@ -15,32 +15,15 @@ const insetDivider: React.CSSProperties = {
   backgroundRepeat: "no-repeat",
 };
 
-/** Urutan: status aktif (Open/In Progress) di atas, selesai (Resolved/Closed) di bawah. */
-const BUG_STATUS_RANK: Record<string, number> = {
-  OPEN: 0,
-  IN_PROGRESS: 1,
-  RESOLVED: 2,
-  CLOSED: 3,
-};
-
+/** Urutan tampilan status bug (hanya OPEN/IN_PROGRESS yang sampai ke card ini). */
 const statusLabel = (s: string) =>
-  s === "OPEN"
-    ? "Open"
-    : s === "IN_PROGRESS"
-      ? "In Progress"
-      : s === "RESOLVED"
-        ? "Resolved"
-        : "Closed";
+  s === "OPEN" ? "Open" : s === "IN_PROGRESS" ? "In Progress" : s;
 
-/** Bug terbaru — status aktif dulu, lalu severity tertinggi. */
+/** Bug aktif — severity tertinggi dulu (Critical→High→Medium→Low), lalu terbaru. */
 export function RecentBugs({ bugs }: { bugs: DashboardBugItem[] }) {
   const rows = [...bugs]
     .sort((a, b) => {
-      // Status aktif dulu (Open/In Progress), selesai di bawah (Resolved/Closed);
-      // di dalam grup: severity lebih tinggi dulu, lalu yang terbaru.
-      const ra = BUG_STATUS_RANK[a.status] ?? 9;
-      const rb = BUG_STATUS_RANK[b.status] ?? 9;
-      if (ra !== rb) return ra - rb;
+      // Prioritas severity, lalu yang terbaru di atas.
       const r = severityRank(a.severity) - severityRank(b.severity);
       if (r !== 0) return r;
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
@@ -96,9 +79,8 @@ export function RecentBugs({ bugs }: { bugs: DashboardBugItem[] }) {
               {rows.map((b) => {
                 const sev = (b.severity ?? "").toUpperCase();
                 const isCriticalOrHigh = sev === "CRITICAL" || sev === "HIGH";
-                const needsRetest = b.status === RETEST_BUG_STATUS;
                 const overdue = isBugOverdue(b.createdAt, b.status, b.severity);
-                const attention = isCriticalOrHigh || needsRetest;
+                const attention = isCriticalOrHigh;
                 return (
                   <tr key={b.id} style={{ ...insetDivider, whiteSpace: "nowrap" }}>
                     <td
@@ -176,22 +158,9 @@ export function RecentBugs({ bugs }: { bugs: DashboardBugItem[] }) {
                         >
                           {statusLabel(b.status)}
                         </span>
-                        {needsRetest && (
-                          <span
-                            title="Siap untuk retest QA"
-                            style={{
-                              fontSize: "0.68rem",
-                              fontWeight: 700,
-                              color: "var(--danger)",
-                              whiteSpace: "nowrap",
-                            }}
-                          >
-                            retest
-                          </span>
-                        )}
                         {overdue && (
                           <span
-                            title={`Overdue — open ${ageInDays(b.createdAt)} days (SLA ${BUG_SLA_DAYS})`}
+                            title={`Overdue — open ${ageInDays(b.createdAt)} days (SLA ${bugSlaDays(b.severity)} days)`}
                             style={{
                               fontSize: "0.68rem",
                               fontWeight: 700,

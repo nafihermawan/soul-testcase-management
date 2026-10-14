@@ -331,14 +331,17 @@ model Bug {
   expectedResult String?
   status      BugStatus @default(OPEN)
   severity    String?
-  /** Tempat bug ditemukan: DEV | STG | PRE-PROD | PROD. Bug eksekusi mewarisi
-   *  dari TestRun terkait; bug ad-hoc diisi manual. Null = belum diketahui. */
-  environment String?
+  /** Tempat bug ditemukan: DEV | STG | PRE-PROD | PROD (selalu UPPERCASE).
+   *  WAJIB — bug eksekusi mewarisi dari TestRun, fallback 'DEV' bila run tanpa
+   *  environment; bug ad-hoc diisi manual. */
+  environment String
   externalLink String?
   testCaseId  String?
   testRunResultId String?
-  /** Suite/modul tempat temuan ad-hoc berada (bug non-eksekusi). */
-  suiteId     String?
+  /** Suite/modul tempat bug berada. WAJIB: bug eksekusi mewarisi suite dari
+   *  TestCase-nya, bug ad-hoc memilih sendiri. Tidak boleh null agar tidak ada
+   *  baris bug dengan Module "—". */
+  suiteId     String
   /** Project pemilik suite di atas — dipakai untuk agregasi jumlah bug. */
   projectId   String?
   createdById String?
@@ -348,8 +351,8 @@ model Bug {
 
   testCase      TestCase?      @relation(fields: [testCaseId], references: [id], onDelete: SetNull)
   testRunResult TestRunResult? @relation(fields: [testRunResultId], references: [id], onDelete: SetNull)
-  // Hapus suite tidak boleh menghapus riwayat bug — cukup lepas rujukannya.
-  suite         Suite?         @relation(fields: [suiteId], references: [id], onDelete: SetNull)
+  // Suite tidak boleh dihapus selama masih dirujuk oleh bug.
+  suite         Suite          @relation(fields: [suiteId], references: [id], onDelete: Restrict)
   project       Project?       @relation(fields: [projectId], references: [id], onDelete: SetNull)
   createdBy     User?          @relation(fields: [createdById], references: [id], onDelete: SetNull)
 

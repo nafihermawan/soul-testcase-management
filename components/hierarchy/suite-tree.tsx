@@ -125,9 +125,13 @@ function SuiteRow({
     setDeletePending(true);
     const formData = new FormData();
     formData.set("id", suite.id);
-    await deleteSuite(formData);
+    const res = await deleteSuite(formData);
     setDeletePending(false);
     setConfirmDelete(false);
+    if (res?.error) {
+      showToast(res.error, "error");
+      return;
+    }
     onSuiteDeleted(suite.id);
     showToast(`Suite "${suite.name}" dihapus.`, "success");
   }, [suite.id, suite.name, showToast, onSuiteDeleted]);

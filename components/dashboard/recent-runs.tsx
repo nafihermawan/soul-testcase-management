@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Card, PanelHeader, ProgressBar } from "@/components/ui";
 import { Tooltip } from "@/components/ui/tooltip";
 import { EmptyState } from "@/components/dashboard/empty-state";
-import { formatPct, pct } from "@/lib/qa-metrics";
+import { executionProgress, formatPct, pct } from "@/lib/qa-metrics";
 import { RUN_STATUS_LABEL, type RunStatusValue } from "@/lib/run-status";
 import type { DashboardRunItem } from "@/types/api";
 import { CalendarClock } from "lucide-react";
@@ -108,11 +108,11 @@ export function RecentRuns({ runs }: { runs: DashboardRunItem[] }) {
             </thead>
             <tbody>
               {rows.map((r) => {
-                // Progress = kelengkapan eksekusi (Passed+Failed+Blocked)/Total.
-                const progress = pct(
-                  r.counts.passed + r.counts.failed + r.counts.blocked,
-                  r.counts.total
-                );
+                // Progress eksekusi: definisi TUNGGAL dari lib/qa-metrics.
+                const progress = executionProgress(r.counts);
+                const status = r.status as RunStatusValue;
+                // Jaring pengaman: Completed tapi eksekusi belum 100%.
+                const completedIncomplete = status === "COMPLETED" && (progress ?? 0) < 100;
                 // Pass Rate = rasio lolos dari yang dieksekusi (Passed+Failed).
                 const passRate = pct(r.counts.passed, r.counts.passed + r.counts.failed);
                 // Rincian status dipindah ke tooltip progress (menggantikan sub-teks).
@@ -212,10 +212,15 @@ export function RecentRuns({ runs }: { runs: DashboardRunItem[] }) {
                         fontSize: 12,
                         fontWeight: 600,
                         whiteSpace: "nowrap",
-                        color: runStatusColor[r.status] ?? "#64748B",
+                        color: runStatusColor[status] ?? "#64748B",
                       }}
                     >
-                      {RUN_STATUS_LABEL[r.status as RunStatusValue] ?? r.status}
+                      {RUN_STATUS_LABEL[status] ?? status}
+                      {completedIncomplete && (
+                        <span style={{ color: "#B45309", fontWeight: 600, whiteSpace: "nowrap" }}>
+                          {" "}· {progress ?? 0}% executed
+                        </span>
+                      )}
                     </td>
                     <td style={{ padding: "0.625rem 1.25rem", color: "var(--text-muted)", whiteSpace: "nowrap" }}>
                       {formatDate(r.completedAt ?? r.updatedAt)}

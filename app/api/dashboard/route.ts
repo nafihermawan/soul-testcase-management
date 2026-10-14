@@ -153,6 +153,10 @@ export async function GET() {
     `,
 
     prisma.bug.findMany({
+      // Card "Recent / Critical Bugs" hanya untuk bug yang masih butuh
+      // perhatian: bug selesai (CLOSED) dan status legacy (RESOLVED) dibuang
+      // di query, bukan cuma disembunyikan di UI.
+      where: { status: { notIn: ["CLOSED", "RESOLVED"] } },
       orderBy: { createdAt: "desc" },
       take: RECENT_BUG_LIMIT,
       select: {
@@ -161,6 +165,11 @@ export async function GET() {
         severity: true,
         status: true,
         createdAt: true,
+        // Sumber UTAMA: kolom milik bug sendiri. Bug ad-hoc tidak punya
+        // testCase/testRunResult, jadi Module & Env-nya dulu kosong di sini.
+        environment: true,
+        suite: { select: { id: true, name: true, projectId: true } },
+        // Fallback untuk data lama yang relasi barunya belum terisi.
         testCase: { select: { suite: { select: { id: true, name: true, projectId: true } } } },
         testRunResult: { select: { run: { select: { environment: true } } } },
       },
@@ -228,7 +237,9 @@ export async function GET() {
   });
 
   const bugItems: DashboardBugItem[] = bugs.map((b) => {
-    const suite = b.testCase?.suite ?? null;
+    // Kolom bug sendiri lebih dulu; record terkait (TestCase/TestRun) hanya
+    // fallback — sama seperti yang dipakai halaman Bugs.
+    const suite = b.suite ?? b.testCase?.suite ?? null;
     return {
       id: b.id,
       title: b.title,
@@ -236,7 +247,7 @@ export async function GET() {
       status: b.status,
       projectId: suite?.projectId ?? null,
       platform: suite ? platformByProject.get(suite.projectId) ?? null : null,
-      environment: b.testRunResult?.run?.environment ?? null,
+      environment: b.environment ?? b.testRunResult?.run?.environment ?? null,
       suiteId: suite?.id ?? null,
       suiteName: suite?.name ?? null,
       createdAt: b.createdAt.toISOString(),

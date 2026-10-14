@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { runCodeOf, monthRangeToDateRange } from "@/lib/format";
 import { apiSession, apiRoleAtLeast, json401 } from "@/lib/api-auth";
+import { countsFromStatuses, executionProgress } from "@/lib/qa-metrics";
 import type { HistoryPayload, HistoryRunRow } from "@/types/api";
 
 
@@ -83,7 +84,6 @@ export async function GET(req: NextRequest) {
       include: {
         project: { select: { id: true, name: true } },
         createdBy: { select: { name: true } },
-        _count: { select: { results: true } },
         results: {
           select: {
             status: true,
@@ -126,11 +126,9 @@ export async function GET(req: NextRequest) {
   }
 
   const rows: HistoryRunRow[] = runs.map((run) => {
-    const total = run._count.results;
-    // Pass rate dihitung dari hasil yang memang sudah ikut ter-fetch (bounded
-    // ke run halaman ini) — bukan groupBy atas seluruh tabel TestRunResult.
-    const passed = run.results.filter((r) => r.status === "PASS").length;
-    const pct = total > 0 ? Math.round((passed / total) * 100) : 0;
+    // Progress eksekusi = definisi TUNGGAL dari lib/qa-metrics (executed/total).
+    const counts = countsFromStatuses(run.results.map((r) => r.status));
+    const pct = executionProgress(counts) ?? 0;
     const meta = metaByRun.get(run.id);
     return {
       id: run.id,

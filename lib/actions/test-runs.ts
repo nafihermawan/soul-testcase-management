@@ -420,6 +420,18 @@ export async function completeRun(
 ): Promise<TestRunActionState> {
   await requireRole("QA");
   try {
+    // Run hanya boleh ditutup bila TIDAK ada TC yang masih NOT_RUN — supaya
+    // status "Completed" SELALU berarti progress eksekusi 100%. Sisa TC boleh
+    // ditandai SKIPPED lewat `completeRunWithSkip` (TC tetap punya status akhir).
+    const notRun = await prisma.testRunResult.count({
+      where: { runId, status: "NOT_RUN" },
+    });
+    if (notRun > 0) {
+      return {
+        error: `Masih ada ${notRun} test case yang belum dieksekusi. Eksekusi semuanya, atau pakai "Selesaikan & tandai sisa sebagai Skipped".`,
+      };
+    }
+
     const bug = await sourceBugToClose(runId);
     await prisma.$transaction([
       prisma.testRun.update({

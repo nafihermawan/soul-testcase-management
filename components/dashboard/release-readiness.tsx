@@ -1,8 +1,8 @@
-import { Card, PanelHeader, ProgressBar } from "@/components/ui";
+import { Card } from "@/components/ui";
 import {
   ACTIVE_BUG_STATUSES,
+  executionProgress,
   formatPct,
-  pct,
   severityRank,
   type ExecutionCounts,
 } from "@/lib/qa-metrics";
@@ -21,12 +21,14 @@ export const RELEASE_READINESS_BANDS = {
   atRisk: 50,
 } as const;
 
-type Band = { label: string; color: string };
+type Band = { label: string; color: string; bg: string; border: string };
 
 function bandOf(score: number): Band {
-  if (score >= RELEASE_READINESS_BANDS.ready) return { label: "Ready", color: "#047857" };
-  if (score >= RELEASE_READINESS_BANDS.atRisk) return { label: "At Risk", color: "#B45309" };
-  return { label: "Not Ready", color: "#BE123C" };
+  if (score >= RELEASE_READINESS_BANDS.ready)
+    return { label: "Ready", color: "#047857", bg: "#ECFDF5", border: "#A7F3D0" };
+  if (score >= RELEASE_READINESS_BANDS.atRisk)
+    return { label: "At Risk", color: "#B45309", bg: "#FFFBEB", border: "#FDE68A" };
+  return { label: "Not Ready", color: "#E11D48", bg: "#FFF1F2", border: "#FECDD3" };
 }
 
 /**
@@ -67,64 +69,128 @@ export function ReleaseReadiness({
     }),
     { passed: 0, failed: 0, blocked: 0, skipped: 0, notRun: 0, total: 0, executed: 0 }
   );
-  const progress = pct(counts.executed, counts.total) ?? 0;
+  const progress = executionProgress(counts) ?? 0;
   const penalty = critical * RELEASE_BLOCKER_PENALTY.CRITICAL + high * RELEASE_BLOCKER_PENALTY.HIGH;
   const score = Math.max(0, Math.min(100, progress - penalty));
   const band = bandOf(score);
 
   return (
     <Card style={{ display: "flex", flexDirection: "column" }}>
-      <PanelHeader
-        title="Release Readiness"
-        compact
-        action={
-          <span style={{ fontSize: "0.78rem", color: activeSprint ? "#475569" : "#94A3B8", fontWeight: 600 }}>
-            {activeSprint ? activeSprint : "No active release"}
-          </span>
-        }
-      />
-      <div style={{ padding: "0.75rem", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-        <div style={{ display: "flex", alignItems: "baseline", gap: "0.5rem" }}>
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-            <Rocket size={15} style={{ color: band.color }} />
-            <span style={{ fontSize: 22, fontWeight: 800, letterSpacing: "-0.02em", color: "#1E293B" }}>
-              {score}
-            </span>
-            <span style={{ fontSize: 12, fontWeight: 600, color: "#94A3B8" }}>/ 100</span>
-          </span>
-          <span style={{ fontSize: 12, fontWeight: 700, color: band.color }}>{band.label}</span>
-        </div>
-
-        <ProgressBar value={score} color={band.color} track="#F1F5F9" height={6} />
-
-        <div
+      {/* Header + divider inset (bukan full-bleed) */}
+      <div
+        style={{
+          padding: "0.75rem 1rem 0.5rem",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: "0.5rem",
+          borderBottom: "1px solid #F1F5F9",
+        }}
+      >
+        <h3 style={{ fontSize: 14, fontWeight: 600, color: "#1E293B", margin: 0 }}>
+          Release Readiness
+        </h3>
+        <span
           style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr 1fr",
-            gap: "0.4rem",
+            padding: "0.125rem 0.5rem",
             fontSize: 12,
+            fontWeight: 600,
+            background: "#F1F5F9",
+            color: "#475569",
+            borderRadius: 999,
+            whiteSpace: "nowrap",
           }}
         >
-          <div>
-            <div style={{ fontWeight: 700, color: blockers > 0 ? "#BE123C" : "#047857" }}>
-              {blockers}
-            </div>
-            <div style={{ color: "#64748B" }}>Blockers</div>
-            <div style={{ fontSize: 11, color: "#94A3B8" }}>
-              {critical} Critical · {high} High
-            </div>
-          </div>
-          <div>
-            <div style={{ fontWeight: 700, color: "#1E293B" }}>{scoped.length}</div>
-            <div style={{ color: "#64748B" }}>Test Runs</div>
-          </div>
-          <div>
-            <div style={{ fontWeight: 700, color: "#1E293B" }}>{formatPct(pct(counts.executed, counts.total))}</div>
-            <div style={{ color: "#64748B" }}>Executed</div>
-            <div style={{ fontSize: 11, color: "#94A3B8" }}>
-              {counts.executed} / {counts.total}
-            </div>
-          </div>
+          {activeSprint ? `Release ${activeSprint}` : "No active release"}
+        </span>
+      </div>
+
+      {/* Skor + badge status (space-between) */}
+      <div
+        style={{
+          padding: "0.75rem 1rem 0.25rem",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: "0.5rem",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <Rocket size={16} style={{ color: band.color }} />
+          <span style={{ fontSize: 20, fontWeight: 700, color: "#0F172A", lineHeight: 1 }}>
+            {score}
+            <span style={{ fontSize: 12, fontWeight: 400, color: "#94A3B8" }}> / 100</span>
+          </span>
+        </div>
+        <span
+          style={{
+            padding: "0.125rem 0.5rem",
+            fontSize: 12,
+            fontWeight: 600,
+            background: band.bg,
+            color: band.color,
+            border: `1px solid ${band.border}`,
+            borderRadius: 4,
+            whiteSpace: "nowrap",
+          }}
+        >
+          {band.label}
+        </span>
+      </div>
+
+      {/* Progress bar dengan padding horizontal */}
+      <div style={{ padding: "0 1rem", marginBottom: "0.75rem" }}>
+        <div
+          style={{
+            width: "100%",
+            background: "#F1F5F9",
+            height: 8,
+            borderRadius: 999,
+            overflow: "hidden",
+          }}
+        >
+          <div
+            style={{
+              width: `${score}%`,
+              height: "100%",
+              background: band.color,
+              borderRadius: 999,
+            }}
+          />
+        </div>
+      </div>
+
+      {/* 3 indikator bawah + pembatas vertikal inset */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+          gap: "0.5rem",
+          padding: "0.5rem 1rem 0.75rem",
+          textAlign: "left",
+        }}
+      >
+        <div style={{ borderRight: "1px solid #F1F5F9", paddingRight: "0.5rem" }}>
+          <p style={{ fontSize: 14, fontWeight: 700, color: blockers > 0 ? "#E11D48" : "#047857", margin: 0 }}>
+            {blockers}
+          </p>
+          <p style={{ fontSize: 11, fontWeight: 500, color: "#475569", margin: 0 }}>Blockers</p>
+          <p style={{ fontSize: 9, color: "#94A3B8", margin: 0 }}>
+            {critical} Critical · {high} High
+          </p>
+        </div>
+        <div style={{ borderRight: "1px solid #F1F5F9", padding: "0 0.5rem" }}>
+          <p style={{ fontSize: 14, fontWeight: 700, color: "#1E293B", margin: 0 }}>{scoped.length}</p>
+          <p style={{ fontSize: 11, fontWeight: 500, color: "#475569", margin: 0 }}>Test Runs</p>
+        </div>
+        <div style={{ paddingLeft: "0.5rem" }}>
+          <p style={{ fontSize: 14, fontWeight: 700, color: "#1E293B", margin: 0 }}>
+            {formatPct(executionProgress(counts))}
+          </p>
+          <p style={{ fontSize: 11, fontWeight: 500, color: "#475569", margin: 0 }}>Executed</p>
+          <p style={{ fontSize: 9, color: "#94A3B8", margin: 0 }}>
+            {counts.executed} / {counts.total}
+          </p>
         </div>
       </div>
     </Card>

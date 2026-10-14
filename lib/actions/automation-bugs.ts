@@ -29,6 +29,15 @@ function handleError(error: unknown): AutomationBugActionState {
 }
 
 /**
+ * Normalisasi environment ke UPPERCASE penuh (DEV/STG/PRE-PROD/PROD) supaya
+ * penulisan nilainya konsisten; null bila kosong.
+ */
+function normalizeEnv(value: string | null | undefined): string | null {
+  const v = value?.trim();
+  return v ? v.toUpperCase() : null;
+}
+
+/**
  * Error kontrol-flow Next.js (`redirect()` / `notFound()`) melempar error khusus
  * ber-`digest` NEXT_REDIRECT / NEXT_NOT_FOUND yang HARUS diteruskan ke framework.
  * Kalau ikut ditangkap catch biasa, role-gate (mis. redirect ke /settings) rusak.
@@ -155,9 +164,9 @@ export async function createBug(data: {
       linkedSuiteId = tc?.suiteId ?? null;
     }
 
-    // Module/Suite wajib: bug ad-hoc tanpa rujukan TC harus memilih suite
-    // sendiri supaya tidak ada baris bug dengan Module "—".
-    if (!linkedSuiteId && !linkedTestCaseId) {
+    // Module/Suite WAJIB — baik ad-hoc (pilih sendiri) maupun dari eksekusi
+    // yang mewarisi suite TestCase. Tidak boleh null agar Module tak pernah "—".
+    if (!linkedSuiteId) {
       return { error: "Suite / Module wajib dipilih.", field: "suiteId" };
     }
 
@@ -177,15 +186,17 @@ export async function createBug(data: {
      *   kiriman klien diabaikan supaya tidak bisa dipalsukan);
      * - bug ad-hoc memakai pilihan QA, divalidasi terhadap daftar opsi resmi.
      */
-    let linkedEnvironment: string | null = null;
+    let linkedEnvironment: string;
     if (data.testRunResultId) {
       const result = await prisma.testRunResult.findUnique({
         where: { id: data.testRunResultId },
         select: { run: { select: { environment: true } } },
       });
-      linkedEnvironment = result?.run?.environment ?? null;
+      // Bug eksekusi mewarisi env run; run tanpa env -> fallback 'DEV' supaya
+      // kolom NOT NULL tidak pernah kosong.
+      linkedEnvironment = normalizeEnv(result?.run?.environment) ?? "DEV";
     } else {
-      const env = data.environment?.trim() || null;
+      const env = normalizeEnv(data.environment);
       // Environment wajib untuk bug ad-hoc agar tidak ada nilai kosong/"—".
       if (!env) {
         return { error: "Environment wajib dipilih.", field: "environment" };
@@ -296,7 +307,7 @@ export async function updateBug(data: {
     return { error: "Judul bug wajib diisi.", field: "title" };
   }
 
-  const env = data.environment?.trim() || null;
+  const env = normalizeEnv(data.environment);
   if (env && !(ENVIRONMENT_OPTIONS as readonly string[]).includes(env)) {
     return { error: "Environment tidak valid.", field: "environment" };
   }
@@ -315,8 +326,8 @@ export async function updateBug(data: {
     // dipertahankan alih-alih dikosongkan.
     const isExecutionBug = !!existing.testRunResultId;
 
-    const linkedSuiteId = data.suiteId?.trim() || (isExecutionBug ? existing.suiteId : null);
-    if (!linkedSuiteId && !isExecutionBug) {
+    const linkedSuiteId = data.suiteId?.trim() || existing.suiteId;
+    if (!linkedSuiteId) {
       return { error: "Suite / Module wajib dipilih.", field: "suiteId" };
     }
     let linkedProjectId: string | null = null;
@@ -329,11 +340,12 @@ export async function updateBug(data: {
       linkedProjectId = suite.projectId;
     }
 
-    // Environment wajib untuk bug non-eksekusi.
-    const nextEnv = env ?? (isExecutionBug ? existing.environment : null);
-    if (!isExecutionBug && !nextEnv) {
+    // Environment wajib untuk bug non-eksekusi; jalur eksekusi mempertahankan
+    // nilai lama, fallback 'DEV' agar kolom NOT NULL tetap terisi.
+    if (!isExecutionBug && !env) {
       return { error: "Environment wajib dipilih.", field: "environment" };
     }
+    const nextEnv = env ?? existing.environment ?? "DEV";
 
     const bug = await prisma.bug.update({
       where: { id: data.bugId },

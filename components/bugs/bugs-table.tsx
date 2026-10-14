@@ -18,7 +18,7 @@ import { BugDetailModal } from "@/components/bugs/bug-detail-modal";
 import { ReportGeneralBugModal } from "@/components/bugs/report-general-bug-modal";
 import { HistoryPagination } from "@/components/test-runs/history-pagination";
 import { entityCode } from "@/lib/format";
-import { ENVIRONMENT_OPTIONS, isBugOverdue } from "@/lib/qa-metrics";
+import { ENVIRONMENT_OPTIONS, bugSlaDays, isBugOverdue } from "@/lib/qa-metrics";
 import type { AttachmentItem, BugSourceType } from "@/types/api";
 
 export type BugRow = {
@@ -776,7 +776,7 @@ export function BugsPageClient({
                           )}
                           {isBugOverdue(b.createdAt, b.status, b.severity) && (
                             <span
-                              title="Overdue — melewati SLA 7 hari"
+                              title={`Overdue — melewati SLA ${bugSlaDays(b.severity)} hari`}
                               style={{
                                 fontSize: 10,
                                 fontWeight: 700,

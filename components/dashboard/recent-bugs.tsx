@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Card, PanelHeader } from "@/components/ui";
 import { EmptyState } from "@/components/dashboard/empty-state";
-import { ACTIVE_BUG_STATUSES, RETEST_BUG_STATUS, ageInDays, formatAge, severityRank } from "@/lib/qa-metrics";
+import { BUG_SLA_DAYS, RETEST_BUG_STATUS, ageInDays, formatAge, isBugOverdue, severityRank } from "@/lib/qa-metrics";
 import type { DashboardBugItem } from "@/types/api";
 import { Bug as BugIcon } from "lucide-react";
 
@@ -53,15 +53,15 @@ export function RecentBugs({ bugs }: { bugs: DashboardBugItem[] }) {
         title="Recent / Critical Bugs"
         action={
           <Link href="/bugs" style={{ fontSize: "0.78rem", color: "#2563EB", textDecoration: "none" }}>
-            Lihat semua →
+            View all →
           </Link>
         }
       />
       {rows.length === 0 ? (
         <EmptyState
           icon={<BugIcon size={22} />}
-          title="Belum Ada Bug"
-          subtext="Tidak ada bug yang cocok dengan filter saat ini."
+          title="No Bugs Yet"
+          subtext="No bug matches the current filters."
         />
       ) : (
         <div style={{ overflowX: "auto", width: "100%" }}>
@@ -97,7 +97,7 @@ export function RecentBugs({ bugs }: { bugs: DashboardBugItem[] }) {
                 const sev = (b.severity ?? "").toUpperCase();
                 const isCriticalOrHigh = sev === "CRITICAL" || sev === "HIGH";
                 const needsRetest = b.status === RETEST_BUG_STATUS;
-                const isActive = (ACTIVE_BUG_STATUSES as readonly string[]).includes(b.status);
+                const overdue = isBugOverdue(b.createdAt, b.status, b.severity);
                 const attention = isCriticalOrHigh || needsRetest;
                 return (
                   <tr key={b.id} style={{ ...insetDivider, whiteSpace: "nowrap" }}>
@@ -189,17 +189,17 @@ export function RecentBugs({ bugs }: { bugs: DashboardBugItem[] }) {
                             retest
                           </span>
                         )}
-                        {isActive && isCriticalOrHigh && (
+                        {overdue && (
                           <span
-                            title="Bug aktif dengan severity tinggi"
+                            title={`Overdue — open ${ageInDays(b.createdAt)} days (SLA ${BUG_SLA_DAYS})`}
                             style={{
                               fontSize: "0.68rem",
                               fontWeight: 700,
-                              color: "var(--danger)",
+                              color: "#DC2626",
                               whiteSpace: "nowrap",
                             }}
                           >
-                            !
+                            Overdue
                           </span>
                         )}
                       </span>

@@ -13,20 +13,31 @@ import {
   RETEST_BUG_STATUS,
   withinPeriod,
   severityRank,
+  PERIOD_OPTIONS,
 } from "@/lib/qa-metrics";
 import {
   DashboardFilters,
   type DashboardFilterState,
 } from "@/components/dashboard/dashboard-filters";
 import { KpiCard } from "@/components/ui/kpi-card";
+import { StackedBar } from "@/components/ui/stacked-bar";
 import { Card, PanelHeader } from "@/components/ui";
+import { OPEN_RUN_STATUSES } from "@/lib/run-status";
 import { ActionRequiredList, type ActionItem } from "@/components/dashboard/action-required";
 import { CoverageBySuite } from "@/components/dashboard/coverage-by-suite";
+import { ReleaseReadiness } from "@/components/dashboard/release-readiness";
 import { RecentRuns } from "@/components/dashboard/recent-runs";
 import { RecentBugs } from "@/components/dashboard/recent-bugs";
 import type { DashboardBugItem, DashboardRunItem, DashboardSuiteCoverageItem } from "@/types/api";
 
 const ALL = "ALL";
+
+const PLATFORM_LABELS: Record<string, string> = {
+  WEB: "Web",
+  MOBILE: "Mobile",
+  HARDWARE: "Hardware",
+  API: "API",
+};
 
 const DEFAULT_FILTERS: DashboardFilterState = {
   platform: ALL,
@@ -47,6 +58,8 @@ export function Dashboard({
   suiteCoverage: DashboardSuiteCoverageItem[];
 }) {
   const [filters, setFilters] = useState<DashboardFilterState>(DEFAULT_FILTERS);
+  // Scope agregasi Pass Rate: seluruh waktu vs. sprint/release yang sedang aktif.
+  const [passRateScope, setPassRateScope] = useState<"ALL" | "RELEASE">("ALL");
   const firstName = (user?.name ?? "Nafi").split(" ")[0];
 
   const matchers = useMemo(() => {
@@ -123,17 +136,76 @@ export function Dashboard({
     };
   }, [filteredSuites]);
 
+  /**
+   * Sprint/release aktif = sprint dari run yang masih berjalan (PENDING/
+   * IN_PROGRESS/RE_OPEN) paling baru; fallback ke sprint run terbaru. Model
+   * tidak punya entitas "Release" — `TestRun.sprint` dipakai sebagai padanannya.
+   */
+  const activeSprint = useMemo(() => {
+    const open = filteredRuns.filter(
+      (r) => r.sprint && (OPEN_RUN_STATUSES as readonly string[]).includes(r.status)
+    );
+    const pool = (open.length ? open : filteredRuns.filter((r) => r.sprint))
+      .slice()
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return pool[0]?.sprint ?? null;
+  }, [filteredRuns]);
+
+  /**
+   * Ringkasan scope filter sebagai teks tipis di samping sub-judul (menggantikan
+   * pill chip). Null bila tidak ada scope yang aktif sama sekali.
+   */
+  const scopeSummary = useMemo(() => {
+    const parts: string[] = [];
+    if (filters.platform !== ALL) parts.push(PLATFORM_LABELS[filters.platform] ?? filters.platform);
+    if (filters.module !== ALL)
+      parts.push(modules.find((m) => m.id === filters.module)?.name ?? "Module");
+    if (filters.environment !== ALL) parts.push(filters.environment);
+    if (filters.period !== "ALL")
+      parts.push(PERIOD_OPTIONS.find((p) => p.value === filters.period)?.label ?? filters.period);
+
+    const release = activeSprint ? `Release ${activeSprint}` : null;
+    if (!release && parts.length === 0) return null;
+    const scope = parts.length ? parts.join(", ") : "All Platforms, Modules & Envs";
+    return [release, `(${scope})`].filter(Boolean).join(" ");
+  }, [filters, modules, activeSprint]);
+
+  /**
+   * Pass Rate per scope. "All Time" = seluruh hasil terakhir (dari suite);
+   * "Active Release" = akumulasi hasil run pada sprint aktif. Bila tidak ada
+   * release aktif, scope "Active Release" otomatis jatuh ke All Time.
+   */
+  const passRateData = useMemo(() => {
+    if (passRateScope === "RELEASE" && activeSprint) {
+      const rows = filteredRuns.filter((r) => r.sprint === activeSprint);
+      let passed = 0;
+      let executed = 0;
+      for (const r of rows) {
+        passed += r.counts.passed;
+        executed += r.counts.executed;
+      }
+      return { passed, executed, rate: pct(passed, executed), scope: "RELEASE" as const };
+    }
+    return {
+      passed: execCounts.passed,
+      executed: execCounts.executed,
+      rate: passRate,
+      scope: "ALL" as const,
+    };
+  }, [passRateScope, activeSprint, filteredRuns, execCounts, passRate]);
+
   // --- Bugs ---
   const openBugs = filteredBugs.filter((b) =>
     (ACTIVE_BUG_STATUSES as readonly string[]).includes(b.status)
   );
-  const criticalHighBugs = openBugs.filter((b) => severityRank(b.severity) <= 1).length;
+  const criticalBugs = openBugs.filter((b) => severityRank(b.severity) === 0).length;
+  const highBugs = openBugs.filter((b) => severityRank(b.severity) === 1).length;
 
   const actionItems: ActionItem[] = [
     {
       key: "failed-runs",
       count: filteredRuns.filter((r) => r.counts.failed > 0).length,
-      label: "Failed test runs",
+      label: "Test Runs with Failures",
       cta: "View",
       href: "/test-runs",
       tone: "danger",
@@ -183,7 +255,8 @@ export function Dashboard({
             Good afternoon, {firstName}
           </h1>
           <p style={{ margin: "0.25rem 0 0", color: "#64748B", fontSize: 12, fontWeight: 400 }}>
-            Here&apos;s your QA testing overview.
+            Here&apos;s your QA testing overview
+            {scopeSummary && <span style={{ color: "#94A3B8" }}> • {scopeSummary}</span>}
           </p>
         </div>
         <DashboardFilters value={filters} modules={modules} onChange={setFilters} />
@@ -194,7 +267,7 @@ export function Dashboard({
             <div className="metric-grid">
               <KpiCard
                 label="Total Test Cases"
-                value={totalTC.toLocaleString("id-ID")}
+                value={totalTC.toLocaleString("en-US")}
                 sub={
                   filters.platform === ALL && filters.module === ALL
                     ? "Across all active suites"
@@ -203,23 +276,45 @@ export function Dashboard({
                 accent="#2563EB"
               />
               <KpiCard
-                label="Test Coverage"
+                label="Execution Progress"
                 value={formatPct(coveragePct)}
-                sub={totalTC === 0 ? "Belum ada test case" : `${tested} / ${totalTC} tested`}
+                sub={totalTC === 0 ? "No test cases yet" : `${tested} / ${totalTC} executed`}
                 accent="#0EA5E9"
               />
               <KpiCard
                 label="Pass Rate"
-                value={formatPct(passRate)}
+                value={formatPct(passRateData.rate)}
                 sub={
                   <>
-                    {passRate === null
+                    {passRateData.rate === null
                       ? "No execution yet"
-                      : `${execCounts.passed} / ${execCounts.executed} executed`}
+                      : `${passRateData.passed} / ${passRateData.executed} executed`}
+                    <select
+                      aria-label="Pass rate scope"
+                      value={passRateData.scope}
+                      onChange={(e) => setPassRateScope(e.target.value as "ALL" | "RELEASE")}
+                      title="Aggregation scope"
+                      style={{
+                        marginLeft: 6,
+                        verticalAlign: "middle",
+                        fontSize: 11,
+                        color: "#475569",
+                        background: "#fff",
+                        border: "1px solid #E2E8F0",
+                        borderRadius: 6,
+                        padding: "1px 4px",
+                        cursor: "pointer",
+                      }}
+                    >
+                      <option value="ALL">All Time</option>
+                      <option value="RELEASE" disabled={!activeSprint}>
+                        Active Release
+                      </option>
+                    </select>
                     {/* Ringkasan eksekusi (dulu teks menggantung di bawah stat
                         card) kini jadi tooltip ikon info. */}
                     <span
-                      title={`${execCounts.executed} executed · ${execCounts.blocked} blocked · ${execCounts.notRun} not run${execCounts.failed > 0 ? ` · ${execCounts.failed} failed` : ""}`}
+                      title={`${execCounts.executed} executed · ${execCounts.blocked} blocked · ${execCounts.notRun} not run${execCounts.failed > 0 ? ` · ${execCounts.failed} failed` : ""}${activeSprint ? ` · release ${activeSprint}` : ""}`}
                       style={{
                         display: "inline-flex",
                         marginLeft: 6,
@@ -237,7 +332,7 @@ export function Dashboard({
               <KpiCard
                 label="Open Bugs"
                 value={String(openBugs.length)}
-                sub={`${criticalHighBugs} Critical / High`}
+                sub={`${criticalBugs} Critical · ${highBugs} High`}
                 accent="#F43F5E"
               />
             </div>
@@ -246,65 +341,58 @@ export function Dashboard({
       {/* Baris utama: Coverage by Suite (span 8) + Health & Action (span 4) */}
       <div className="dash-main-12">
         <div className="span-8" style={{ minWidth: 0 }}>
-          <CoverageBySuite suites={filteredSuites} />
+          <div className="dash-fill">
+            <CoverageBySuite suites={filteredSuites} />
+          </div>
         </div>
-        <div className="span-4" style={{ minWidth: 0 }}>
-          {/* Kartu terpadu: Health + ringkasan eksekusi + Action Required + aksi
-              cepat. `marginTop: auto` mendorong aksi ke dasar kartu agar tidak
-              ada ruang kosong dan tingginya sejajar dengan tabel kiri. */}
-          <Card style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-            <PanelHeader title="Health & Action" />
+        <div className="span-4" style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+          <ReleaseReadiness activeSprint={activeSprint} runs={filteredRuns} bugs={filteredBugs} />
+          {/* Kartu terpadu (di-compact): Health + ringkasan eksekusi + Action
+              Required + aksi cepat. Tinggi mengikuti konten (h-auto). */}
+          <Card style={{ display: "flex", flexDirection: "column" }}>
+            <PanelHeader title="Health & Action" compact />
 
             {/* 1. Ringkasan eksekusi: bar tersegmentasi + kartu badge */}
-            <div style={{ padding: "1rem", borderBottom: "1px solid var(--border)" }}>
+            <div style={{ padding: "0.9rem 1rem", borderBottom: "1px solid var(--border)" }}>
               <div
                 style={{
-                  fontSize: 11,
+                  fontSize: 12,
                   fontWeight: 600,
                   color: "#64748B",
-                  textTransform: "uppercase",
-                  letterSpacing: "0.04em",
                   marginBottom: "0.5rem",
                 }}
               >
                 Test Execution
               </div>
 
-              {/* Bar rasio: emerald/rose/amber/slate */}
+              {/* Bar rasio: emerald/rose/amber/slate (Passed/Failed/Blocked/
+                  Skipped/Untested) — warna mengikuti badge di bawahnya. */}
+              <StackedBar
+                height={6}
+                style={{ marginBottom: "0.6rem" }}
+                segments={[
+                  { key: "passed", label: "Passed", value: execCounts.passed, color: "#10B981" },
+                  { key: "failed", label: "Failed", value: execCounts.failed, color: "#F43F5E" },
+                  { key: "blocked", label: "Blocked", value: execCounts.blocked, color: "#F59E0B" },
+                  { key: "skipped", label: "Skipped", value: execCounts.skipped, color: "#94A3B8" },
+                  { key: "notRun", label: "Untested", value: execCounts.notRun, color: "#CBD5E1" },
+                ]}
+              />
+
+              {/* Grid angka status: 2 baris (3 kolom) dengan gap lega */}
               <div
                 style={{
-                  display: "flex",
-                  height: 6,
-                  borderRadius: 999,
-                  overflow: "hidden",
-                  background: "#F1F5F9",
-                  marginBottom: "0.75rem",
+                  display: "grid",
+                  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                  gap: "0.625rem",
                 }}
               >
-                {[
-                  { key: "passed", value: execCounts.passed, color: "#10B981" },
-                  { key: "failed", value: execCounts.failed, color: "#F43F5E" },
-                  { key: "blocked", value: execCounts.blocked, color: "#F59E0B" },
-                  { key: "notRun", value: execCounts.notRun, color: "#CBD5E1" },
-                ].map((seg) =>
-                  seg.value > 0 ? (
-                    <div
-                      key={seg.key}
-                      style={{
-                        width: `${(seg.value / Math.max(execCounts.total, 1)) * 100}%`,
-                        background: seg.color,
-                      }}
-                    />
-                  ) : null
-                )}
-              </div>
-
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem" }}>
                 {[
                   { label: "Passed", value: execCounts.passed, bg: "#ECFDF5", border: "#A7F3D0", color: "#047857" },
                   { label: "Failed", value: execCounts.failed, bg: "#FFF1F2", border: "#FECDD3", color: "#BE123C" },
                   { label: "Blocked", value: execCounts.blocked, bg: "#FFFBEB", border: "#FDE68A", color: "#B45309" },
-                  { label: "Not run", value: execCounts.notRun, bg: "#F8FAFC", border: "#E2E8F0", color: "#64748B" },
+                  { label: "Skipped", value: execCounts.skipped, bg: "#F1F5F9", border: "#CBD5E1", color: "#475569" },
+                  { label: "Untested", value: execCounts.notRun, bg: "#F8FAFC", border: "#E2E8F0", color: "#64748B" },
                 ].map((m) => (
                   <div
                     key={m.label}
@@ -312,7 +400,7 @@ export function Dashboard({
                       background: m.bg,
                       border: `1px solid ${m.border}`,
                       borderRadius: 8,
-                      padding: "0.5rem 0.7rem",
+                      padding: "0.5rem 0.6rem",
                     }}
                   >
                     <div
@@ -320,26 +408,36 @@ export function Dashboard({
                         fontSize: 16,
                         fontWeight: 700,
                         letterSpacing: "-0.01em",
+                        lineHeight: 1.15,
                         color: m.color,
                       }}
                     >
-                      {m.value.toLocaleString("id-ID")}
+                      {m.value.toLocaleString("en-US")}
                     </div>
-                    <div style={{ fontSize: 11, fontWeight: 500, color: m.color }}>{m.label}</div>
+                    <div
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 500,
+                        color: m.color,
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                      }}
+                    >
+                      {m.label}
+                    </div>
                   </div>
                 ))}
               </div>
             </div>
 
             {/* 2. Needs Attention */}
-            <div style={{ padding: "0.85rem 1rem 0.15rem" }}>
+            <div style={{ padding: "0.9rem 1rem 0.35rem" }}>
               <div
                 style={{
-                  fontSize: 11,
+                  fontSize: 12,
                   fontWeight: 600,
                   color: "#64748B",
-                  textTransform: "uppercase",
-                  letterSpacing: "0.04em",
                 }}
               >
                 Needs Attention
@@ -352,35 +450,34 @@ export function Dashboard({
             <div
               style={{
                 marginTop: "auto",
-                padding: "0.85rem 1rem",
+                padding: "0.9rem 1rem",
                 borderTop: "1px solid var(--border)",
                 display: "flex",
                 gap: "0.5rem",
                 flexWrap: "wrap",
               }}
             >
-              {/* Primary: Mulai Testing (amber) */}
+              {/* Primary CTA: Start Testing (amber solid) */}
               <Link
                 href="/test-runs"
                 style={{
                   display: "inline-flex",
                   alignItems: "center",
-                  height: 32,
-                  padding: "0 0.9rem",
+                  padding: "0.375rem 0.75rem",
                   borderRadius: 8,
                   background: "#F59E0B",
-                  color: "#111827",
+                  color: "#fff",
                   fontSize: 12,
-                  fontWeight: 700,
+                  fontWeight: 600,
                   textDecoration: "none",
                   transition: "background-color 0.15s ease",
                 }}
                 onMouseEnter={(e) => (e.currentTarget.style.background = "#D97706")}
                 onMouseLeave={(e) => (e.currentTarget.style.background = "#F59E0B")}
               >
-                + Mulai Testing
+                + Start Testing
               </Link>
-              {/* Secondary: outlined */}
+              {/* Secondary: outline amber (match tombol Filter kanan atas) */}
               {[
                 { href: "/bugs", label: "Bugs" },
                 { href: "/reports", label: "Reports" },
@@ -391,23 +488,21 @@ export function Dashboard({
                   style={{
                     display: "inline-flex",
                     alignItems: "center",
-                    height: 32,
-                    padding: "0 0.9rem",
+                    padding: "0.375rem 0.875rem",
                     borderRadius: 8,
-                    border: "1px solid #E2E8F0",
+                    border: "1px solid #FCD34D",
                     background: "#fff",
-                    color: "#475569",
+                    color: "#D97706",
                     fontSize: 12,
-                    fontWeight: 600,
+                    fontWeight: 500,
                     textDecoration: "none",
-                    transition: "background-color 0.15s ease, border-color 0.15s ease",
+                    boxShadow: "0 1px 2px rgba(15, 23, 42, 0.05)",
+                    transition: "background-color 0.15s ease",
                   }}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.borderColor = "#CBD5E1";
-                    e.currentTarget.style.background = "#F8FAFC";
+                    e.currentTarget.style.background = "#FFFBEB";
                   }}
                   onMouseLeave={(e) => {
-                    e.currentTarget.style.borderColor = "#E2E8F0";
                     e.currentTarget.style.background = "#fff";
                   }}
                 >

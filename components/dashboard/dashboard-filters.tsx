@@ -13,7 +13,7 @@ import {
 const ALL = "ALL";
 
 const PLATFORM_LABELS: Record<string, string> = {
-  ALL: "Semua Platform",
+  ALL: "All Platforms",
   WEB: "Web",
   MOBILE: "Mobile",
   HARDWARE: "Hardware",
@@ -95,7 +95,7 @@ export function DashboardFilters({
           value={draft.module}
           onChange={(v) => set("module", v)}
           options={[
-            { value: ALL, label: "Semua Module" },
+            { value: ALL, label: "All Modules" },
             ...modules.map((m) => ({ value: m.id, label: m.name })),
           ]}
         />
@@ -108,7 +108,7 @@ export function DashboardFilters({
           value={draft.environment}
           onChange={(v) => set("environment", v)}
           options={[
-            { value: ALL, label: "Semua Environment" },
+            { value: ALL, label: "All Environments" },
             ...ENVIRONMENT_OPTIONS.map((env) => ({ value: env as string, label: env })),
           ]}
         />

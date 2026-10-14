@@ -155,6 +155,12 @@ export async function createBug(data: {
       linkedSuiteId = tc?.suiteId ?? null;
     }
 
+    // Module/Suite wajib: bug ad-hoc tanpa rujukan TC harus memilih suite
+    // sendiri supaya tidak ada baris bug dengan Module "—".
+    if (!linkedSuiteId && !linkedTestCaseId) {
+      return { error: "Suite / Module wajib dipilih.", field: "suiteId" };
+    }
+
     let linkedProjectId: string | null = null;
     if (linkedSuiteId) {
       const suite = await prisma.suite.findUnique({
@@ -180,7 +186,11 @@ export async function createBug(data: {
       linkedEnvironment = result?.run?.environment ?? null;
     } else {
       const env = data.environment?.trim() || null;
-      if (env && !(ENVIRONMENT_OPTIONS as readonly string[]).includes(env)) {
+      // Environment wajib untuk bug ad-hoc agar tidak ada nilai kosong/"—".
+      if (!env) {
+        return { error: "Environment wajib dipilih.", field: "environment" };
+      }
+      if (!(ENVIRONMENT_OPTIONS as readonly string[]).includes(env)) {
         return { error: "Environment tidak valid.", field: "environment" };
       }
       linkedEnvironment = env;
@@ -294,7 +304,21 @@ export async function updateBug(data: {
   try {
     // Role-guard di DALAM try — sama seperti createBug (lihat catatannya).
     await requireRole("DEVELOPER");
-    const linkedSuiteId = data.suiteId?.trim() || null;
+    const existing = await prisma.bug.findUnique({
+      where: { id: data.bugId },
+      select: { testRunResultId: true, environment: true, suiteId: true },
+    });
+    if (!existing) return { error: "Bug tidak ditemukan." };
+
+    // Bug hasil eksekusi mewarisi environment & suite dari run/TC-nya — jalur
+    // "edit bug" dari run-executor tidak mengirim keduanya, jadi nilai lama
+    // dipertahankan alih-alih dikosongkan.
+    const isExecutionBug = !!existing.testRunResultId;
+
+    const linkedSuiteId = data.suiteId?.trim() || (isExecutionBug ? existing.suiteId : null);
+    if (!linkedSuiteId && !isExecutionBug) {
+      return { error: "Suite / Module wajib dipilih.", field: "suiteId" };
+    }
     let linkedProjectId: string | null = null;
     if (linkedSuiteId) {
       const suite = await prisma.suite.findUnique({
@@ -303,6 +327,12 @@ export async function updateBug(data: {
       });
       if (!suite) return { error: "Suite / Module tidak valid.", field: "suiteId" };
       linkedProjectId = suite.projectId;
+    }
+
+    // Environment wajib untuk bug non-eksekusi.
+    const nextEnv = env ?? (isExecutionBug ? existing.environment : null);
+    if (!isExecutionBug && !nextEnv) {
+      return { error: "Environment wajib dipilih.", field: "environment" };
     }
 
     const bug = await prisma.bug.update({
@@ -315,7 +345,7 @@ export async function updateBug(data: {
         expectedResult: data.expectedResult?.trim() || null,
         // Link eksternal opsional; skema https:// ditambahkan otomatis.
         externalLink: normalizeUrl(data.externalLink ?? "") || null,
-        environment: env,
+        environment: nextEnv,
         suiteId: linkedSuiteId,
         projectId: linkedProjectId,
       },

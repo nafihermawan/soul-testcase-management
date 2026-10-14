@@ -1,42 +1,167 @@
+"use client";
+
+import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Card, PanelHeader, ProgressBar } from "@/components/ui";
+import { Card, PanelHeader } from "@/components/ui";
 import { EmptyState } from "@/components/dashboard/empty-state";
 import { firstUrlOf } from "@/lib/format";
 import { formatPct, pct } from "@/lib/qa-metrics";
 import type { DashboardSuiteCoverageItem } from "@/types/api";
-import { ExternalLink, FolderTree } from "lucide-react";
+import { ArrowDown, ArrowUp, ExternalLink, FolderTree } from "lucide-react";
 
-const coverageColor = (value: number) =>
-  value >= 70 ? "var(--success)" : value >= 40 ? "var(--warning)" : "var(--danger)";
+type SortKey =
+  | "name"
+  | "total"
+  | "executed"
+  | "passed"
+  | "failed"
+  | "passRate"
+  | "coverage"
+  | "lastExecutedAt";
+type SortDir = "asc" | "desc";
 
-/** Coverage per suite. Default urutan: coverage terendah dulu (risiko tertinggi). */
+/** Nilai yang dipakai untuk sorting tiap kolom; null = tidak ada data (selalu di bawah). */
+function sortValue(s: DashboardSuiteCoverageItem, key: SortKey): string | number | null {
+  switch (key) {
+    case "name":
+      return s.name.toLowerCase();
+    case "total":
+      return s.total;
+    case "executed":
+      return s.counts.executed;
+    case "passed":
+      return s.counts.passed;
+    case "failed":
+      return s.counts.failed;
+    case "passRate":
+      return pct(s.counts.passed, s.counts.executed);
+    case "coverage":
+      return pct(s.counts.executed, s.total);
+    case "lastExecutedAt":
+      return s.lastExecutedAt ? new Date(s.lastExecutedAt).getTime() : null;
+  }
+}
+
+const shortDate = (iso: string) =>
+  new Date(iso).toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" });
+
+/** Header kolom yang bisa diklik untuk sort ASC/DESC. */
+function SortHeader({
+  label,
+  sortKey,
+  align = "left",
+  width,
+  sort,
+  onSort,
+}: {
+  label: string;
+  sortKey: SortKey;
+  align?: "left" | "right";
+  width?: number;
+  sort: { key: SortKey; dir: SortDir };
+  onSort: (key: SortKey) => void;
+}) {
+  const active = sort.key === sortKey;
+  return (
+    <th
+      style={{
+        position: "sticky",
+        top: 0,
+        zIndex: 10,
+        background: "#F8FAFC",
+        padding: "0.55rem 0.5rem",
+        fontWeight: 600,
+        width,
+        textAlign: align,
+        whiteSpace: "nowrap",
+        cursor: "pointer",
+        userSelect: "none",
+      }}
+      onClick={() => onSort(sortKey)}
+      title={`Sort by ${label}`}
+    >
+      <span
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 4,
+          justifyContent: align === "right" ? "flex-end" : "flex-start",
+          color: active ? "#1E293B" : undefined,
+        }}
+      >
+        {label}
+        {active &&
+          (sort.dir === "asc" ? <ArrowUp size={12} /> : <ArrowDown size={12} />)}
+      </span>
+    </th>
+  );
+}
+
+/**
+ * Coverage per suite. Default urutan: aktivitas eksekusi terakhir (terbaru dulu)
+ * supaya suite yang sedang diuji muncul di atas. Tiap header kolom bisa diklik
+ * untuk sort ASC/DESC.
+ */
 export function CoverageBySuite({ suites }: { suites: DashboardSuiteCoverageItem[] }) {
-  const rows = [...suites].sort((a, b) => {
-    const ca = pct(a.counts.executed, a.total);
-    const cb = pct(b.counts.executed, b.total);
-    // Tanpa TC = tidak ada risiko, taruh paling bawah.
-    if (ca === null && cb === null) return b.total - a.total;
-    if (ca === null) return 1;
-    if (cb === null) return -1;
-    // Coverage terendah dulu; seri -> suite dengan TC terbanyak (risiko lebih besar).
-    if (ca !== cb) return ca - cb;
-    return b.total - a.total;
+  const [sort, setSort] = useState<{ key: SortKey; dir: SortDir }>({
+    key: "lastExecutedAt",
+    dir: "desc",
   });
 
+  const rows = useMemo(() => {
+    return [...suites].sort((a, b) => {
+      const va = sortValue(a, sort.key);
+      const vb = sortValue(b, sort.key);
+      // Tanpa data selalu di bawah, apa pun arah sortirnya.
+      if (va === null && vb === null) return 0;
+      if (va === null) return 1;
+      if (vb === null) return -1;
+      let cmp: number;
+      if (typeof va === "string" && typeof vb === "string") cmp = va.localeCompare(vb);
+      else cmp = (va as number) - (vb as number);
+      return sort.dir === "asc" ? cmp : -cmp;
+    });
+  }, [suites, sort]);
+
+  const handleSort = (key: SortKey) =>
+    setSort((prev) =>
+      prev.key === key
+        ? { key, dir: prev.dir === "asc" ? "desc" : "asc" }
+        : { key, dir: key === "name" ? "asc" : "desc" }
+    );
+
   return (
-    <Card style={{ display: "flex", flexDirection: "column" }}>
+    <Card
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        flex: "1 1 auto",
+        minHeight: 0,
+        justifyContent: "space-between",
+      }}
+    >
       <PanelHeader title="Coverage by Suite" />
       {rows.length === 0 ? (
         <EmptyState
           icon={<FolderTree size={22} />}
-          title="Belum Ada Suite"
-          subtext="Tidak ada suite yang cocok dengan filter saat ini."
+          title="No Suites Yet"
+          subtext="No suite matches the current filters."
         />
       ) : (
-        <div style={{ overflowX: "auto", maxHeight: 380, overflowY: "auto" }}>
+        <div
+          className="coverage-scroll"
+          style={{
+            overflowX: "auto",
+            overflowY: "auto",
+            flex: "1 1 auto",
+            minHeight: 180,
+            paddingBottom: "0.35rem",
+          }}
+        >
           <table
             style={{
               width: "100%",
+              minWidth: 800,
               borderCollapse: "collapse",
               fontSize: "0.82rem",
               tableLayout: "fixed",
@@ -51,26 +176,20 @@ export function CoverageBySuite({ suites }: { suites: DashboardSuiteCoverageItem
                   background: "#F8FAFC",
                 }}
               >
-                <th style={{ position: "sticky", top: 0, zIndex: 10, background: "#F8FAFC", padding: "0.55rem 1.25rem", fontWeight: 600 }}>
-                  Suite
-                </th>
-                <th style={{ position: "sticky", top: 0, zIndex: 10, background: "#F8FAFC", padding: "0.55rem 0.5rem", fontWeight: 600, width: 64, textAlign: "right" }}>
-                  TC
-                </th>
-                <th style={{ position: "sticky", top: 0, zIndex: 10, background: "#F8FAFC", padding: "0.55rem 0.5rem", fontWeight: 600, width: 76, textAlign: "right" }}>
-                  Tested
-                </th>
-                <th style={{ position: "sticky", top: 0, zIndex: 10, background: "#F8FAFC", padding: "0.55rem 0.5rem", fontWeight: 600, width: 68, textAlign: "right" }}>
-                  Pass
-                </th>
-                <th style={{ position: "sticky", top: 0, zIndex: 10, background: "#F8FAFC", padding: "0.55rem 1.25rem", fontWeight: 600, width: 260 }}>
-                  Coverage
-                </th>
+                <SortHeader label="Suite" sortKey="name" sort={sort} onSort={handleSort} />
+                <SortHeader label="TC" sortKey="total" align="right" width={56} sort={sort} onSort={handleSort} />
+                <SortHeader label="Tested" sortKey="executed" align="right" width={68} sort={sort} onSort={handleSort} />
+                <SortHeader label="Pass" sortKey="passed" align="right" width={58} sort={sort} onSort={handleSort} />
+                <SortHeader label="Failed" sortKey="failed" align="right" width={62} sort={sort} onSort={handleSort} />
+                <SortHeader label="Pass Rate" sortKey="passRate" align="right" width={80} sort={sort} onSort={handleSort} />
+                <SortHeader label="Coverage" sortKey="coverage" align="right" width={90} sort={sort} onSort={handleSort} />
+                <SortHeader label="Last Activity" sortKey="lastExecutedAt" align="right" width={124} sort={sort} onSort={handleSort} />
               </tr>
             </thead>
             <tbody>
               {rows.map((s) => {
                 const cov = pct(s.counts.executed, s.total);
+                const rate = pct(s.counts.passed, s.counts.executed);
                 const docHref = firstUrlOf(s.docUrl);
                 return (
                   <tr
@@ -89,7 +208,7 @@ export function CoverageBySuite({ suites }: { suites: DashboardSuiteCoverageItem
                     >
                       <Link
                         href={`/suites/${s.id}`}
-                        title={`Buka suite ${s.name}`}
+                        title={`Open suite ${s.name}`}
                         style={{
                           fontWeight: 500,
                           fontSize: 12,
@@ -107,7 +226,7 @@ export function CoverageBySuite({ suites }: { suites: DashboardSuiteCoverageItem
                           href={docHref}
                           target="_blank"
                           rel="noopener noreferrer"
-                          title="Buka Dokumentasi Suite"
+                          title="Open suite documentation"
                           style={{
                             marginLeft: "0.35rem",
                             color: "#2563EB",
@@ -129,36 +248,51 @@ export function CoverageBySuite({ suites }: { suites: DashboardSuiteCoverageItem
                       style={{
                         padding: "0.55rem 0.5rem",
                         textAlign: "right",
-                        color: s.counts.failed > 0 ? "var(--danger)" : "var(--text-secondary)",
-                        fontWeight: s.counts.failed > 0 ? 700 : 400,
+                        color: s.counts.passed > 0 ? "#047857" : "var(--text-secondary)",
+                        fontWeight: s.counts.passed > 0 ? 600 : 400,
                       }}
                     >
                       {s.counts.passed}
                     </td>
-                    <td style={{ padding: "0.55rem 1.25rem" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                        <span style={{ width: 160, flexShrink: 0 }}>
-                          {cov === null ? (
-                            <span style={{ color: "var(--text-muted)", fontSize: "0.78rem" }}>
-                              Belum ada TC
-                            </span>
-                          ) : (
-                            <ProgressBar value={cov} color={coverageColor(cov)} track="#F1F5F9" />
-                          )}
-                        </span>
-                        <span
-                          style={{
-                            fontWeight: 700,
-                            width: 44,
-                            textAlign: "right",
-                            flexShrink: 0,
-                            // Nilai 0% dibuat muted agar tidak menyampah secara visual.
-                            color: cov === 0 ? "#CBD5E1" : undefined,
-                          }}
-                        >
-                          {formatPct(cov)}
-                        </span>
-                      </div>
+                    <td
+                      style={{
+                        padding: "0.55rem 0.5rem",
+                        textAlign: "right",
+                        color: s.counts.failed > 0 ? "var(--danger)" : "var(--text-secondary)",
+                        fontWeight: s.counts.failed > 0 ? 700 : 400,
+                      }}
+                    >
+                      {s.counts.failed}
+                    </td>
+                    <td
+                      style={{
+                        padding: "0.55rem 0.5rem",
+                        textAlign: "right",
+                        fontWeight: 700,
+                        color:
+                          rate === null
+                            ? "#475569"
+                            : rate >= 80
+                              ? "#047857"
+                              : rate >= 50
+                                ? "#B45309"
+                                : "#BE123C",
+                      }}
+                    >
+                      {formatPct(rate)}
+                    </td>
+                    <td
+                      style={{
+                        padding: "0.55rem 1.25rem",
+                        textAlign: "right",
+                        fontWeight: 600,
+                        color: "#334155",
+                      }}
+                    >
+                      {formatPct(cov)}
+                    </td>
+                    <td style={{ padding: "0.55rem 1.25rem", textAlign: "right", color: "var(--text-muted)" }}>
+                      {s.lastExecutedAt ? shortDate(s.lastExecutedAt) : "—"}
                     </td>
                   </tr>
                 );

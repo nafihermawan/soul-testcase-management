@@ -33,6 +33,7 @@ type SuiteAggRow = {
   failed: number | bigint;
   blocked: number | bigint;
   skipped: number | bigint;
+  last_executed_at: Date | null;
 };
 
 type RunAggRow = {
@@ -43,6 +44,7 @@ type RunAggRow = {
   created_at: Date;
   updated_at: Date;
   completed_at: Date | null;
+  sprint: string | null;
   project_id: string;
   project_name: string;
   created_by_name: string | null;
@@ -72,7 +74,7 @@ export async function GET() {
     // menggantikan dedupe "hasil terakhir per TC" yang sebelumnya di Node.
     prisma.$queryRaw<SuiteAggRow[]>`
       WITH latest AS (
-        SELECT DISTINCT ON (r."testCaseId") r."testCaseId", r."status"
+        SELECT DISTINCT ON (r."testCaseId") r."testCaseId", r."status", r."updatedAt"
         FROM "TestRunResult" r
         JOIN "TestRun" run ON run.id = r."runId"
         WHERE run."status"::text IN (${Prisma.join(EXECUTED_RUN_STATUSES)})
@@ -83,7 +85,8 @@ export async function GET() {
                COUNT(*) FILTER (WHERE l."status"::text = 'PASS')    AS passed,
                COUNT(*) FILTER (WHERE l."status"::text = 'FAIL')    AS failed,
                COUNT(*) FILTER (WHERE l."status"::text = 'BLOCKED') AS blocked,
-               COUNT(*) FILTER (WHERE l."status"::text = 'SKIPPED') AS skipped
+               COUNT(*) FILTER (WHERE l."status"::text = 'SKIPPED') AS skipped,
+               MAX(l."updatedAt") AS last_executed_at
         FROM latest l
         JOIN "TestCase" tc ON tc.id = l."testCaseId"
         WHERE tc."suiteId" IS NOT NULL AND l."status"::text <> 'NOT_RUN'
@@ -97,13 +100,14 @@ export async function GET() {
              COALESCE(ps.passed, 0) AS passed,
              COALESCE(ps.failed, 0) AS failed,
              COALESCE(ps.blocked, 0) AS blocked,
-             COALESCE(ps.skipped, 0) AS skipped
+             COALESCE(ps.skipped, 0) AS skipped,
+             ps.last_executed_at
       FROM "Suite" s
       JOIN "Project" p ON p.id = s."projectId"
       LEFT JOIN "TestCase" tc ON tc."suiteId" = s.id
       LEFT JOIN "AutomationLink" a ON a."testCaseId" = tc.id
       LEFT JOIN per_suite ps ON ps.suite_id = s.id
-      GROUP BY p.id, s.id, ps.passed, ps.failed, ps.blocked, ps.skipped
+      GROUP BY p.id, s.id, ps.passed, ps.failed, ps.blocked, ps.skipped, ps.last_executed_at
       ORDER BY s."order" ASC, s."createdAt" ASC
     `,
 
@@ -112,14 +116,14 @@ export async function GET() {
     prisma.$queryRaw<RunAggRow[]>`
       WITH recent AS (
         SELECT id, name, status, environment, "createdAt", "updatedAt", "completedAt",
-               "projectId", "createdById"
+               sprint, "projectId", "createdById"
         FROM "TestRun"
         ORDER BY "createdAt" DESC
         LIMIT ${RECENT_RUN_LIMIT}
       )
       SELECT run.id, run.name, run."status"::text AS status, run.environment,
              run."createdAt" AS created_at, run."updatedAt" AS updated_at,
-             run."completedAt" AS completed_at,
+             run."completedAt" AS completed_at, run.sprint,
              p.id AS project_id, p.name AS project_name,
              u.name AS created_by_name,
              COALESCE(stats.passed, 0)  AS passed,
@@ -190,6 +194,7 @@ export async function GET() {
       total,
       automated: n(s.automated),
       counts,
+      lastExecutedAt: s.last_executed_at ? s.last_executed_at.toISOString() : null,
     };
   });
 
@@ -212,6 +217,7 @@ export async function GET() {
       platform: platformByProject.get(r.project_id) ?? null,
       environment: r.environment ?? null,
       status: r.status as DashboardRunItem["status"],
+      sprint: r.sprint ?? null,
       executedBy: r.created_by_name ?? "—",
       createdAt: r.created_at.toISOString(),
       updatedAt: r.updated_at.toISOString(),

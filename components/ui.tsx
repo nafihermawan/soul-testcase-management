@@ -199,9 +199,12 @@ export function DonutChart({
 export function PanelHeader({
   title,
   action,
+  compact = false,
 }: {
   title: string;
   action?: React.ReactNode;
+  /** Padding lebih rapat (py-3 px-4) — untuk kartu sidebar yang di-compact. */
+  compact?: boolean;
 }) {
   return (
     <div
@@ -212,7 +215,7 @@ export function PanelHeader({
         gap: "0.75rem",
         // Header kartu standar: px-6 py-4 + garis pemisah slate-200.
         // slate-100 (kontras 1.10:1) terlalu pudar untuk terbaca di atas putih.
-        padding: "1rem 1.5rem",
+        padding: compact ? "0.7rem 1rem" : "1rem 1.5rem",
         borderBottom: "1px solid #E2E8F0",
       }}
     >

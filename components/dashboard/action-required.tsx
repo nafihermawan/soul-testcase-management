@@ -31,7 +31,7 @@ export function ActionRequiredList({ items }: { items: ActionItem[] }) {
       <EmptyState
         icon={<CheckCircle2 size={22} />}
         title="All clear"
-        subtext="Tidak ada item yang butuh tindakan saat ini."
+        subtext="No items need attention right now."
       />
     );
   }
@@ -44,22 +44,22 @@ export function ActionRequiredList({ items }: { items: ActionItem[] }) {
           style={{
             display: "flex",
             alignItems: "center",
-            gap: "0.75rem",
-            padding: "0.8rem 1rem",
+            gap: "0.5rem",
+            padding: "0.5rem 0.75rem",
             borderTop: idx === 0 ? "none" : "1px solid var(--border)",
           }}
         >
           {/* Angka polos berwarna — tanpa background/border pill. */}
           <span
             style={{
-              minWidth: 34,
+              minWidth: 30,
               fontWeight: 800,
-              fontSize: "0.95rem",
+              fontSize: "0.9rem",
               color: toneText[item.tone],
               flexShrink: 0,
             }}
           >
-            {item.count.toLocaleString("id-ID")}
+            {item.count.toLocaleString("en-US")}
           </span>
           <span style={{ fontSize: "0.84rem", color: "var(--text)", minWidth: 0 }}>
             {item.label}

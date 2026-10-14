@@ -18,7 +18,7 @@ import { BugDetailModal } from "@/components/bugs/bug-detail-modal";
 import { ReportGeneralBugModal } from "@/components/bugs/report-general-bug-modal";
 import { HistoryPagination } from "@/components/test-runs/history-pagination";
 import { entityCode } from "@/lib/format";
-import { ENVIRONMENT_OPTIONS } from "@/lib/qa-metrics";
+import { ENVIRONMENT_OPTIONS, isBugOverdue } from "@/lib/qa-metrics";
 import type { AttachmentItem, BugSourceType } from "@/types/api";
 
 export type BugRow = {
@@ -80,7 +80,8 @@ const TITLE_MIN_WIDTH = 280;
  *         Created By · Created Date · Aksi.
  */
 // Kolom Aksi: satu tombol kebab (~29px) di tengah dengan px-4.
-const FIXED_COLUMNS_WIDTH = 110 + 140 + 110 + 80 + 90 + 90 + 130 + 100 + 72;
+// Severity dilebarkan (90→122) agar label severity + badge "Overdue" muat.
+const FIXED_COLUMNS_WIDTH = 110 + 140 + 110 + 80 + 122 + 90 + 130 + 100 + 72;
 
 /**
  * Klasifikasi sumber bug. Field `sourceType` dari API dipakai kalau ada, tapi
@@ -585,7 +586,7 @@ export function BugsPageClient({
                 <col style={{ width: 140 }} />
                 <col style={{ width: 110 }} />
                 <col style={{ width: 80 }} />
-                <col style={{ width: 90 }} />
+                <col style={{ width: 122 }} />
                 <col style={{ width: 90 }} />
                 <col style={{ width: 130 }} />
                 <col style={{ width: 100 }} />
@@ -765,13 +766,32 @@ export function BugsPageClient({
                         )}
                       </td>
                       <td style={{ padding: "0.6rem 0.5rem", textAlign: "left" }}>
-                        {sev ? (
-                          <span style={{ fontSize: 12, fontWeight: 600, color: sev }}>
-                            {b.severity}
-                          </span>
-                        ) : (
-                          "—"
-                        )}
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}>
+                          {sev ? (
+                            <span style={{ fontSize: 12, fontWeight: 600, color: sev }}>
+                              {b.severity}
+                            </span>
+                          ) : (
+                            "—"
+                          )}
+                          {isBugOverdue(b.createdAt, b.status, b.severity) && (
+                            <span
+                              title="Overdue — melewati SLA 7 hari"
+                              style={{
+                                fontSize: 10,
+                                fontWeight: 700,
+                                color: "#DC2626",
+                                background: "#FEF2F2",
+                                border: "1px solid #FECACA",
+                                borderRadius: 4,
+                                padding: "0 4px",
+                                lineHeight: "16px",
+                              }}
+                            >
+                              Overdue
+                            </span>
+                          )}
+                        </span>
                       </td>
                       <td style={{ padding: "0.6rem 0.5rem", textAlign: "left" }}>
                         <span onClick={(e) => e.stopPropagation()} style={{ display: "inline-flex", maxWidth: 130 }}>

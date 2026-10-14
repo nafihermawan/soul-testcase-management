@@ -6,6 +6,7 @@ import { createBug, deleteBug, updateBugStatus } from "@/lib/actions/automation-
 import { useRefresh } from "@/lib/client/refresh-context";
 import { ConfirmDialog, Spinner, Toast, useToast } from "@/components/ui/feedback";
 import { Select } from "@/components/ui/select";
+import { ENVIRONMENT_OPTIONS } from "@/lib/qa-metrics";
 
 export type BugItem = {
   id: string;
@@ -31,6 +32,7 @@ export function BugsTab({ testCaseId, bugs }: { testCaseId: string; bugs: BugIte
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [severity, setSeverity] = useState("");
+  const [environment, setEnvironment] = useState("");
   const [externalLink, setExternalLink] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -39,9 +41,13 @@ export function BugsTab({ testCaseId, bugs }: { testCaseId: string; bugs: BugIte
   const { toast, showToast, dismissToast } = useToast();
 
   const saveBug = async () => {
+    if (!environment.trim()) {
+      setError("Environment wajib dipilih.");
+      return;
+    }
     setPending(true);
     setError(null);
-    const res = await createBug({ title, description, severity, externalLink, testCaseId });
+    const res = await createBug({ title, description, severity, environment, externalLink, testCaseId });
     setPending(false);
     if (res.error) {
       setError(res.error);
@@ -50,6 +56,7 @@ export function BugsTab({ testCaseId, bugs }: { testCaseId: string; bugs: BugIte
     setTitle("");
     setDescription("");
     setSeverity("");
+    setEnvironment("");
     setExternalLink("");
     setCreating(false);
     showToast("Bug berhasil dibuat.", "success");
@@ -108,6 +115,19 @@ export function BugsTab({ testCaseId, bugs }: { testCaseId: string; bugs: BugIte
                 <option value="MEDIUM">Medium</option>
                 <option value="HIGH">High</option>
                 <option value="CRITICAL">Critical</option>
+              </Select>
+            </div>
+            <div>
+              <label style={{ fontSize: "0.78rem", fontWeight: 600, color: "var(--text-secondary)" }}>
+                Environment *
+              </label>
+              <Select value={environment} ariaLabel="Environment bug" style={{ marginTop: "0.25rem", width: "100%" }} onChange={(e) => setEnvironment(e.target.value)}>
+                <option value="">—</option>
+                {ENVIRONMENT_OPTIONS.map((env) => (
+                  <option key={env} value={env}>
+                    {env}
+                  </option>
+                ))}
               </Select>
             </div>
             <div>

@@ -34,7 +34,7 @@ const STATUS_RANK: Record<string, number> = {
 };
 
 const formatDate = (iso: string) =>
-  new Date(iso).toLocaleDateString("id-ID", {
+  new Date(iso).toLocaleDateString("en-US", {
     day: "2-digit",
     month: "short",
     year: "numeric",
@@ -60,7 +60,7 @@ export function RecentRuns({ runs }: { runs: DashboardRunItem[] }) {
         action={
           runs.length > MAX_ROWS ? (
             <Link href="/test-runs/history" style={{ fontSize: "0.78rem", color: "#2563EB", textDecoration: "none" }}>
-              Lihat semua →
+              View all →
             </Link>
           ) : undefined
         }
@@ -68,9 +68,9 @@ export function RecentRuns({ runs }: { runs: DashboardRunItem[] }) {
       {rows.length === 0 ? (
         <EmptyState
           icon={<CalendarClock size={22} />}
-          title="Belum Ada Test Run"
-          subtext="Belum ada test run yang cocok dengan filter saat ini."
-          actionLabel="Buat Test Run Baru"
+          title="No Test Runs Yet"
+          subtext="No test run matches the current filters."
+          actionLabel="Create New Test Run"
           actionHref="/test-runs"
         />
       ) : (
@@ -103,7 +103,7 @@ export function RecentRuns({ runs }: { runs: DashboardRunItem[] }) {
                   Pass Rate
                 </th>
                 <th style={{ padding: "0.625rem 0.5rem", fontWeight: 600, width: 96, whiteSpace: "nowrap" }}>Status</th>
-                <th style={{ padding: "0.625rem 1.25rem", fontWeight: 600, width: 104, whiteSpace: "nowrap" }}>Updated</th>
+                <th style={{ padding: "0.625rem 1.25rem", fontWeight: 600, width: 112, whiteSpace: "nowrap" }}>Updated</th>
               </tr>
             </thead>
             <tbody>

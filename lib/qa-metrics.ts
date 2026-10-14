@@ -41,10 +41,10 @@ export const ENVIRONMENT_OPTIONS = ["DEV", "STG", "PRE-PROD", "PROD"] as const;
 export type PeriodKey = "ALL" | "7D" | "30D" | "MONTH";
 
 export const PERIOD_OPTIONS: { value: PeriodKey; label: string }[] = [
-  { value: "ALL", label: "Semua Waktu" },
-  { value: "7D", label: "7 Hari Terakhir" },
-  { value: "30D", label: "30 Hari Terakhir" },
-  { value: "MONTH", label: "Bulan Ini" },
+  { value: "ALL", label: "All Time" },
+  { value: "7D", label: "Last 7 Days" },
+  { value: "30D", label: "Last 30 Days" },
+  { value: "MONTH", label: "This Month" },
 ];
 
 export function emptyCounts(): ExecutionCounts {
@@ -155,11 +155,11 @@ export function ageInDays(iso: string, now: Date = new Date()): number {
 }
 
 export function formatAge(days: number): string {
-  if (days <= 0) return "Hari ini";
-  if (days === 1) return "1 hari";
-  if (days < 30) return `${days} hari`;
+  if (days <= 0) return "Today";
+  if (days === 1) return "1 day";
+  if (days < 30) return `${days} days`;
   const months = Math.floor(days / 30);
-  return months === 1 ? "1 bulan" : `${months} bulan`;
+  return months === 1 ? "1 month" : `${months} months`;
 }
 
 /** Urutan prioritas bug: Critical dulu, lalu High, lalu sisanya. */
@@ -173,6 +173,23 @@ export const ACTIVE_BUG_STATUSES = ["OPEN", "IN_PROGRESS"] as const;
 
 /** Status bug yang menandakan sudah diperbaiki & menunggu retest QA. */
 export const RETEST_BUG_STATUS = "RESOLVED";
+
+/**
+ * SLA bug: OPEN/IN_PROGRESS dengan severity CRITICAL/HIGH yang durasi bukanya
+ * melewati `BUG_SLA_DAYS`. Ubah ambangnya di satu tempat ini saja.
+ */
+export const BUG_SLA_DAYS = 7;
+
+export function isBugOverdue(
+  createdAtIso: string,
+  status: string,
+  severity: string | null | undefined,
+  now: Date = new Date()
+): boolean {
+  if (!(ACTIVE_BUG_STATUSES as readonly string[]).includes(status)) return false;
+  if (severityRank(severity) > 1) return false;
+  return ageInDays(createdAtIso, now) > BUG_SLA_DAYS;
+}
 
 /* ---------- Komposisi inventaris Test Case (Reports) ---------- */
 

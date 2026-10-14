@@ -53,6 +53,8 @@ export type DashboardRunItem = {
   /** TestRun.environment: DEV | STG | PRE-PROD | PROD */
   environment: string | null;
   status: string;
+  /** Label sprint/release run ini (dipakai scope "Active Release" & Release Readiness). */
+  sprint: string | null;
   executedBy: string;
   createdAt: string;
   updatedAt: string;
@@ -89,6 +91,9 @@ export type DashboardSuiteCoverageItem = {
   /** Distribusi TC suite ini menurut hasil TERAKHIR pada run COMPLETED
    *  (latest per TC, tanpa double count). counts.executed = jumlah TC tested. */
   counts: ExecutionCounts;
+  /** Timestamp eksekusi terakhir (MAX TestRunResult.updatedAt) — dasar sort
+   *  default "aktivitas terakhir". null = suite belum pernah dieksekusi. */
+  lastExecutedAt: string | null;
 };
 
 export type DashboardPayload = {

@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { ShieldAlert } from "lucide-react";
 import { Card } from "@/components/ui";
-import { PageTabs } from "@/components/ui/page-tabs";
 import { FilterModal } from "@/components/ui/filter-modal";
 import { CustomSelect, filterLabelStyle } from "@/components/ui/custom-select";
 import { ErrorBlock, StatsCardsSkeleton, TableCardSkeleton } from "@/components/ui/data-states";
@@ -27,6 +26,11 @@ import type { QaPerformancePayload, ReportsPayload } from "@/types/api";
 const ALL = "ALL";
 
 type ReportsTabKey = "coverage" | "performance";
+
+const REPORTS_TABS: { key: ReportsTabKey; label: string }[] = [
+  { key: "coverage", label: "Coverage & Repository" },
+  { key: "performance", label: "QA Performance" },
+];
 
 /**
  * Halaman terpadu "Reports & Analytics" — gabungan Reports (coverage &
@@ -165,44 +169,63 @@ export function ReportsAnalyticsView() {
     <main
       style={{
         fontFamily: "var(--font-sans, system-ui, sans-serif)",
-        width: "100%",
+        // Full-bleed ke area konten AppShell (batalkan padding 1rem), padding 24px
+        // di semua sisi; lebar sengaja `auto` supaya gap kiri/kanan sama.
+        margin: "-1rem",
+        padding: 24,
+        minHeight: "calc(100% + 2rem)",
         display: "flex",
         flexDirection: "column",
-        gap: "1rem",
+        gap: 18,
+        background: "#F1F3F6",
       }}
     >
-      {/* Header halaman + aksi (Filter & Export Report) — responsif. */}
-      <Card style={{ padding: "0.875rem" }}>
+      {/* Header card: judul + deskripsi (kiri), aksi Filter/Export (kanan).
+          Card ini TIDAK memuat divider atau tab. */}
+      <Card style={{ border: "1px solid #E3E7EE", borderRadius: 18, padding: "24px 22px 22px 22px" }}>
         <div
           style={{
             display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 12,
             flexWrap: "wrap",
+            justifyContent: "space-between",
+            alignItems: "flex-start",
+            gap: 16,
           }}
         >
-          <div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             <h1
               style={{
-                fontSize: 18,
-                fontWeight: 700,
-                color: "#1E293B",
-                letterSpacing: "-0.025em",
+                fontSize: 24,
+                fontWeight: 600,
+                color: "#0F172A",
+                letterSpacing: "-0.02em",
                 margin: 0,
+                lineHeight: 1.2,
               }}
             >
               Reports &amp; Analytics
             </h1>
-            <p style={{ fontSize: 12, color: "#64748B", margin: "0.25rem 0 0" }}>
+            <p style={{ fontSize: 14, lineHeight: 1.5, color: "#475569", margin: 0 }}>
               Coverage &amp; kesehatan repository plus performa tim QA.
             </p>
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
             {tab === "coverage" && data && (
               <FilterModal
                 title="Filter Reports"
+                triggerClassName="btn-radius-10"
+                iconSize={16}
+                triggerStyle={{
+                  height: 40,
+                  padding: "0 14px",
+                  border: "1px solid #FFC348",
+                  background: "#FFF8E8",
+                  color: "#0F172A",
+                  fontSize: 14,
+                  fontWeight: 600,
+                  gap: 8,
+                }}
                 activeCount={(platform !== ALL ? 1 : 0) + (project !== ALL ? 1 : 0)}
                 onReset={() => {
                   setDraftPlatform(ALL);
@@ -292,15 +315,47 @@ export function ReportsAnalyticsView() {
         </div>
       </Card>
 
-      {/* Tab navigation — di luar card konten. */}
-      <PageTabs<ReportsTabKey>
-        active={tab}
-        onChange={setTab}
-        tabs={[
-          { key: "coverage", label: "Coverage & Repository" },
-          { key: "performance", label: "QA Performance" },
-        ]}
-      />
+      {/* Page tabs — di luar card konten, di bawah header card; garis dasar
+          full width dan underline kuning duduk tepat di atas garis itu. */}
+      <div
+        role="tablist"
+        aria-label="Reports & Analytics"
+        style={{
+          display: "flex",
+          gap: 28,
+          padding: "0 23px",
+          marginTop: -4,
+          borderBottom: "1px solid #DDE2E9",
+        }}
+      >
+        {REPORTS_TABS.map((t) => {
+          const active = tab === t.key;
+          return (
+            <button
+              key={t.key}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => setTab(t.key)}
+              style={{
+                height: 44,
+                marginBottom: -1,
+                padding: 0,
+                border: "none",
+                background: "transparent",
+                fontSize: 14,
+                fontWeight: active ? 600 : 500,
+                color: active ? "#0F172A" : "#64748B",
+                borderBottom: active ? "2px solid #FFC348" : "2px solid transparent",
+                cursor: "pointer",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {t.label}
+            </button>
+          );
+        })}
+      </div>
 
       {tab === "coverage" ? (
         error ? (
@@ -317,7 +372,6 @@ export function ReportsAnalyticsView() {
             suites={view.suites}
             suitesWithoutTc={view.suitesWithoutTc}
             inventory={view.inventory}
-            isFiltered={isFiltered}
           />
         )
       ) : qaError ? (

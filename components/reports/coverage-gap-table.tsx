@@ -1,12 +1,21 @@
 import Link from "next/link";
-import { Card, PanelHeader, ProgressBar } from "@/components/ui";
-import { EmptyState } from "@/components/dashboard/empty-state";
-import { formatPct, pct } from "@/lib/qa-metrics";
+import { Info } from "lucide-react";
+import { pct } from "@/lib/qa-metrics";
+import {
+  cardStyle,
+  LINE,
+  HEAD_BG,
+  ROW_DIVIDER,
+  MONO,
+  LINK,
+  LINK_HOVER,
+  DANGER,
+  fmt,
+} from "@/components/reports/report-tokens";
 import type { ReportsSuiteGapItem } from "@/types/api";
-import { CheckCircle2, FolderTree, Info } from "lucide-react";
 
-const gapColor = (value: number) =>
-  value >= 80 ? "var(--danger)" : value >= 40 ? "var(--warning)" : "var(--success)";
+/** Sel angka: Geist Mono; Belum & Gap lebih tebal. */
+const monoCell = { fontFamily: MONO, fontWeight: 500 } as const;
 
 /** Celah coverage per suite: TC yang belum pernah dieksekusi, gap terbesar dulu. */
 export function CoverageGapTable({
@@ -21,173 +30,121 @@ export function CoverageGapTable({
     return b.total - a.total;
   });
 
-  return (
-    <Card style={{ display: "flex", flexDirection: "column" }}>
-      <PanelHeader title="Celah Coverage per Suite" />
+  const th = {
+    padding: "11px 10px",
+    fontSize: 12,
+    fontWeight: 500,
+    color: "#64748B",
+    textAlign: "right",
+    whiteSpace: "nowrap",
+  } as const;
+  const td = { padding: "12px 10px", verticalAlign: "middle" } as const;
 
-      {rows.length === 0 ? (
-        <EmptyState
-          icon={<FolderTree size={22} />}
-          title="Belum Ada Suite dengan Test Case"
-          subtext="Tambahkan test case ke suite untuk melihat celah coverage di sini."
-        />
-      ) : (
-        // Body kartu standar: p-4 — disamakan dengan kartu Reports lainnya.
+  return (
+    <section style={{ ...cardStyle, overflow: "hidden" }}>
+      <div style={{ padding: "18px 22px" }}>
+        <h2 style={{ fontSize: 17, fontWeight: 600, color: "#0F172A", margin: 0 }}>Celah Coverage per Suite</h2>
+      </div>
+
+      {noExecutionYet && (
         <div
           style={{
-            padding: "1rem",
             display: "flex",
-            flexDirection: "column",
-            gap: "1rem",
+            alignItems: "flex-start",
+            gap: 10,
+            margin: "0 22px 12px",
+            padding: "10px 12px",
+            background: "#FFF8E8",
+            border: "1px solid #FDE68A",
+            borderRadius: 10,
+            fontSize: 13,
+            color: "#B45309",
+            lineHeight: 1.5,
           }}
         >
-          {noExecutionYet && (
-            <div
-              style={{
-                display: "flex",
-                alignItems: "flex-start",
-                gap: "0.6rem",
-                padding: "0.65rem 0.85rem",
-                background: "var(--warning-bg)",
-                border: "1px solid #FDE68A",
-                borderRadius: 8,
-                fontSize: "0.8rem",
-                color: "#B45309",
-                lineHeight: 1.5,
-              }}
-            >
-              <Info size={15} style={{ flexShrink: 0, marginTop: 1 }} />
-              <span>
-                <strong>Belum ada eksekusi sama sekali.</strong> Seluruh test case di bawah masih
-                berstatus belum pernah di-test — angka ini akan turun setelah test run dijalankan dan
-                diselesaikan.
-              </span>
-            </div>
-          )}
+          <Info size={15} style={{ flexShrink: 0, marginTop: 1 }} aria-hidden="true" />
+          <span>
+            <strong>Belum ada eksekusi sama sekali.</strong> Seluruh test case di bawah masih
+            berstatus belum pernah di-test — angka ini akan turun setelah test run dijalankan dan
+            diselesaikan.
+          </span>
+        </div>
+      )}
 
-          {/* Tinggi dibatasi + scroll sendiri supaya halaman tidak memanjang. */}
-          <div style={{ overflowX: "auto", maxHeight: 300, overflowY: "auto" }}>
-          <table
-            style={{
-              width: "100%",
-              borderCollapse: "collapse",
-              fontSize: "0.82rem",
-              tableLayout: "fixed",
-            }}
-          >
+      {rows.length === 0 ? (
+        <div style={{ padding: "2.5rem 1.5rem", textAlign: "center", fontSize: 14, color: "#64748B" }}>
+          Belum ada suite dengan test case.
+        </div>
+      ) : (
+        <div style={{ overflowX: "auto", maxHeight: 300, overflowY: "auto" }}>
+          <table style={{ width: "100%", minWidth: 760, tableLayout: "fixed", borderCollapse: "collapse", fontSize: 14 }}>
+            <colgroup>
+              <col />
+              <col style={{ width: 110 }} />
+              <col style={{ width: 110 }} />
+              <col style={{ width: 110 }} />
+              <col style={{ width: 120 }} />
+            </colgroup>
             <thead>
-              <tr
-                style={{
-                  color: "var(--text-muted)",
-                  textAlign: "left",
-                  borderBottom: "1px solid var(--border)",
-                  background: "#F8FAFC",
-                }}
-              >
-                <th style={{ position: "sticky", top: 0, zIndex: 10, background: "#F8FAFC", padding: "0.55rem 0", fontWeight: 600 }}>Suite</th>
-                <th style={{ position: "sticky", top: 0, zIndex: 10, background: "#F8FAFC", padding: "0.55rem 0.5rem", fontWeight: 600, width: 64, textAlign: "right" }}>TC</th>
-                <th style={{ position: "sticky", top: 0, zIndex: 10, background: "#F8FAFC", padding: "0.55rem 0.5rem", fontWeight: 600, width: 76, textAlign: "right" }}>Tested</th>
-                <th style={{ position: "sticky", top: 0, zIndex: 10, background: "#F8FAFC", padding: "0.55rem 0.5rem", fontWeight: 600, width: 76, textAlign: "right" }}>Belum</th>
-                <th style={{ position: "sticky", top: 0, zIndex: 10, background: "#F8FAFC", padding: "0.55rem 0", fontWeight: 600, width: 260 }}>Gap</th>
+              <tr style={{ background: HEAD_BG, borderTop: `1px solid ${LINE}`, borderBottom: `1px solid ${LINE}` }}>
+                <th style={{ ...th, textAlign: "left", paddingLeft: 22 }}>Suite</th>
+                <th style={th}>TC</th>
+                <th style={th}>Tested</th>
+                <th style={th}>Belum</th>
+                <th style={{ ...th, paddingRight: 22 }}>Gap</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((s) => {
                 const gapPct = pct(s.untested, s.total);
                 return (
-                  <tr
-                    key={s.suiteId}
-                    style={{ borderBottom: "1px solid var(--border)" }}
-                    onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-muted)")}
-                    onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-                  >
-                    <td
-                      style={{
-                        padding: "0.55rem 0",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
+                  <tr key={s.suiteId} style={{ borderBottom: `1px solid ${ROW_DIVIDER}` }}>
+                    <td style={{ ...td, paddingLeft: 22 }}>
                       <Link
                         href={`/suites/${s.suiteId}`}
                         title={`Buka suite ${s.name}`}
-                        style={{ fontWeight: 600, color: "#2563EB", textDecoration: "none" }}
+                        onMouseEnter={(e) => (e.currentTarget.style.color = LINK_HOVER)}
+                        onMouseLeave={(e) => (e.currentTarget.style.color = LINK)}
+                        style={{
+                          display: "block",
+                          fontWeight: 500,
+                          color: LINK,
+                          textDecoration: "none",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
                       >
                         {s.name}
                       </Link>
-                      <span
+                      <div
                         style={{
-                          marginLeft: "0.4rem",
-                          fontSize: "0.72rem",
-                          color: "var(--text-muted)",
+                          marginTop: 2,
+                          fontSize: 12,
+                          color: "#64748B",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
                         }}
                       >
                         {s.projectName}
-                      </span>
+                      </div>
                     </td>
-                    <td style={{ padding: "0.55rem 0.5rem", textAlign: "right", color: "var(--text-secondary)" }}>
-                      {s.total}
+                    <td style={{ ...td, ...monoCell, color: "#334155" }}>{fmt(s.total)}</td>
+                    <td style={{ ...td, ...monoCell, color: s.tested === 0 ? "#94A3B8" : "#334155" }}>
+                      {fmt(s.tested)}
                     </td>
-                    <td style={{ padding: "0.55rem 0.5rem", textAlign: "right", color: "var(--text-secondary)" }}>
-                      {s.tested}
-                    </td>
-                    <td
-                      style={{
-                        padding: "0.55rem 0.5rem",
-                        textAlign: "right",
-                        fontWeight: s.untested > 0 ? 700 : 400,
-                        color: s.untested > 0 ? "var(--text)" : "var(--text-muted)",
-                      }}
-                    >
-                      {s.untested}
-                    </td>
-                    <td style={{ padding: "0.55rem 0" }}>
-                      {gapPct === null ? (
-                        <span style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>
-                          Belum ada TC
-                        </span>
-                      ) : s.untested === 0 ? (
-                        <span
-                          style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: "0.3rem",
-                            fontSize: "0.78rem",
-                            fontWeight: 600,
-                            color: "var(--success)",
-                          }}
-                        >
-                          <CheckCircle2 size={14} /> Semua sudah di-test
-                        </span>
-                      ) : (
-                        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                          <span style={{ width: 150, flexShrink: 0 }}>
-                            <ProgressBar value={gapPct} color={gapColor(gapPct)} />
-                          </span>
-                          <span
-                            style={{
-                              fontWeight: 700,
-                              width: 52,
-                              textAlign: "right",
-                              flexShrink: 0,
-                              fontSize: "0.78rem",
-                              color: "var(--text-muted)",
-                            }}
-                          >
-                            {formatPct(gapPct)} gap
-                          </span>
-                        </div>
-                      )}
+                    <td style={{ ...td, fontFamily: MONO, fontWeight: 600, color: "#0F172A" }}>{fmt(s.untested)}</td>
+                    <td style={{ ...td, paddingRight: 22, fontFamily: MONO, fontWeight: 600, color: DANGER }}>
+                      {gapPct === null ? "—" : `${gapPct}%`}
                     </td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
-          </div>
         </div>
       )}
-    </Card>
+    </section>
   );
 }

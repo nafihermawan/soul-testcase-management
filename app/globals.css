@@ -193,10 +193,19 @@ button,
   border-radius: 6px !important;
 }
 
-/* Pengecualian: tombol sekunder dashboard (Filter/Bugs/Reports) — radius 11px
-   sesuai spesifikasi, menang dari aturan global 3px di atas. */
+/* Pengecualian: tombol dengan radius sesuai spesifikasi halaman (dashboard 11px;
+   Bugs Tracker: Filter 10px, tombol status & aksi 8px) — menang dari aturan
+   global 3px di atas. */
 .btn-radius-11 {
   border-radius: 11px !important;
+}
+
+.btn-radius-10 {
+  border-radius: 10px !important;
+}
+
+.btn-radius-8 {
+  border-radius: 8px !important;
 }
 
 /* Sidebar menu item: unified base + hover state */

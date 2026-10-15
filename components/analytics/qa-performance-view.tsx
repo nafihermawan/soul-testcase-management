@@ -2,63 +2,81 @@
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
-import { FileSpreadsheet, FileText, SlidersHorizontal } from "lucide-react";
-import { Card } from "@/components/ui";
-import { KpiCard } from "@/components/ui/kpi-card";
-import { ProgressBar } from "@/components/ui/progress-bar";
+import { Download, FileSpreadsheet, FileText, SlidersHorizontal } from "lucide-react";
+import { initialsOf } from "@/components/ui/avatar";
 import { Select } from "@/components/ui/select";
-import { InitialsAvatar } from "@/components/ui/avatar";
 import { BADGE_LABEL, MONTH_NAMES, type PeriodMode, type PerformanceBadge } from "@/lib/qa-performance";
+import {
+  SANS,
+  MONO,
+  cardStyle,
+  LINE,
+  HEAD_BG,
+  ROW_DIVIDER,
+  fmt,
+} from "@/components/reports/report-tokens";
 import type { QaPerformanceMember, QaPerformancePayload } from "@/types/api";
 
 const MONTHS_PER_QUARTER = 3;
 
-/** Warna teks status performa — minimalis (tanpa pill/latar). */
+/* ------------------------------- Tokens ------------------------------- */
+
+/** Warna teks status performa — dot & teks sama, tanpa pill. */
 const BADGE_COLOR: Record<PerformanceBadge, string> = {
-  TOP_PERFORMER: "#047857",
-  ON_TRACK: "#2563EB",
-  NEEDS_ATTENTION: "#BE123C",
+  TOP_PERFORMER: "#15803D",
+  ON_TRACK: "#B45309",
+  NEEDS_ATTENTION: "#B91C1C",
 };
 
-/** Warna bar pass rate: hijau ≥80, amber 50–79, rose <50, abu bila belum ada data. */
+/** Warna teks pass rate per ambang; null (tanpa data) → muted. */
 function passRateColor(value: number | null): string {
-  if (value === null) return "#CBD5E1";
-  if (value >= 80) return "#059669";
-  if (value >= 50) return "#D97706";
-  return "#E11D48";
+  if (value === null) return "#94A3B8";
+  if (value >= 80) return "#15803D";
+  if (value >= 50) return "#B45309";
+  return "#B91C1C";
 }
 
-/** Divider inset (tidak mentok tepi kartu) — pola yang dipakai tabel lain. */
-const rowDivider: CSSProperties = {
-  backgroundImage:
-    "linear-gradient(to right, transparent 0, transparent 16px, #F1F5F9 16px, #F1F5F9 calc(100% - 16px), transparent calc(100% - 16px))",
-  backgroundSize: "100% 1px",
-  backgroundPosition: "top left",
-  backgroundRepeat: "no-repeat",
-};
-
-const th: CSSProperties = {
-  position: "sticky",
-  top: 0,
-  zIndex: 10,
-  background: "#F8FAFC",
-  padding: "9px 12px",
-  fontSize: 12,
+/** Tombol aksi di header card (Filter sekunder & Export Report primer). */
+const HEADER_BTN: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 8,
+  height: 40,
+  borderRadius: 10,
+  fontSize: 14,
   fontWeight: 600,
-  color: "#64748B",
+  border: "1px solid #FFC348",
+  color: "#0F172A",
+  cursor: "pointer",
   whiteSpace: "nowrap",
-  textAlign: "left",
-  borderBottom: "1px solid #E2E8F0",
+  transition: "background-color 0.15s ease, border-color 0.15s ease",
 };
 
-const td: CSSProperties = {
-  padding: "10px 12px",
-  fontSize: 12,
-  fontWeight: 400,
-  color: "#475569",
-  whiteSpace: "nowrap",
-  verticalAlign: "middle",
-};
+/* ---------------------------- KPI (3 baris) --------------------------- */
+
+const KPI_CARD = {
+  background: "#ffffff",
+  border: "1px solid #E3E7EE",
+  borderRadius: 16,
+  padding: "18px 20px",
+  display: "flex",
+  flexDirection: "column",
+  gap: 12,
+} as const;
+
+const KPI_ROW_LABEL = { height: 24, display: "flex", alignItems: "center" } as const;
+const KPI_ROW_BOTTOM = { height: 18, display: "flex", alignItems: "center" } as const;
+const KPI_LABEL = { fontSize: 13, fontWeight: 500, color: "#475569" } as const;
+const KPI_CAPTION = { fontSize: 13, color: "#64748B" } as const;
+const KPI_VALUE = {
+  fontFamily: SANS,
+  fontSize: 32,
+  fontWeight: 600,
+  lineHeight: 1,
+  letterSpacing: "-0.02em",
+  fontVariantNumeric: "tabular-nums",
+  color: "#0F172A",
+} as const;
 
 /** Menu kecil Export Report (portal supaya tidak terpotong overflow card). */
 export function ExportMenu({
@@ -120,35 +138,22 @@ export function ExportMenu({
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="menu"
         aria-expanded={open}
+        className="btn-radius-10"
         style={{
-          // Primary Action Button — solid tanpa garis tepi (border-0), kuning/
-          // amber khas sistem. Spec memakai kelas Tailwind (bg-amber-400 …,
-          // shadow-2xs, border-0), tapi proyek ini TIDAK memakai Tailwind, jadi
-          // nilainya diterjemahkan ke inline style: bg-amber-400 #FBBF24 ·
-          // hover bg-amber-500 #F59E0B · text-slate-900 #0F172A · font-bold ·
-          // px-4 py-2 · text-xs · shadow-2xs · border-0.
-          // (`border: none` wajib eksplisit — tidak ada reset border global
-          // untuk <button>, sehingga border bawaan browser ikut tampil.)
-          padding: "8px 16px",
-          borderRadius: 8,
-          border: "none",
-          background: "#FBBF24",
-          color: "#0F172A",
-          fontSize: 12,
-          fontWeight: 700,
-          boxShadow: "0 1px 2px rgba(0, 0, 0, 0.05)",
+          ...HEADER_BTN,
+          padding: "0 16px",
+          background: "#FFC348",
           cursor: disabled ? "not-allowed" : "pointer",
           opacity: disabled ? 0.55 : 1,
-          whiteSpace: "nowrap",
-          transition: "background-color 0.15s ease, color 0.15s ease",
         }}
         onMouseEnter={(e) => {
-          if (!disabled) e.currentTarget.style.background = "#F59E0B";
+          if (!disabled) e.currentTarget.style.background = "#F0B53D";
         }}
         onMouseLeave={(e) => {
-          if (!disabled) e.currentTarget.style.background = "#FBBF24";
+          if (!disabled) e.currentTarget.style.background = "#FFC348";
         }}
       >
+        <Download size={16} aria-hidden="true" />
         Export Report
       </button>
 
@@ -290,33 +295,22 @@ export function PeriodFilterControl({
         onClick={() => (open ? setOpen(false) : openPopover())}
         aria-haspopup="dialog"
         aria-expanded={open}
+        className="btn-radius-10"
         style={{
-          display: "inline-flex",
-          alignItems: "center",
-          gap: 8,
-          // Styling identik dengan tombol Filter tab Coverage & Repository
-          // (FilterModal): outlined/ghost amber, h-8 (32px), px-12, text-xs.
-          height: 32,
-          padding: "0 12px",
-          border: "1px solid #FFC348",
-          background: "#fff",
-          color: "#F59E0B",
-          fontWeight: 500,
-          fontSize: 12,
-          borderRadius: 8,
-          cursor: "pointer",
-          transition: "background-color 0.15s ease, border-color 0.15s ease",
+          ...HEADER_BTN,
+          padding: "0 14px",
+          background: "#FFF8E8",
         }}
         onMouseEnter={(e) => {
           e.currentTarget.style.background = "rgba(255, 251, 235, 0.5)";
           e.currentTarget.style.borderColor = "#FBBF24";
         }}
         onMouseLeave={(e) => {
-          e.currentTarget.style.background = "#fff";
+          e.currentTarget.style.background = "#FFF8E8";
           e.currentTarget.style.borderColor = "#FFC348";
         }}
       >
-        <SlidersHorizontal size={13} />
+        <SlidersHorizontal size={16} aria-hidden="true" />
         Filter
       </button>
 
@@ -502,6 +496,109 @@ export function PeriodFilterControl({
   );
 }
 
+/* ------------------------------ Member table -------------------------- */
+
+const th = {
+  padding: "12px 10px",
+  fontSize: 12,
+  fontWeight: 500,
+  color: "#64748B",
+  textAlign: "right",
+  whiteSpace: "nowrap",
+} as const;
+const td = { padding: "14px 10px", verticalAlign: "middle" } as const;
+
+/** Sel angka: Geist Mono #334155; nilai 0 → muted. */
+function NumCell({ value }: { value: number }) {
+  return (
+    <td style={{ ...td, fontFamily: MONO, fontWeight: 500, color: value === 0 ? "#94A3B8" : "#334155" }}>
+      {fmt(value)}
+    </td>
+  );
+}
+
+function MemberRow({ member }: { member: QaPerformanceMember }) {
+  const tone = BADGE_COLOR[member.badge];
+  const name = member.name ?? "(tanpa nama)";
+
+  return (
+    <tr style={{ borderBottom: `1px solid ${ROW_DIVIDER}` }}>
+      {/* QA member: avatar netral + nama + role */}
+      <td style={{ ...td, paddingLeft: 22 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
+          <span
+            aria-hidden="true"
+            style={{
+              width: 34,
+              height: 34,
+              borderRadius: "50%",
+              background: "#EEF1F5",
+              color: "#334155",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: 12,
+              fontWeight: 600,
+              flexShrink: 0,
+            }}
+          >
+            {initialsOf(name)}
+          </span>
+          <div style={{ display: "flex", flexDirection: "column", gap: 1, minWidth: 0 }}>
+            <span
+              title={name}
+              style={{
+                fontSize: 14,
+                fontWeight: 500,
+                color: "#0F172A",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {name}
+            </span>
+            <span style={{ fontSize: 12, color: "#64748B" }}>{member.roleLabel}</span>
+          </div>
+        </div>
+      </td>
+
+      <NumCell value={member.assignedRuns} />
+      <NumCell value={member.executedCases} />
+      <NumCell value={member.createdCases} />
+
+      {/* Pass rate: angka polos, tanpa bar */}
+      <td style={{ ...td, fontFamily: MONO, fontWeight: 600, color: passRateColor(member.passRate) }}>
+        {member.passRate === null ? "—" : `${member.passRate}%`}
+      </td>
+
+      <NumCell value={member.bugsFound} />
+
+      <td style={{ ...td, fontFamily: MONO, fontSize: 15, fontWeight: 600, color: "#0F172A" }}>
+        {fmt(member.score)}
+      </td>
+
+      {/* Status: dot + teks, warna sama, tanpa pill */}
+      <td style={{ ...td, textAlign: "left", paddingLeft: 28, paddingRight: 22 }}>
+        <span
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 7,
+            color: tone,
+            fontSize: 13,
+            fontWeight: 600,
+            whiteSpace: "nowrap",
+          }}
+        >
+          <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: "50%", background: tone, flexShrink: 0 }} />
+          {BADGE_LABEL[member.badge]}
+        </span>
+      </td>
+    </tr>
+  );
+}
+
 /**
  * QA Performance Analytics — hanya dirender untuk Lead QA (gerbang di page).
  *
@@ -513,40 +610,55 @@ export function QaPerformanceView({ data }: { data: QaPerformancePayload }) {
   const totals = data.totals;
 
   return (
-    <div style={{ fontFamily: "var(--font-sans)", width: "100%" }}>
-      {/* Kartu ringkasan tim — 3 kartu simetris (grid-cols-3). */}
-      <div className="metric-grid-3" style={{ marginBottom: 12 }}>
-        <KpiCard
-          compact
-          label="Total Executed Test Cases"
-          value={String(totals.executedCases)}
-          sub="Eksekusi (status ≠ Not run) pada periode ini"
-        />
-        <KpiCard
-          compact
-          label="Average Pass Rate"
-          value={totals.passRate === null ? "—" : `${totals.passRate}%`}
-          sub={
-            totals.passRate === null
-              ? "Belum ada hasil Pass/Fail di periode ini"
-              : "Pass ÷ (Pass + Fail), agregat tim"
-          }
-        />
-        <KpiCard
-          compact
-          label="Total Bugs Reported"
-          value={String(totals.bugsReported)}
-          sub="Bug yang dilaporkan pada periode ini"
-        />
+    <>
+      {/* KPI row — struktur 3 baris seragam */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 14 }}>
+        <div style={KPI_CARD}>
+          <div style={KPI_ROW_LABEL}>
+            <span style={KPI_LABEL}>Total Executed Test Cases</span>
+          </div>
+          <span style={KPI_VALUE}>{fmt(totals.executedCases)}</span>
+          <div style={KPI_ROW_BOTTOM}>
+            <span style={KPI_CAPTION}>Eksekusi (status ≠ Not run) pada periode ini</span>
+          </div>
+        </div>
+
+        <div style={KPI_CARD}>
+          <div style={KPI_ROW_LABEL}>
+            <span style={KPI_LABEL}>Average Pass Rate</span>
+          </div>
+          <span style={{ ...KPI_VALUE, color: totals.passRate === null ? "#94A3B8" : "#15803D" }}>
+            {totals.passRate === null ? "—" : `${totals.passRate}%`}
+          </span>
+          <div style={KPI_ROW_BOTTOM}>
+            <span style={KPI_CAPTION}>
+              {totals.passRate === null
+                ? "Belum ada hasil Pass/Fail di periode ini"
+                : "Pass ÷ (Pass + Fail), agregat tim"}
+            </span>
+          </div>
+        </div>
+
+        <div style={KPI_CARD}>
+          <div style={KPI_ROW_LABEL}>
+            <span style={KPI_LABEL}>Total Bugs Reported</span>
+          </div>
+          <span style={KPI_VALUE}>{fmt(totals.bugsReported)}</span>
+          <div style={KPI_ROW_BOTTOM}>
+            <span style={KPI_CAPTION}>Bug yang dilaporkan pada periode ini</span>
+          </div>
+        </div>
       </div>
 
-      {/* Tabel performa member — full height seperti halaman Active Runs */}
-      <Card
+      {/* Tabel performa member — mengisi sisa tinggi halaman */}
+      <div
         style={{
-          padding: 0,
-          minHeight: "calc(100vh - 280px)",
+          ...cardStyle,
+          flex: 1,
+          minHeight: 0,
           display: "flex",
           flexDirection: "column",
+          overflow: "hidden",
         }}
       >
         {data.members.length === 0 ? (
@@ -558,35 +670,37 @@ export function QaPerformanceView({ data }: { data: QaPerformancePayload }) {
               justifyContent: "center",
               padding: "2.5rem 1.5rem",
               textAlign: "center",
-              fontSize: 12,
+              fontSize: 13,
               color: "#94A3B8",
             }}
           >
             Belum ada aktivitas QA pada periode ini. Coba pilih periode lain.
           </div>
         ) : (
-          <div style={{ flex: 1, minHeight: 0, overflowX: "auto", overflowY: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "auto" }}>
+          <div style={{ flex: 1, minHeight: 0, overflowX: "auto" }}>
+            <table
+              style={{ width: "100%", minWidth: 980, tableLayout: "fixed", borderCollapse: "collapse", fontSize: 14 }}
+            >
               <colgroup>
-                <col style={{ minWidth: 230 }} />
-                <col style={{ width: 130 }} />
-                <col style={{ width: 130 }} />
-                <col style={{ width: 130 }} />
-                <col style={{ width: 210 }} />
+                <col />
                 <col style={{ width: 120 }} />
+                <col style={{ width: 130 }} />
+                <col style={{ width: 120 }} />
+                <col style={{ width: 110 }} />
+                <col style={{ width: 110 }} />
                 <col style={{ width: 90 }} />
-                <col style={{ width: 140 }} />
+                <col style={{ width: 190 }} />
               </colgroup>
               <thead>
-                <tr>
-                  <th style={th}>QA member</th>
-                  <th style={{ ...th, textAlign: "center" }}>Assigned runs</th>
-                  <th style={{ ...th, textAlign: "center" }}>Executed cases</th>
-                  <th style={{ ...th, textAlign: "center" }}>TCs created</th>
+                <tr style={{ background: HEAD_BG, borderBottom: `1px solid ${LINE}` }}>
+                  <th style={{ ...th, textAlign: "left", paddingLeft: 22 }}>QA member</th>
+                  <th style={th}>Assigned runs</th>
+                  <th style={th}>Executed cases</th>
+                  <th style={th}>TCs created</th>
                   <th style={th}>Pass rate</th>
-                  <th style={{ ...th, textAlign: "center" }}>Bugs found</th>
-                  <th style={{ ...th, textAlign: "center" }}>Score</th>
-                  <th style={th}>Status</th>
+                  <th style={th}>Bugs found</th>
+                  <th style={th}>Score</th>
+                  <th style={{ ...th, textAlign: "left", paddingLeft: 28, paddingRight: 22 }}>Status</th>
                 </tr>
               </thead>
               <tbody>
@@ -597,96 +711,7 @@ export function QaPerformanceView({ data }: { data: QaPerformancePayload }) {
             </table>
           </div>
         )}
-      </Card>
-    </div>
-  );
-}
-
-function MemberRow({ member }: { member: QaPerformanceMember }) {
-  const tone = BADGE_COLOR[member.badge];
-  return (
-    <tr style={rowDivider}>
-      {/* QA member: avatar inisial + nama + role */}
-      <td style={td}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-          <InitialsAvatar name={member.name ?? "(tanpa nama)"} size={24} />
-          <div style={{ minWidth: 0 }}>
-            <div
-              style={{
-                fontSize: 12,
-                fontWeight: 500,
-                color: "#1E293B",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-              }}
-              title={member.name ?? "(tanpa nama)"}
-            >
-              {member.name ?? "(tanpa nama)"}
-            </div>
-            <div style={{ fontSize: 11, color: "#94A3B8" }}>{member.roleLabel}</div>
-          </div>
-        </div>
-      </td>
-
-      <td style={{ ...td, textAlign: "center", fontWeight: 600, color: "#334155" }}>
-        {member.assignedRuns}
-      </td>
-      <td style={{ ...td, textAlign: "center", fontWeight: 600, color: "#334155" }}>
-        {member.executedCases}
-      </td>
-      <td style={{ ...td, textAlign: "center", fontWeight: 600, color: "#334155" }}>
-        {member.createdCases}
-      </td>
-
-      {/* Pass rate: bar + angka */}
-      <td style={td}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ flex: 1, minWidth: 90 }}>
-            {/* Bar selalu emerald (sinyal sukses); angka tetap berwarna sesuai ambang. */}
-            <ProgressBar value={member.passRate ?? 0} color="#10B981" height={6} />
-          </span>
-          <span
-            style={{
-              fontSize: 12,
-              fontWeight: 600,
-              color: passRateColor(member.passRate),
-              minWidth: 42,
-              textAlign: "right",
-            }}
-            title={`${member.passed} pass · ${member.failed} fail`}
-          >
-            {member.passRate === null ? "—" : `${member.passRate}%`}
-          </span>
-        </div>
-      </td>
-
-      <td style={{ ...td, textAlign: "center", fontWeight: 600, color: "#334155" }}>
-        {member.bugsFound}
-      </td>
-      <td style={{ ...td, textAlign: "center", fontWeight: 700, color: "#1E293B" }}>
-        {member.score}
-      </td>
-
-      <td style={td}>
-        {/* Status minimalis: dot warna + teks, tanpa pill/latar. */}
-        <span
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 6,
-            color: tone,
-            fontSize: 12,
-            fontWeight: 600,
-            whiteSpace: "nowrap",
-          }}
-        >
-          <span
-            style={{ width: 6, height: 6, borderRadius: 999, background: tone, flexShrink: 0 }}
-          />
-          {BADGE_LABEL[member.badge]}
-        </span>
-      </td>
-    </tr>
+      </div>
+    </>
   );
 }

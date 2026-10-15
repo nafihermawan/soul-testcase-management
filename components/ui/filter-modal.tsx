@@ -18,6 +18,8 @@ export function FilterModal({
   onApply,
   children,
   triggerStyle,
+  triggerClassName,
+  iconSize = 13,
 }: {
   title: string;
   activeCount: number;
@@ -29,6 +31,10 @@ export function FilterModal({
    *  Kalau `background`/`borderColor` di-override, nilai itu sekaligus dipakai
    *  sebagai warna yang dipulihkan setelah hover. */
   triggerStyle?: CSSProperties;
+  /** Kelas tambahan pada tombol pemicu (mis. override radius). */
+  triggerClassName?: string;
+  /** Ukuran ikon sliders pada tombol pemicu. */
+  iconSize?: number;
 }) {
   const [open, setOpen] = useState(false);
   // `mounted` menahan portal selama animasi keluar; `shown` adalah target
@@ -92,6 +98,7 @@ export function FilterModal({
       <button
         type="button"
         onClick={() => setOpen(true)}
+        className={triggerClassName}
         style={{
           display: "inline-flex",
           alignItems: "center",
@@ -121,7 +128,7 @@ export function FilterModal({
           e.currentTarget.style.borderColor = restoreBorder;
         }}
       >
-        <SlidersHorizontal size={13} />
+        <SlidersHorizontal size={iconSize} />
         Filter
         {activeCount > 0 && (
           <span

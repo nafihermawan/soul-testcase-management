@@ -33,7 +33,23 @@ const menuItemStyle = (destructive?: boolean): React.CSSProperties => ({
   whiteSpace: "nowrap",
 });
 
-export function RowActionsMenu({ actions }: { actions: RowAction[] }) {
+export function RowActionsMenu({
+  actions,
+  ariaLabel = "Aksi lainnya",
+  iconSize = 17,
+  iconColor,
+  triggerStyle,
+  triggerClassName,
+}: {
+  actions: RowAction[];
+  /** aria-label + tooltip tombol pemicu (mis. "Aksi untuk bug-2026-938"). */
+  ariaLabel?: string;
+  iconSize?: number;
+  iconColor?: string;
+  triggerStyle?: React.CSSProperties;
+  /** Kelas tambahan pada tombol pemicu (mis. override radius). */
+  triggerClassName?: string;
+}) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
@@ -74,12 +90,12 @@ export function RowActionsMenu({ actions }: { actions: RowAction[] }) {
       <button
         ref={btnRef}
         type="button"
-        aria-label="Aksi lainnya"
+        aria-label={ariaLabel}
         aria-haspopup="menu"
         aria-expanded={open}
-        title="Aksi lainnya"
+        title={ariaLabel}
         onClick={() => (open ? setOpen(false) : openMenu())}
-        className="kebab-btn"
+        className={triggerClassName ? `kebab-btn ${triggerClassName}` : "kebab-btn"}
         style={{
           display: "flex",
           alignItems: "center",
@@ -88,12 +104,13 @@ export function RowActionsMenu({ actions }: { actions: RowAction[] }) {
           borderRadius: 999,
           border: "none",
           background: "transparent",
-          color: "var(--text-secondary)",
+          color: iconColor ?? "var(--text-secondary)",
           flexShrink: 0,
           cursor: "pointer",
+          ...triggerStyle,
         }}
       >
-        <MoreVertical size={17} />
+        <MoreVertical size={iconSize} />
       </button>
 
       {open &&

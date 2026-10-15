@@ -1,9 +1,22 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ExternalLink, FileText, Play, Plus, Search, Trash2 } from "lucide-react";
+import { createPortal } from "react-dom";
+import {
+  Check,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  ExternalLink,
+  FileText,
+  Play,
+  Plus,
+  Search,
+  Trash2,
+} from "lucide-react";
 import { deleteBug, updateBugStatus } from "@/lib/actions/automation-bugs";
 import {
   RowActionsMenu,
@@ -13,10 +26,8 @@ import { ConfirmDialog, Toast, useToast } from "@/components/ui/feedback";
 import { FilterModal } from "@/components/ui/filter-modal";
 import { CustomSelect, filterLabelStyle } from "@/components/ui/custom-select";
 import { MonthPicker } from "@/components/ui/month-picker";
-import { Select } from "@/components/ui/select";
 import { BugDetailModal } from "@/components/bugs/bug-detail-modal";
 import { ReportGeneralBugModal } from "@/components/bugs/report-general-bug-modal";
-import { HistoryPagination } from "@/components/test-runs/history-pagination";
 import { entityCode } from "@/lib/format";
 import { ENVIRONMENT_OPTIONS, bugSlaDays, isBugOverdue } from "@/lib/qa-metrics";
 import type { AttachmentItem, BugSourceType } from "@/types/api";
@@ -62,26 +73,79 @@ type BugTab = "ALL" | BugSourceType;
 /** Jumlah baris per halaman; sengaja tetap (tanpa opsi ubah dari UI). */
 const BUGS_PER_PAGE = 25;
 
-/**
- * Lebar kolom beku ID (px) — sekaligus offset `left` kolom "Title & Linked TC"
- * yang ikut di-sticky. Dipakai di <colgroup> supaya lebarnya presisi.
- */
-const STICKY_ID_WIDTH = 110;
+/* ------------------------------- Tokens ------------------------------- */
 
-/**
- * Lebar minimum kolom "Title & Linked TC" — kolom ini sengaja TANPA lebar tetap
- * supaya mengisi seluruh sisa ruang tabel, jadi tabel tidak "breakout" ke kanan.
- */
-const TITLE_MIN_WIDTH = 280;
+const SANS = '"Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif';
+const MONO = '"Geist Mono", ui-monospace, monospace';
 
-/**
- * Total lebar kolom SELAIN Title (semua kolom tetap) — dasar minWidth tabel.
- * Urutan: ID · Test Run · Module · Environment · Severity · Status ·
- *         Created By · Created Date · Aksi.
- */
-// Kolom Aksi: satu tombol kebab (~29px) di tengah dengan px-4.
-// Severity dilebarkan (90→122) agar label severity + badge "Overdue" muat.
-const FIXED_COLUMNS_WIDTH = 110 + 140 + 110 + 80 + 122 + 90 + 130 + 100 + 72;
+const CARD_BORDER = "#E3E7EE";
+const HEADER_DIVIDER = "#E8ECF1";
+const LINE = "#EEF1F5";
+const ROW_DIVIDER = "#F1F4F8";
+const HEAD_BG = "#F8FAFC";
+const PAGER_BG = "#FAFBFC";
+const YELLOW = "#FFC348";
+const LINK = "#1D4ED8";
+const LINK_HOVER = "#1E3A8A";
+
+/** Gaya angka (bug ID & nomor halaman): Geist Mono. */
+const mono: CSSProperties = { fontFamily: MONO };
+
+/** Label aksesibilitas yang disembunyikan secara visual. */
+const srOnly: CSSProperties = {
+  position: "absolute",
+  width: 1,
+  height: 1,
+  padding: 0,
+  margin: -1,
+  overflow: "hidden",
+  clip: "rect(0 0 0 0)",
+  whiteSpace: "nowrap",
+  border: 0,
+};
+
+/** Severity: kotak 8px + teks (Title Case), tanpa pill. */
+const SEVERITY: Record<string, { square: string; text: string; label: string }> = {
+  CRITICAL: { square: "#B91C1C", text: "#B91C1C", label: "Critical" },
+  HIGH: { square: "#EA580C", text: "#C2410C", label: "High" },
+  MEDIUM: { square: "#CA8A04", text: "#854D0E", label: "Medium" },
+  LOW: { square: "#64748B", text: "#475569", label: "Low" },
+};
+
+/** Status: label + warna titik (tanpa pill). RESOLVED = legacy → tampil Closed. */
+const STATUS_LABEL: Record<string, string> = {
+  OPEN: "Open",
+  IN_PROGRESS: "In Progress",
+  CLOSED: "Closed",
+  RESOLVED: "Closed",
+};
+const STATUS_DOT: Record<string, string> = {
+  OPEN: "#C2410C",
+  IN_PROGRESS: "#1D4ED8",
+  CLOSED: "#15803D",
+  RESOLVED: "#15803D",
+};
+
+const statusLabelOf = (s: BugRow["status"]) => STATUS_LABEL[s] ?? s;
+const statusDotOf = (s: BugRow["status"]) => STATUS_DOT[s] ?? "#64748B";
+
+/** Warna environment: PROD = danger, lainnya netral. */
+const envColor = (env: string) => (env.toUpperCase() === "PROD" ? "#B91C1C" : "#475569");
+
+/** Tanggal ringkas berbahasa Indonesia, mis. "09 Okt 2026". */
+const formatDate = (iso: string) =>
+  new Date(iso).toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" });
+
+/** Inisial avatar: huruf pertama dari maksimal 2 kata. */
+function initialsOf(name: string | null | undefined): string {
+  if (!name) return "—";
+  return name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((w) => w.charAt(0).toUpperCase())
+    .join("");
+}
 
 /**
  * Klasifikasi sumber bug. Field `sourceType` dari API dipakai kalau ada, tapi
@@ -100,25 +164,172 @@ const BUG_STATUS_RANK: Record<BugRow["status"], number> = {
   CLOSED: 3,
 };
 
-/**
- * Warna & bobot teks status bug (teks polos, tanpa pill/box).
- * Alur status: Open → In Progress → Closed. 'Resolved' sudah dihapus dari
- * dropdown; entri RESOLVED di bawah hanya fallback tampilan (legacy).
- */
-const statusStyle: Record<BugRow["status"], { color: string; weight: number }> = {
-  OPEN: { color: "#E11D48", weight: 600 }, // rose-600
-  IN_PROGRESS: { color: "#D97706", weight: 600 }, // amber-600
-  RESOLVED: { color: "#047857", weight: 500 }, // legacy → tampil seperti Closed
-  CLOSED: { color: "#047857", weight: 500 }, // emerald-700, medium
-};
+/* ------------------------------ Primitives ---------------------------- */
 
-/** Warna teks severity bug (teks polos, tanpa pill/box). */
-const severityColor: Record<string, string> = {
-  CRITICAL: "#DC2626", // red-600
-  HIGH: "#D97706", // amber-600
-  MEDIUM: "#2563EB", // blue-600
-  LOW: "#64748B", // slate-500
-};
+function Square({ color }: { color: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: color, flexShrink: 0 }}
+    />
+  );
+}
+
+function Dot({ color }: { color: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      style={{ display: "inline-block", width: 7, height: 7, borderRadius: "50%", background: color, flexShrink: 0 }}
+    />
+  );
+}
+
+/** Tombol status yang membuka menu ubah status (Open / In Progress / Closed). */
+function StatusMenu({
+  status,
+  onSelect,
+}: {
+  status: BugRow["status"];
+  onSelect: (next: BugRow["status"]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+
+  const openMenu = () => {
+    const r = btnRef.current?.getBoundingClientRect();
+    if (r) setPos({ top: r.bottom + 4, left: r.left });
+    setOpen(true);
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (btnRef.current?.contains(t)) return;
+      if ((e.target as HTMLElement).closest?.("[data-status-menu]")) return;
+      setOpen(false);
+    };
+    const close = () => setOpen(false);
+    document.addEventListener("mousedown", onDown);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+    };
+  }, [open]);
+
+  const label = statusLabelOf(status);
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        type="button"
+        className="btn-radius-8"
+        aria-label={`Ubah status: ${label}`}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={(e) => {
+          e.stopPropagation();
+          if (open) setOpen(false);
+          else openMenu();
+        }}
+        onMouseDown={(e) => e.stopPropagation()}
+        onMouseEnter={(e) => (e.currentTarget.style.background = "#F1F5F9")}
+        onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 7,
+          height: 32,
+          padding: "0 8px 0 10px",
+          marginLeft: -10,
+          border: "1px solid transparent",
+          background: "transparent",
+          fontSize: 13,
+          fontWeight: 500,
+          color: "#0F172A",
+          cursor: "pointer",
+          whiteSpace: "nowrap",
+        }}
+      >
+        <Dot color={statusDotOf(status)} />
+        {label}
+        <ChevronDown size={14} color="#94A3B8" aria-hidden="true" />
+      </button>
+
+      {open &&
+        pos &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            role="menu"
+            data-status-menu
+            style={{
+              position: "fixed",
+              top: pos.top,
+              left: pos.left,
+              minWidth: 150,
+              background: "#fff",
+              border: "1px solid #E2E8F0",
+              borderRadius: 10,
+              boxShadow: "0 12px 24px -6px rgba(15, 23, 42, 0.18)",
+              padding: 4,
+              zIndex: 400,
+              display: "flex",
+              flexDirection: "column",
+              gap: 2,
+              animation: "dropdownIn 0.12s ease-out",
+            }}
+          >
+            {(["OPEN", "IN_PROGRESS", "CLOSED"] as const).map((value) => {
+              const active = value === status;
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={active}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setOpen(false);
+                    if (!active) onSelect(value);
+                  }}
+                  style={{
+                    width: "100%",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    padding: "7px 9px",
+                    border: "none",
+                    borderRadius: 6,
+                    background: "transparent",
+                    color: active ? "#0F172A" : "#334155",
+                    fontSize: 13,
+                    fontWeight: active ? 600 : 500,
+                    cursor: "pointer",
+                    textAlign: "left",
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = "#F8FAFC")}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                >
+                  <Dot color={statusDotOf(value)} />
+                  <span style={{ flex: 1 }}>{statusLabelOf(value)}</span>
+                  {active && <Check size={13} color="#B45309" aria-hidden="true" />}
+                </button>
+              );
+            })}
+          </div>,
+          document.body
+        )}
+    </>
+  );
+}
+
+/* -------------------------------- Page -------------------------------- */
 
 export function BugsPageClient({
   bugs,
@@ -151,7 +362,7 @@ export function BugsPageClient({
     setLocalBugs((prev) => prev.map((b) => (b.id === bugId ? { ...b, ...patch } : b)));
   };
 
-  // Filter pencarian header banner
+  // Filter pencarian toolbar
   const [query, setQuery] = useState("");
   // Filter yang sudah DITERAPKAN (committed).
   const [sevFilter, setSevFilter] = useState<string>("");
@@ -250,6 +461,22 @@ export function BugsPageClient({
   const currentPage = Math.min(page, totalPages);
   const pagedBugs = visibleBugs.slice((currentPage - 1) * BUGS_PER_PAGE, currentPage * BUGS_PER_PAGE);
 
+  // Jendela nomor halaman (maks 7 angka + elipsis), tanpa teks "Halaman x dari y".
+  const pageItems: (number | "…")[] = [];
+  const pushRange = (a: number, b: number) => {
+    for (let i = a; i <= b; i++) pageItems.push(i);
+  };
+  if (totalPages <= 7) pushRange(1, totalPages);
+  else {
+    const lo = Math.max(1, currentPage - 1);
+    const hi = Math.min(totalPages, currentPage + 1);
+    if (lo > 2) pageItems.push(1, "…");
+    else if (lo === 2) pageItems.push(1);
+    pushRange(lo, hi);
+    if (hi < totalPages - 1) pageItems.push("…", totalPages);
+    else if (hi === totalPages - 1) pageItems.push(totalPages);
+  }
+
   /**
    * Ubah status bug langsung di barisnya. Server tetap yang menulis (termasuk
    * auto-PASS hasil run yang FAIL); daftar lokal di-patch di tempat supaya
@@ -279,590 +506,591 @@ export function BugsPageClient({
     showToast("Bug dihapus.", "success");
   };
 
+  const th: CSSProperties = {
+    padding: "11px 10px",
+    fontSize: 12,
+    fontWeight: 500,
+    color: "#64748B",
+    textAlign: "left",
+    whiteSpace: "nowrap",
+  };
+  const td: CSSProperties = { padding: "12px 10px", verticalAlign: "middle" };
+  const pagerBtn: CSSProperties = {
+    width: 36,
+    height: 36,
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    border: "none",
+    background: "transparent",
+    padding: 0,
+  };
+
   return (
     <>
-      {/* Single Card Wrapper — satu card utuh yang membungkus header, kontrol
-          (tab / search / filter), dan tabel. Border & shadow hanya ada di
-          wrapper ini; tidak ada card tambahan di dalamnya. */}
+      {/* Satu card mengisi seluruh area konten: Header → inset divider → Toolbar
+          → Tabel (flex 1) → Pagination di dasar card. */}
       <div
         style={{
-          background: "#fff",
-          border: "1px solid rgba(226, 232, 240, 0.8)", // border-slate-200/80
-          borderRadius: 12, // rounded-xl
-          boxShadow: "0 1px 2px rgba(16, 24, 40, 0.04)", // shadow-sm
+          flex: 1,
+          minHeight: 0,
+          display: "flex",
+          flexDirection: "column",
+          background: "#ffffff",
+          border: `1px solid ${CARD_BORDER}`,
+          borderRadius: 18,
           overflow: "hidden",
+          fontFamily: SANS,
+          color: "#0F172A",
         }}
       >
-      {/* Header card — judul & deskripsi di paling atas, dipisah divider tipis
-          (slate-100) dari area kontrol di bawahnya. */}
-      <div
-        style={{
-          padding: "20px 24px",
-          borderBottom: "1px solid #F1F5F9", // border-slate-100
-        }}
-      >
-        <div style={{ minWidth: 0 }}>
-          <h1
-            style={{
-              fontSize: 20,
-              fontWeight: 700,
-              color: "#1E293B",
-              letterSpacing: "-0.025em",
-              margin: 0,
-              lineHeight: 1.2,
-            }}
-          >
+        {/* Header */}
+        <header
+          style={{
+            padding: "24px 22px 20px 22px",
+            display: "flex",
+            flexDirection: "column",
+            gap: 6,
+            flexShrink: 0,
+          }}
+        >
+          <h1 style={{ fontSize: 24, fontWeight: 600, letterSpacing: "-0.02em", color: "#0F172A", margin: 0, lineHeight: 1.2 }}>
             Bugs Tracker
           </h1>
-          <p
-            style={{
-              fontSize: 12,
-              fontWeight: 400,
-              color: "#64748B",
-              margin: "4px 0 0",
-            }}
-          >
+          <p style={{ maxWidth: 720, fontSize: 14, lineHeight: 1.5, color: "#475569", margin: 0 }}>
             Daftar bug dari hasil eksekusi test case maupun temuan ad-hoc. Ubah status untuk melacak penyelesaian.
           </p>
-        </div>
-      </div>
+        </header>
 
-      {/* Controls bar — tab (kiri) & search/filter (kanan), tepat di bawah
-          header. Inset horizontal `px-6` (24px) agar sejajar dengan header &
-          tabel. CLASSIC UNDERLINE TAB: `align-items: flex-end` +
-          `padding-bottom: 0` membuat garis bawah tab menempel persis pada
-          border pemisah ke tabel. */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "flex-end",
-          justifyContent: "space-between",
-          gap: "1rem",
-          padding: "12px 24px 0",
-          borderBottom: "1px solid #E2E8F0",
-          flexWrap: "wrap",
-        }}
-      >
-        {/* KIRI: navigasi sumber bug sebagai CLASSIC UNDERLINE TAB — tanpa box/pill,
-            hanya teks; tab aktif diberi garis 2px amber yang `marginBottom: -1`
-            supaya menempel/overlay pada border-bottom toolbar. */}
-        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-          {tabs.map((t) => {
-            const active = tab === t.key;
-            return (
-              <button
-                key={t.key}
-                type="button"
-                aria-pressed={active}
-                onClick={() => setTab(t.key)}
-                style={{
-                  padding: "0 4px 12px",
-                  border: "none",
-                  borderBottom: active ? "2px solid #F59E0B" : "2px solid transparent",
-                  marginBottom: -1,
-                  background: "transparent",
-                  color: active ? "#0F172A" : "#64748B",
-                  fontWeight: active ? 700 : 500,
-                  fontSize: "0.75rem",
-                  cursor: "pointer",
-                  transition: "color 0.15s ease, border-color 0.15s ease",
-                }}
-                onMouseEnter={(e) => {
-                  if (!active) e.currentTarget.style.color = "#1E293B";
-                }}
-                onMouseLeave={(e) => {
-                  if (!active) e.currentTarget.style.color = "#64748B";
-                }}
-              >
-                {t.label}
-              </button>
-            );
-          })}
-        </div>
+        {/* Inset divider (tidak full width — sejajar teks header & toolbar) */}
+        <div style={{ margin: "0 22px", borderBottom: `1px solid ${HEADER_DIVIDER}`, flexShrink: 0 }} />
 
-        {/* KANAN: pencarian, filter, dan aksi laporkan bug. `paddingBottom: 8`
-            mengangkat kontrol 32px ini sedikit dari garis pembatas, sejajar
-            dengan teks tab di sebelahnya. */}
+        {/* Toolbar: tab (kiri) + search/filter (kanan). Garis bawahnya full width
+            dan menyambung ke header tabel. */}
         <div
           style={{
             display: "flex",
-            alignItems: "center",
-            justifyContent: "flex-end",
-            gap: "0.625rem",
-            marginLeft: "auto",
-            paddingBottom: 8,
             flexWrap: "wrap",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 12,
+            padding: "4px 22px 0 22px",
+            borderBottom: `1px solid ${LINE}`,
+            flexShrink: 0,
           }}
         >
+          <div role="tablist" aria-label="Sumber bug" style={{ display: "flex", gap: 24 }}>
+            {tabs.map((t) => {
+              const active = tab === t.key;
+              return (
+                <button
+                  key={t.key}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => setTab(t.key)}
+                  style={{
+                    height: 56,
+                    padding: 0,
+                    border: "none",
+                    borderBottom: `2px solid ${active ? YELLOW : "transparent"}`,
+                    background: "transparent",
+                    fontSize: 14,
+                    fontWeight: active ? 600 : 500,
+                    color: active ? "#0F172A" : "#64748B",
+                    cursor: "pointer",
+                    transition: "color 0.15s ease, border-color 0.15s ease",
+                  }}
+                >
+                  {t.label}
+                </button>
+              );
+            })}
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", flexWrap: "wrap" }}>
+            <label style={{ position: "relative", display: "inline-flex" }}>
+              <span style={srOnly}>Cari bug</span>
+              <Search
+                size={16}
+                color="#64748B"
+                aria-hidden="true"
+                style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}
+              />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Cari bug…"
+                style={{
+                  width: 260,
+                  height: 40,
+                  borderRadius: 10,
+                  border: "1px solid #DDE2E9",
+                  background: "#ffffff",
+                  fontSize: 14,
+                  color: "#0F172A",
+                  padding: "0 12px 0 36px",
+                  boxSizing: "border-box",
+                  outline: "none",
+                }}
+              />
+            </label>
+
+            <FilterModal
+              title="Filter Bugs"
+              triggerClassName="btn-radius-10"
+              iconSize={16}
+              triggerStyle={{
+                height: 40,
+                padding: "0 14px",
+                border: "1px solid #FFC348",
+                background: "#FFF8E8",
+                color: "#0F172A",
+                fontSize: 14,
+                fontWeight: 600,
+                gap: 8,
+              }}
+              activeCount={
+                (sevFilter ? 1 : 0) +
+                (statusFilter ? 1 : 0) +
+                (envFilter ? 1 : 0) +
+                (monthFilter ? 1 : 0)
+              }
+              onReset={() => {
+                setDraftSev("");
+                setDraftStatus("");
+                setDraftEnv("");
+                setDraftMonth("");
+              }}
+              onApply={() => {
+                setSevFilter(draftSev);
+                setStatusFilter(draftStatus);
+                setEnvFilter(draftEnv);
+                setMonthFilter(draftMonth);
+              }}
+            >
+              <div>
+                <span style={filterLabelStyle}>Severity</span>
+                <CustomSelect
+                  ariaLabel="Filter severity"
+                  value={draftSev}
+                  onChange={setDraftSev}
+                  options={[
+                    { value: "", label: "Semua Severity" },
+                    { value: "CRITICAL", label: "Critical" },
+                    { value: "HIGH", label: "High" },
+                    { value: "MEDIUM", label: "Medium" },
+                    { value: "LOW", label: "Low" },
+                  ]}
+                />
+              </div>
+
+              <div>
+                <span style={filterLabelStyle}>Status</span>
+                <CustomSelect
+                  ariaLabel="Filter status"
+                  value={draftStatus}
+                  onChange={setDraftStatus}
+                  options={[
+                    { value: "", label: "Semua Status" },
+                    { value: "OPEN", label: "Open" },
+                    { value: "IN_PROGRESS", label: "In Progress" },
+                    { value: "CLOSED", label: "Closed" },
+                  ]}
+                />
+              </div>
+
+              <div>
+                <span style={filterLabelStyle}>Environment</span>
+                <CustomSelect
+                  ariaLabel="Filter environment"
+                  value={draftEnv}
+                  onChange={setDraftEnv}
+                  options={[
+                    { value: "", label: "Semua Environment" },
+                    ...ENVIRONMENT_OPTIONS.map((env) => ({ value: env, label: env })),
+                  ]}
+                />
+              </div>
+
+              <div>
+                <span style={filterLabelStyle}>Periode Laporan</span>
+                <MonthPicker
+                  ariaLabel="Filter periode laporan"
+                  value={draftMonth}
+                  onChange={setDraftMonth}
+                />
+              </div>
+            </FilterModal>
+
+            {/* Tombol lapor bug hanya relevan di tab General Findings */}
+            {tab === "GENERAL_FINDING" && (
+              <button
+                type="button"
+                className="btn-radius-10"
+                onClick={() => setReportOpen(true)}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 8,
+                  height: 40,
+                  padding: "0 16px",
+                  border: "none",
+                  background: YELLOW,
+                  color: "#0F172A",
+                  fontSize: 14,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                <Plus size={15} aria-hidden="true" /> Laporkan Bug
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Tabel (mengisi sisa tinggi card; scroll horizontal di dalam card) */}
+        {visibleBugs.length === 0 ? (
           <div
             style={{
+              flex: 1,
+              minHeight: 0,
               display: "flex",
               alignItems: "center",
-              gap: "0.4rem",
-              // Tinggi dikunci 32px (h-8) + padding horizontal saja, agar sejajar
-              // dengan tombol Filter & Laporkan Bug di sebelahnya.
-              height: 32,
-              padding: "0 0.7rem",
-              borderRadius: 8,
-              border: "1px solid #D1D5DB",
-              background: "#fff",
+              justifyContent: "center",
+              padding: "3rem 1.5rem",
+              textAlign: "center",
+              color: "#64748B",
+              fontSize: 14,
             }}
           >
-            <Search size={14} color="#9CA3AF" />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Cari bug…"
-              style={{ border: "none", outline: "none", fontSize: "0.8rem", width: 180, background: "transparent" }}
-            />
+            {bugs.length === 0
+              ? "Belum ada bug yang tercatat di sistem."
+              : tab === "ALL"
+                ? "Tidak ada bug yang cocok dengan pencarian / filter."
+                : `Belum ada bug pada kategori ${tab === "EXECUTION" ? "Test Run Bugs" : "General Findings"}.`}
           </div>
-          <FilterModal
-            title="Filter Bugs"
-            // Gaya tombol Filter khusus halaman ini: teks amber-600, border
-            // amber-300/80, px-3.5, shadow-sm. `height: 32` bawaan sengaja
-            // dipertahankan (bukan `py-2`) supaya tinggi tetap pas 32px walau
-            // badge jumlah filter muncul, jadi sejajar dengan search bar.
-            triggerStyle={{
-              padding: "0 14px",
-              color: "#D97706",
-              borderColor: "rgba(252, 211, 77, 0.8)",
-              boxShadow: "0 1px 2px rgba(15, 23, 42, 0.05)",
-            }}
-            activeCount={
-              (sevFilter ? 1 : 0) +
-              (statusFilter ? 1 : 0) +
-              (envFilter ? 1 : 0) +
-              (monthFilter ? 1 : 0)
-            }
-            onReset={() => {
-              setDraftSev("");
-              setDraftStatus("");
-              setDraftEnv("");
-              setDraftMonth("");
-            }}
-            onApply={() => {
-              setSevFilter(draftSev);
-              setStatusFilter(draftStatus);
-              setEnvFilter(draftEnv);
-              setMonthFilter(draftMonth);
-            }}
-          >
-            <div>
-              <span style={filterLabelStyle}>Severity</span>
-              <CustomSelect
-                ariaLabel="Filter severity"
-                value={draftSev}
-                onChange={setDraftSev}
-                options={[
-                  { value: "", label: "Semua Severity" },
-                  { value: "CRITICAL", label: "Critical" },
-                  { value: "HIGH", label: "High" },
-                  { value: "MEDIUM", label: "Medium" },
-                  { value: "LOW", label: "Low" },
-                ]}
-              />
-            </div>
-
-            <div>
-              <span style={filterLabelStyle}>Status</span>
-              <CustomSelect
-                ariaLabel="Filter status"
-                value={draftStatus}
-                onChange={setDraftStatus}
-                options={[
-                  { value: "", label: "Semua Status" },
-                  { value: "OPEN", label: "Open" },
-                  { value: "IN_PROGRESS", label: "In Progress" },
-                  { value: "CLOSED", label: "Closed" },
-                ]}
-              />
-            </div>
-
-            <div>
-              <span style={filterLabelStyle}>Environment</span>
-              <CustomSelect
-                ariaLabel="Filter environment"
-                value={draftEnv}
-                onChange={setDraftEnv}
-                options={[
-                  { value: "", label: "Semua Environment" },
-                  ...ENVIRONMENT_OPTIONS.map((env) => ({ value: env, label: env })),
-                ]}
-              />
-            </div>
-
-            <div>
-              <span style={filterLabelStyle}>Periode Laporan</span>
-              <MonthPicker
-                ariaLabel="Filter periode laporan"
-                value={draftMonth}
-                onChange={setDraftMonth}
-              />
-            </div>
-          </FilterModal>
-          {/* Tombol lapor bug hanya relevan di tab General Findings */}
-          {tab === "GENERAL_FINDING" && (
-            <button
-              type="button"
-              onClick={() => setReportOpen(true)}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "0.5rem",
-                // Samakan tinggi dengan search bar & tombol Filter (h-8).
-                height: 32,
-                padding: "0 1rem",
-                borderRadius: 8,
-                border: "none",
-                background: "#FFC348",
-                color: "#0F172A",
-                fontSize: "0.75rem",
-                fontWeight: 700,
-                boxShadow: "0 1px 2px rgba(15, 23, 42, 0.08)",
-                cursor: "pointer",
-                transition: "background-color 0.15s ease",
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = "#F0B53D")}
-              onMouseLeave={(e) => (e.currentTarget.style.background = "#FFC348")}
-            >
-              <Plus size={14} /> Laporkan Bug
-            </button>
-          )}
-          {/* /KANAN */}
-        </div>
-      </div>
-
-      {/* Daftar Bug Table */}
-      {visibleBugs.length === 0 ? (
-        <div
-          style={{
-            padding: "3rem 1.5rem",
-            textAlign: "center",
-            color: "var(--text-muted)",
-            fontSize: "0.9rem",
-          }}
-        >
-          {bugs.length === 0
-            ? "Belum ada bug yang tercatat di sistem."
-            : tab === "ALL"
-              ? "Tidak ada bug yang cocok dengan pencarian / filter."
-              : `Belum ada bug pada kategori ${tab === "EXECUTION" ? "Test Run Bugs" : "General Findings"}.`}
-        </div>
-      ) : (
-        <div
-          style={{
-            // Tanpa padding horizontal: inset kiri/kanan tabel datang dari sel
-            // pertama (pl-6) & terakhir (pr-6), jadi pas 24px seperti header &
-            // controls bar di atasnya.
-            padding: "8px 0",
-          }}
-        >
-          <div style={{ overflow: "auto", maxHeight: 620 }}>
-            <table
-              className="bugs-table"
-              style={{
-                width: "100%",
-                // Semua kolom non-Title lebarnya dipatok <colgroup>; Title tanpa
-                // lebar tetap sehingga menyerap sisa ruang. minWidth menjaga
-                // kolom tetap tidak terhimpit di layar sempit (wrapper scroll).
-                minWidth: FIXED_COLUMNS_WIDTH + TITLE_MIN_WIDTH,
-                borderCollapse: "collapse",
-                // Seluruh teks tabel (th & td) dipatok 12px (text-xs); nilai
-                // ini jadi basis semua sel supaya seragam.
-                fontSize: 12,
-                tableLayout: "fixed",
-              }}
-            >
-              {/* Lebar kolom tetap supaya offset `left` kolom beku presisi.
-                  Kolom Title sengaja tanpa width (auto) — mengisi sisa tabel. */}
-              <colgroup>
-                <col style={{ width: STICKY_ID_WIDTH }} />
-                {/* Title & Linked TC — auto (tanpa width) */}
-                <col />
-                <col style={{ width: 140 }} />
-                <col style={{ width: 110 }} />
-                <col style={{ width: 80 }} />
-                <col style={{ width: 122 }} />
-                <col style={{ width: 90 }} />
-                <col style={{ width: 130 }} />
-                <col style={{ width: 100 }} />
-                <col style={{ width: 72 }} />
-              </colgroup>
-              <thead>
-                <tr style={{ color: "#64748B", fontSize: 12, textAlign: "left", background: "#F8FAFC", borderBottom: "1px solid #E5E7EB", whiteSpace: "nowrap" }}>
-                  <th
-                    style={{
-                      // pl-6: menyamai inset header & controls bar di atasnya.
-                      padding: "0.6rem 0.5rem 0.6rem 24px",
-                      fontWeight: 600,
-                      position: "sticky",
-                      left: 0,
-                      top: 0,
-                      zIndex: 20,
-                      background: "#F8FAFC",
-                    }}
-                  >
-                    ID
-                  </th>
-                  <th
-                    style={{
-                      padding: "0.6rem 0.5rem",
-                      fontWeight: 600,
-                      position: "sticky",
-                      left: STICKY_ID_WIDTH,
-                      top: 0,
-                      zIndex: 20,
-                      background: "#F8FAFC",
-                      boxShadow: "2px 0 5px -2px rgba(0, 0, 0, 0.1)",
-                    }}
-                  >
-                    Title &amp; Linked TC
-                  </th>
-                  <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600, textAlign: "left", position: "sticky", top: 0, zIndex: 20, background: "#F8FAFC" }}>Test Run</th>
-                  <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600, textAlign: "left", position: "sticky", top: 0, zIndex: 20, background: "#F8FAFC" }}>Module</th>
-                  <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600, textAlign: "left", position: "sticky", top: 0, zIndex: 20, background: "#F8FAFC" }}>Environment</th>
-                  <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600, textAlign: "left", position: "sticky", top: 0, zIndex: 20, background: "#F8FAFC" }}>Severity</th>
-                  <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600, textAlign: "left", position: "sticky", top: 0, zIndex: 20, background: "#F8FAFC" }}>Status</th>
-                  <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600, textAlign: "left", position: "sticky", top: 0, zIndex: 20, background: "#F8FAFC" }}>Created By</th>
-                  <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600, textAlign: "left", position: "sticky", top: 0, zIndex: 20, background: "#F8FAFC" }}>Created Date</th>
-                  <th style={{ padding: "0.6rem 24px", fontWeight: 600, textAlign: "center", position: "sticky", top: 0, zIndex: 20, background: "#F8FAFC" }}>Aksi</th>
-                </tr>
-              </thead>
-              <tbody>
-                {pagedBugs.map((b) => {
-                  const st = statusStyle[b.status];
-                  const sev = b.severity ? (severityColor[b.severity] ?? severityColor.LOW) : null;
-                  // Environment bug; fallback ke environment Test Run terkait.
-                  const env = b.environment ?? b.run?.environment ?? null;
-                  return (
-                    <tr
-                      key={b.id}
-                      onClick={() => setDetailBugId(b.id)}
-                      style={{ borderTop: "1px solid var(--border)", cursor: "pointer", whiteSpace: "nowrap" }}
-                    >
-                      <td
-                        className="bug-sticky-cell"
-                        style={{
-                          // pl-6: sel paling kiri sejajar dengan header & controls bar.
-                          padding: "0.6rem 0.5rem 0.6rem 24px",
-                          position: "sticky",
-                          left: 0,
-                          zIndex: 10,
-                        }}
+        ) : (
+          <>
+            <div style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
+              <table
+                className="bugs-table"
+                style={{
+                  width: "100%",
+                  minWidth: 1180,
+                  tableLayout: "fixed",
+                  borderCollapse: "collapse",
+                  fontSize: 14,
+                }}
+              >
+                <colgroup>
+                  <col />
+                  <col style={{ width: 210 }} />
+                  <col style={{ width: 220 }} />
+                  <col style={{ width: 150 }} />
+                  <col style={{ width: 150 }} />
+                  <col style={{ width: 220 }} />
+                  <col style={{ width: 64 }} />
+                </colgroup>
+                <thead>
+                  <tr style={{ background: HEAD_BG, borderBottom: `1px solid ${LINE}` }}>
+                    <th style={{ ...th, paddingLeft: 22 }}>Bug</th>
+                    <th style={th}>Test Run</th>
+                    <th style={th}>Module · Environment</th>
+                    <th style={th}>Severity</th>
+                    <th style={th}>Status</th>
+                    <th style={th}>Created</th>
+                    <th style={{ ...th, textAlign: "right", paddingRight: 22 }}>Aksi</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pagedBugs.map((b) => {
+                    const code = entityCode("BUG", b.id);
+                    const sev = b.severity ? SEVERITY[b.severity.toUpperCase()] : undefined;
+                    const env = b.environment ?? b.run?.environment ?? null;
+                    const overdue = isBugOverdue(b.createdAt, b.status, b.severity);
+                    // Ikon linked TC: pakai URL eksternal bila ada, jika tidak
+                    // arahkan ke halaman test case internal.
+                    const tcHref = b.externalLink ?? (b.testCase ? `/test-cases/${b.testCase.id}` : null);
+                    return (
+                      <tr
+                        key={b.id}
+                        onClick={() => setDetailBugId(b.id)}
+                        style={{ borderBottom: `1px solid ${ROW_DIVIDER}`, cursor: "pointer" }}
                       >
-                        <span
-                          style={{
-                            fontFamily: "var(--font-mono, monospace)",
-                            color: "#94A3B8",
-                            fontWeight: 400,
-                            fontSize: 12,
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          {entityCode("BUG", b.id)}
-                        </span>
-                      </td>
-                      <td
-                        className="bug-sticky-cell"
-                        style={{
-                          padding: "0.6rem 0.5rem",
-                          position: "sticky",
-                          left: STICKY_ID_WIDTH,
-                          zIndex: 10,
-                          boxShadow: "2px 0 5px -2px rgba(0, 0, 0, 0.1)",
-                          overflow: "hidden",
-                        }}
-                      >
-                        <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", minWidth: 0 }}>
-                          <span
-                            title={b.title}
-                            style={{
-                              fontWeight: 500,
-                              fontSize: 12,
-                              color: "#1E293B",
-                              lineHeight: 1.4,
-                              overflow: "hidden",
-                              textOverflow: "ellipsis",
-                              whiteSpace: "nowrap",
-                              minWidth: 0,
-                            }}
-                          >
-                            {b.title}
-                          </span>
-                          {b.externalLink && (
-                            <a
-                              href={b.externalLink}
-                              target="_blank"
-                              rel="noreferrer"
-                              title={b.externalLink}
+                        {/* Bug: judul (+ ikon linked TC) lalu ID di bawahnya */}
+                        <td style={{ ...td, paddingLeft: 22 }}>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 3, minWidth: 0 }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+                              <span
+                                title={b.title}
+                                style={{
+                                  fontWeight: 500,
+                                  color: "#0F172A",
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                  whiteSpace: "nowrap",
+                                  minWidth: 0,
+                                }}
+                              >
+                                {b.title}
+                              </span>
+                              {tcHref && (
+                                <a
+                                  href={tcHref}
+                                  target={b.externalLink ? "_blank" : undefined}
+                                  rel={b.externalLink ? "noreferrer" : undefined}
+                                  aria-label="Buka linked test case"
+                                  title="Buka linked test case"
+                                  onClick={(e) => e.stopPropagation()}
+                                  style={{ display: "inline-flex", color: LINK, flexShrink: 0 }}
+                                >
+                                  <ExternalLink size={14} aria-hidden="true" />
+                                </a>
+                              )}
+                            </div>
+                            <span style={{ ...mono, fontSize: 12, color: "#64748B", whiteSpace: "nowrap" }}>{code}</span>
+                          </div>
+                        </td>
+
+                        {/* Test Run */}
+                        <td style={td}>
+                          {b.run && b.run.name ? (
+                            <Link
+                              href={`/test-runs/${b.run.id}`}
+                              title={b.run.name}
                               onClick={(e) => e.stopPropagation()}
-                              style={{ display: "inline-flex", alignItems: "center", color: "var(--brand-600)", textDecoration: "none", flexShrink: 0 }}
-                            >
-                              <ExternalLink size={13} />
-                            </a>
-                          )}
-                        </div>
-                      </td>
-                      <td style={{ padding: "0.6rem 0.5rem", textAlign: "left", overflow: "hidden" }}>
-                        {b.run && b.run.name ? (
-                          <Link
-                            href={`/test-runs/${b.run.id}`}
-                            onClick={(e) => e.stopPropagation()}
-                            title={b.run.name}
-                            style={{
-                              display: "inline-block",
-                              fontSize: 12,
-                              fontWeight: 600,
-                              color: "#2563EB",
-                              textDecoration: "none",
-                              maxWidth: "100%",
-                              overflow: "hidden",
-                              textOverflow: "ellipsis",
-                              whiteSpace: "nowrap",
-                              verticalAlign: "bottom",
-                            }}
-                            onMouseEnter={(e) => (e.currentTarget.style.textDecoration = "underline")}
-                            onMouseLeave={(e) => (e.currentTarget.style.textDecoration = "none")}
-                          >
-                            {b.run.name}
-                          </Link>
-                        ) : (
-                          // Temuan ad-hoc (Test Run null/kosong) — teks muted biasa
-                          // (bukan pill) supaya tidak mengalihkan fokus dari data
-                          // utama. Berlaku juga untuk baris di tab General Findings.
-                          <span style={{ fontSize: 12, fontWeight: 400, color: "#94A3B8" }}>
-                            Ad-hoc
-                          </span>
-                        )}
-                      </td>
-                      {/* Module / Suite — "—" muted bila bug tidak punya suite. */}
-                      <td
-                        title={b.suite?.name ?? undefined}
-                        style={{
-                          padding: "0.6rem 0.5rem",
-                          textAlign: "left",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          fontSize: 12,
-                          fontWeight: 500,
-                          color: "#475569",
-                        }}
-                      >
-                        {b.suite?.name ?? (
-                          <span style={{ color: "#94A3B8", fontWeight: 400 }}>—</span>
-                        )}
-                      </td>
-                      <td style={{ padding: "0.6rem 0.5rem", textAlign: "left", overflow: "hidden", textOverflow: "ellipsis" }}>
-                        {env ? (
-                          <span style={{ fontSize: 12, fontWeight: 600, color: "#475569", whiteSpace: "nowrap" }}>
-                            {env}
-                          </span>
-                        ) : (
-                          <span style={{ color: "#94A3B8" }}>—</span>
-                        )}
-                      </td>
-                      <td style={{ padding: "0.6rem 0.5rem", textAlign: "left" }}>
-                        <span style={{ display: "inline-flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}>
-                          {sev ? (
-                            <span style={{ fontSize: 12, fontWeight: 600, color: sev }}>
-                              {b.severity}
-                            </span>
-                          ) : (
-                            "—"
-                          )}
-                          {isBugOverdue(b.createdAt, b.status, b.severity) && (
-                            <span
-                              title={`Overdue — melewati SLA ${bugSlaDays(b.severity)} hari`}
+                              onMouseEnter={(e) => (e.currentTarget.style.color = LINK_HOVER)}
+                              onMouseLeave={(e) => (e.currentTarget.style.color = LINK)}
                               style={{
-                                fontSize: 10,
-                                fontWeight: 700,
-                                color: "#DC2626",
-                                background: "#FEF2F2",
-                                border: "1px solid #FECACA",
-                                borderRadius: 4,
-                                padding: "0 4px",
-                                lineHeight: "16px",
+                                display: "block",
+                                fontWeight: 500,
+                                color: LINK,
+                                textDecoration: "none",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
                               }}
                             >
-                              Overdue
+                              {b.run.name}
+                            </Link>
+                          ) : (
+                            <span
+                              title="Ad-hoc"
+                              style={{
+                                display: "block",
+                                color: "#64748B",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              Ad-hoc
                             </span>
                           )}
-                        </span>
-                      </td>
-                      <td style={{ padding: "0.6rem 0.5rem", textAlign: "left" }}>
-                        <span onClick={(e) => e.stopPropagation()} style={{ display: "inline-flex", maxWidth: 130 }}>
-                          <Select
-                            size="sm"
-                            value={b.status}
-                            ariaLabel="Ubah status bug"
-                            style={{
-                              background: "transparent",
-                              border: "none",
-                              borderRadius: 0,
-                              padding: 0,
-                              boxShadow: "none",
-                              width: "auto",
-                              fontSize: 12,
-                              fontWeight: st.weight,
-                              color: st.color,
-                            }}
-                            onChange={(e) => changeStatus(b.id, e.target.value as BugRow["status"])}
+                        </td>
+
+                        {/* Module · Environment */}
+                        <td style={td}>
+                          <span
+                            title={`${b.suite?.name ?? "—"} · ${env ?? "—"}`}
+                            style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
                           >
-                            <option value="OPEN">Open</option>
-                            <option value="IN_PROGRESS">In Progress</option>
-                            <option value="CLOSED">Closed</option>
-                          </Select>
-                        </span>
-                      </td>
-                      <td style={{ padding: "0.6rem 0.5rem", textAlign: "left", color: "var(--text-secondary)", overflow: "hidden", textOverflow: "ellipsis" }}>
-                        {b.createdBy?.name ?? "—"}
-                      </td>
-                      <td style={{ padding: "0.6rem 0.5rem", textAlign: "left", color: "var(--text-muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                        {new Date(b.createdAt).toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" })}
-                      </td>
-                      <td
-                        // Klik di area aksi tidak boleh ikut membuka modal detail
-                        // (baris tabel punya onClick sendiri).
-                        onClick={(e) => e.stopPropagation()}
-                        style={{ padding: "0.6rem 24px", textAlign: "center" }}
-                      >
-                        <div
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                          }}
-                        >
-                          {/* Semua aksi (Test/Express Run · Detail-Export · Hapus)
-                              dibungkus satu kebab menu. */}
-                          <RowActionsMenu actions={rowActionsFor(b)} />
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-          {visibleBugs.length > 0 && (
-            // Padding sendiri karena wrapper tabel kini tanpa padding horizontal;
-            // 24px (px-6) agar sejajar dengan header & controls bar di atasnya.
-            <div style={{ padding: "0 24px" }}>
-              <HistoryPagination
-                total={visibleBugs.length}
-                page={currentPage}
-                perPage={BUGS_PER_PAGE}
-                baseUrl="/bugs"
-                label="Bug"
-                lockPerPage
-                onPageChange={setPage}
-              />
+                            <span style={{ color: "#334155" }}>{b.suite?.name ?? "—"}</span>
+                            <span style={{ color: "#94A3B8" }}> · </span>
+                            {env ? (
+                              <span style={{ fontWeight: 600, color: envColor(env) }}>{env}</span>
+                            ) : (
+                              <span style={{ color: "#94A3B8" }}>—</span>
+                            )}
+                          </span>
+                        </td>
+
+                        {/* Severity */}
+                        <td style={td}>
+                          {sev ? (
+                            <span
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: 6,
+                                fontSize: 13,
+                                fontWeight: 600,
+                                color: sev.text,
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              <Square color={sev.square} />
+                              {sev.label}
+                            </span>
+                          ) : (
+                            <span style={{ color: "#94A3B8" }}>—</span>
+                          )}
+                        </td>
+
+                        {/* Status (buka menu ubah status) */}
+                        <td style={td}>
+                          <StatusMenu status={b.status} onSelect={(next) => changeStatus(b.id, next)} />
+                        </td>
+
+                        {/* Created: avatar + nama + tanggal (+ Overdue di baris yang sama) */}
+                        <td style={td}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+                            <span
+                              aria-hidden="true"
+                              style={{
+                                width: 28,
+                                height: 28,
+                                borderRadius: "50%",
+                                background: "#EEF1F5",
+                                display: "inline-flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                fontSize: 11,
+                                fontWeight: 600,
+                                color: "#334155",
+                                flexShrink: 0,
+                              }}
+                            >
+                              {initialsOf(b.createdBy?.name)}
+                            </span>
+                            <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
+                              <span
+                                title={b.createdBy?.name ?? undefined}
+                                style={{
+                                  fontSize: 13,
+                                  fontWeight: 500,
+                                  color: "#0F172A",
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                {b.createdBy?.name ?? "—"}
+                              </span>
+                              <span
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: 3,
+                                  fontSize: 12,
+                                  color: "#64748B",
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                {formatDate(b.createdAt)}
+                                {overdue && (
+                                  <>
+                                    <span aria-hidden="true" style={{ color: "#CBD5E1" }}>
+                                      {" "}·{" "}
+                                    </span>
+                                    <span
+                                      title={`Overdue — melewati SLA ${bugSlaDays(b.severity)} hari`}
+                                      style={{
+                                        display: "inline-flex",
+                                        alignItems: "center",
+                                        gap: 3,
+                                        fontSize: 11,
+                                        fontWeight: 600,
+                                        color: "#B91C1C",
+                                      }}
+                                    >
+                                      <Clock size={10} aria-hidden="true" />
+                                      Overdue
+                                    </span>
+                                  </>
+                                )}
+                              </span>
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Aksi (kebab) */}
+                        <td style={{ ...td, paddingRight: 22 }} onClick={(e) => e.stopPropagation()}>
+                          <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                            <RowActionsMenu
+                              actions={rowActionsFor(b)}
+                              ariaLabel={`Aksi untuk ${code}`}
+                              iconSize={18}
+                              iconColor="#475569"
+                              triggerClassName="btn-radius-8"
+                              triggerStyle={{ width: 36, height: 36, padding: 0 }}
+                            />
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
-          )}
-        </div>
-      )}
+
+            {/* Pagination — selalu di dasar card, angka polos tanpa box */}
+            <nav
+              aria-label="Navigasi halaman Bugs"
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                alignItems: "center",
+                gap: 4,
+                padding: "12px 22px",
+                background: PAGER_BG,
+                flexShrink: 0,
+              }}
+            >
+              <button
+                type="button"
+                aria-label="Halaman sebelumnya"
+                disabled={currentPage <= 1}
+                onClick={() => setPage(currentPage - 1)}
+                style={{ ...pagerBtn, cursor: currentPage <= 1 ? "default" : "pointer" }}
+              >
+                <ChevronLeft size={16} color={currentPage <= 1 ? "#CBD5E1" : "#334155"} aria-hidden="true" />
+              </button>
+
+              {pageItems.map((p, i) =>
+                typeof p === "number" ? (
+                  <button
+                    key={i}
+                    type="button"
+                    aria-current={p === currentPage ? "page" : undefined}
+                    aria-label={`Halaman ${p}`}
+                    onClick={() => setPage(p)}
+                    style={{ ...pagerBtn, cursor: "pointer" }}
+                  >
+                    <span
+                      style={{
+                        ...mono,
+                        fontSize: 14,
+                        fontWeight: p === currentPage ? 600 : 500,
+                        color: p === currentPage ? "#0F172A" : "#64748B",
+                        padding: "4px 2px",
+                        borderBottom: p === currentPage ? `2px solid ${YELLOW}` : "2px solid transparent",
+                      }}
+                    >
+                      {p}
+                    </span>
+                  </button>
+                ) : (
+                  <span key={i} aria-hidden="true" style={{ ...pagerBtn, ...mono, fontSize: 14, color: "#94A3B8" }}>
+                    …
+                  </span>
+                )
+              )}
+
+              <button
+                type="button"
+                aria-label="Halaman berikutnya"
+                disabled={currentPage >= totalPages}
+                onClick={() => setPage(currentPage + 1)}
+                style={{ ...pagerBtn, cursor: currentPage >= totalPages ? "default" : "pointer" }}
+              >
+                <ChevronRight size={16} color={currentPage >= totalPages ? "#CBD5E1" : "#334155"} aria-hidden="true" />
+              </button>
+            </nav>
+          </>
+        )}
       </div>
-      {/* /Single Card Wrapper */}
 
       <ConfirmDialog
         open={deleteTarget !== null}
@@ -879,11 +1107,7 @@ export function BugsPageClient({
 
       {/* Modal detail bug — dibuka dengan klik salah satu baris tabel */}
       {detailBugId && (
-        <BugDetailModal
-          bugId={detailBugId}
-          onClose={() => setDetailBugId(null)}
-          onUpdated={patchBug}
-        />
+        <BugDetailModal bugId={detailBugId} onClose={() => setDetailBugId(null)} onUpdated={patchBug} />
       )}
 
       {/* Modal lapor bug ad-hoc (General Findings) */}

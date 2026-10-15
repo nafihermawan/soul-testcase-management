@@ -281,18 +281,24 @@ export function BugsPageClient({
 
   return (
     <>
-      {/* Header Card Banner */}
+      {/* Single Card Wrapper — satu card utuh yang membungkus header, kontrol
+          (tab / search / filter), dan tabel. Border & shadow hanya ada di
+          wrapper ini; tidak ada card tambahan di dalamnya. */}
       <div
         style={{
-          background: "#FFFFFF",
-          borderRadius: 12,
-          border: "1px solid #E5E7EB",
-          boxShadow: "0px 1px 2px rgba(16, 24, 40, 0.04), 0px 4px 12px rgba(16, 24, 40, 0.06)",
-          // pb-4: padding bawah card dikurangi (20 -> 16px).
-          padding: "20px 24px 16px",
-          // mb-4: tab kini pindah KE DALAM card tabel, jadi jarak header ke card
-          // di bawahnya tak perlu dirapatkan lagi seperti saat tab masih di antaranya.
-          marginBottom: 16,
+          background: "#fff",
+          border: "1px solid rgba(226, 232, 240, 0.8)", // border-slate-200/80
+          borderRadius: 12, // rounded-xl
+          boxShadow: "0 1px 2px rgba(16, 24, 40, 0.04)", // shadow-sm
+          overflow: "hidden",
+        }}
+      >
+      {/* Header card — judul & deskripsi di paling atas, dipisah divider tipis
+          (slate-100) dari area kontrol di bawahnya. */}
+      <div
+        style={{
+          padding: "20px 24px",
+          borderBottom: "1px solid #F1F5F9", // border-slate-100
         }}
       >
         <div style={{ minWidth: 0 }}>
@@ -321,29 +327,18 @@ export function BugsPageClient({
         </div>
       </div>
 
-      {/* Card pembungkus toolbar + tabel. Toolbar ber-padding `px-4`, sedangkan
-          tabel full-bleed ke tepi card — inset horizontalnya datang dari sel
-          pertama (pl-4) & terakhir (pr-4), jadi keduanya tetap sejajar 16px. */}
-      <div
-        style={{
-          background: "#fff",
-          border: "1px solid rgba(226, 232, 240, 0.8)",
-          borderRadius: 12,
-          boxShadow: "0 1px 2px rgba(16, 24, 40, 0.04)",
-          overflow: "hidden",
-        }}
-      >
-      {/* Toolbar card — style CLASSIC UNDERLINE TAB: `align-items: flex-end` +
+      {/* Controls bar — tab (kiri) & search/filter (kanan), tepat di bawah
+          header. Inset horizontal `px-6` (24px) agar sejajar dengan header &
+          tabel. CLASSIC UNDERLINE TAB: `align-items: flex-end` +
           `padding-bottom: 0` membuat garis bawah tab menempel persis pada
-          border-bottom toolbar. Inset horizontalnya tetap 16px (px-4) agar
-          sejajar dengan sel pertama & terakhir tabel. */}
+          border pemisah ke tabel. */}
       <div
         style={{
           display: "flex",
           alignItems: "flex-end",
           justifyContent: "space-between",
           gap: "1rem",
-          padding: "8px 16px 0",
+          padding: "12px 24px 0",
           borderBottom: "1px solid #E2E8F0",
           flexWrap: "wrap",
         }}
@@ -557,7 +552,8 @@ export function BugsPageClient({
         <div
           style={{
             // Tanpa padding horizontal: inset kiri/kanan tabel datang dari sel
-            // pertama (pl-4) & terakhir (pr-4), jadi pas 16px seperti toolbar.
+            // pertama (pl-6) & terakhir (pr-6), jadi pas 24px seperti header &
+            // controls bar di atasnya.
             padding: "8px 0",
           }}
         >
@@ -596,8 +592,8 @@ export function BugsPageClient({
                 <tr style={{ color: "#64748B", fontSize: 12, textAlign: "left", background: "#F8FAFC", borderBottom: "1px solid #E5E7EB", whiteSpace: "nowrap" }}>
                   <th
                     style={{
-                      // pl-4: menyamai inset toolbar di atasnya.
-                      padding: "0.6rem 0.5rem 0.6rem 16px",
+                      // pl-6: menyamai inset header & controls bar di atasnya.
+                      padding: "0.6rem 0.5rem 0.6rem 24px",
                       fontWeight: 600,
                       position: "sticky",
                       left: 0,
@@ -629,7 +625,7 @@ export function BugsPageClient({
                   <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600, textAlign: "left", position: "sticky", top: 0, zIndex: 20, background: "#F8FAFC" }}>Status</th>
                   <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600, textAlign: "left", position: "sticky", top: 0, zIndex: 20, background: "#F8FAFC" }}>Created By</th>
                   <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600, textAlign: "left", position: "sticky", top: 0, zIndex: 20, background: "#F8FAFC" }}>Created Date</th>
-                  <th style={{ padding: "0.6rem 16px", fontWeight: 600, textAlign: "center", position: "sticky", top: 0, zIndex: 20, background: "#F8FAFC" }}>Aksi</th>
+                  <th style={{ padding: "0.6rem 24px", fontWeight: 600, textAlign: "center", position: "sticky", top: 0, zIndex: 20, background: "#F8FAFC" }}>Aksi</th>
                 </tr>
               </thead>
               <tbody>
@@ -647,8 +643,8 @@ export function BugsPageClient({
                       <td
                         className="bug-sticky-cell"
                         style={{
-                          // pl-4: sel paling kiri sejajar dengan toolbar.
-                          padding: "0.6rem 0.5rem 0.6rem 16px",
+                          // pl-6: sel paling kiri sejajar dengan header & controls bar.
+                          padding: "0.6rem 0.5rem 0.6rem 24px",
                           position: "sticky",
                           left: 0,
                           zIndex: 10,
@@ -828,7 +824,7 @@ export function BugsPageClient({
                         // Klik di area aksi tidak boleh ikut membuka modal detail
                         // (baris tabel punya onClick sendiri).
                         onClick={(e) => e.stopPropagation()}
-                        style={{ padding: "0.6rem 16px", textAlign: "center" }}
+                        style={{ padding: "0.6rem 24px", textAlign: "center" }}
                       >
                         <div
                           style={{
@@ -849,8 +845,9 @@ export function BugsPageClient({
             </table>
           </div>
           {visibleBugs.length > 0 && (
-            // Padding sendiri karena wrapper tabel kini tanpa padding horizontal.
-            <div style={{ padding: "0 16px" }}>
+            // Padding sendiri karena wrapper tabel kini tanpa padding horizontal;
+            // 24px (px-6) agar sejajar dengan header & controls bar di atasnya.
+            <div style={{ padding: "0 24px" }}>
               <HistoryPagination
                 total={visibleBugs.length}
                 page={currentPage}
@@ -865,7 +862,7 @@ export function BugsPageClient({
         </div>
       )}
       </div>
-      {/* /Card pembungkus toolbar + tabel */}
+      {/* /Single Card Wrapper */}
 
       <ConfirmDialog
         open={deleteTarget !== null}

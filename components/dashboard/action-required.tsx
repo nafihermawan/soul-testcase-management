@@ -38,15 +38,15 @@ export function ActionRequiredList({ items }: { items: ActionItem[] }) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column" }}>
-      {visible.map((item, idx) => (
+      {visible.map((item) => (
         <div
           key={item.key}
           style={{
             display: "flex",
             alignItems: "center",
             gap: "0.5rem",
-            padding: "0.5rem 0.75rem",
-            borderTop: idx === 0 ? "none" : "1px solid var(--border)",
+            // Tanpa garis pemisah penuh: cukup padding vertikal tipis.
+            padding: "0.5rem 1rem",
           }}
         >
           {/* Angka polos berwarna — tanpa background/border pill. */}
@@ -68,13 +68,16 @@ export function ActionRequiredList({ items }: { items: ActionItem[] }) {
             href={item.href}
             style={{
               marginLeft: "auto",
-              fontSize: "0.78rem",
-              fontWeight: 600,
+              fontSize: 12,
+              fontWeight: 400,
               color: "#2563EB",
               textDecoration: "none",
               whiteSpace: "nowrap",
               flexShrink: 0,
+              transition: "color 0.15s ease",
             }}
+            onMouseEnter={(e) => (e.currentTarget.style.color = "#1D4ED8")}
+            onMouseLeave={(e) => (e.currentTarget.style.color = "#2563EB")}
           >
             {item.cta} →
           </Link>

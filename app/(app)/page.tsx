@@ -1,43 +1,12 @@
-"use client";
-
 import { Dashboard } from "@/components/dashboard/dashboard";
-import {
-  ErrorBlock,
-  StatsCardsSkeleton,
-  TableCardSkeleton,
-} from "@/components/ui/data-states";
-import { useApi } from "@/lib/client/use-api";
-import type { DashboardPayload } from "@/types/api";
 
+/**
+ * Dashboard "QA Testing Overview".
+ *
+ * Untuk saat ini dirender dari data contoh di dalam komponen (array `SUITES`,
+ * `RUNS`, `BUGS`) sesuai spesifikasi desain; strukturnya sudah dipisah rapi agar
+ * bisa disambungkan ke API data asli nanti.
+ */
 export default function Home() {
-  const { data, error, loading, reload } = useApi<DashboardPayload>("/api/dashboard");
-
-  if (error) {
-    return (
-      <main style={{ fontFamily: "var(--font-sans, system-ui, sans-serif)", width: "100%" }}>
-        <ErrorBlock message={error.message} onRetry={reload} />
-      </main>
-    );
-  }
-
-  if (loading || !data) {
-    return (
-      <main style={{ fontFamily: "var(--font-sans, system-ui, sans-serif)", width: "100%" }}>
-        <StatsCardsSkeleton count={3} />
-        <div style={{ height: "1.25rem" }} />
-        <TableCardSkeleton />
-      </main>
-    );
-  }
-
-  return (
-    <main style={{ fontFamily: "var(--font-sans, system-ui, sans-serif)", width: "100%" }}>
-      <Dashboard
-        user={data.user}
-        runs={data.runs}
-        bugs={data.bugs}
-        suiteCoverage={data.suiteCoverage}
-      />
-    </main>
-  );
+  return <Dashboard />;
 }

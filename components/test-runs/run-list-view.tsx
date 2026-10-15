@@ -229,22 +229,44 @@ export function RunListView({ searchParams }: { searchParams: ActiveRunsSearchPa
   const columnLabels = listColumnLabels(canEdit);
 
   return (
-    <main style={{ fontFamily: "var(--font-sans)", width: "100%" }}>
-      {/* Top control bar — card tersendiri di paling atas, terpisah dari card
-          kelompok status di bawahnya. */}
+    // Flex column yang mengisi tinggi area konten; card di bawahnya flex:1
+    // sehingga selalu mencapai dasar layar walau run-nya sedikit.
+    <main
+      style={{
+        fontFamily: "var(--font-sans)",
+        margin: "-1rem",
+        padding: 16,
+        minHeight: "calc(100% + 2rem)",
+        display: "flex",
+        flexDirection: "column",
+      }}
+    >
+      {/* SATU card gabungan: header row → divider inset → kelompok run.
+          Card mempertahankan background/border/radius/shadow miliknya. */}
       <div
         style={{
           background: "#fff",
           border: "1px solid #F1F5F9",
           borderRadius: 8,
-          padding: 16,
           boxShadow: "0 1px 2px rgba(15, 23, 42, 0.05)",
-          marginBottom: 12,
+          overflow: "hidden",
+          width: "100%",
+          flex: 1,
+          minHeight: 0,
+          display: "flex",
+          flexDirection: "column",
+        }}
+      >
+      {/* Header row — dipertahankan persis (padding & alignment sama). */}
+      <div
+        style={{
+          padding: 16,
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
           gap: 16,
           flexWrap: "wrap",
+          flexShrink: 0,
         }}
       >
         <h1
@@ -289,18 +311,22 @@ export function RunListView({ searchParams }: { searchParams: ActiveRunsSearchPa
         </div>
       </div>
 
-      {/* Satu card utama berisi semua kelompok status. */}
-      <div style={{ display: "flex", flexDirection: "column" }}>
+      {/* Satu divider tipis INSET antara header row dan grup pertama. */}
+      <div style={{ margin: "0 26px", height: 1, background: "#EEF0F3", flexShrink: 0 }} />
+
+      {/* Area kelompok run — mengisi sisa tinggi card & scroll sendiri. */}
+      <div
+        style={{
+          flex: 1,
+          minHeight: 0,
+          overflowY: "auto",
+          padding: "0.875rem",
+          display: "flex",
+          flexDirection: "column",
+        }}
+      >
         {filteredRuns.length === 0 ? (
-          <div
-            style={{
-              background: "#fff",
-              border: "1px solid #F1F5F9",
-              borderRadius: 8,
-              boxShadow: "0 1px 2px rgba(15, 23, 42, 0.05)",
-              overflow: "hidden",
-            }}
-          >
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center" }}>
             {hasFilter ? (
               <div
                 style={{
@@ -352,22 +378,8 @@ export function RunListView({ searchParams }: { searchParams: ActiveRunsSearchPa
             )}
           </div>
         ) : (
-          /* SATU card utama menampung SEMUA kelompok status (tanpa garis pemisah). */
-          <div
-            style={{
-              background: "#fff",
-              border: "1px solid rgba(226, 232, 240, 0.8)",
-              borderRadius: 12,
-              boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
-              overflow: "hidden",
-              padding: "0.875rem",
-              // Full-width & mengisi sisa tinggi viewport walau isi sedikit.
-              width: "100%",
-              minHeight: "calc(100vh - 160px)",
-              display: "flex",
-              flexDirection: "column",
-            }}
-          >
+          /* Kelompok run dirender langsung di dalam card gabungan. */
+          <>
             {groups.map((group, idx) => {
               const open = !collapsedGroups[group.status];
               const label =
@@ -510,8 +522,9 @@ export function RunListView({ searchParams }: { searchParams: ActiveRunsSearchPa
                 </div>
               );
             })}
-          </div>
+          </>
         )}
+      </div>
       </div>
 
       <Toast toast={toast} onDismiss={dismissToast} />

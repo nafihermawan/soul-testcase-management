@@ -34,7 +34,18 @@ export function RunDetailView({ runId }: { runId: string }) {
   }
 
   return (
-    <main style={{ fontFamily: "var(--font-sans)", width: "100%" }}>
+    <main
+      style={{
+        fontFamily: "var(--font-sans)",
+        // Flex column yang mengisi tinggi area konten; card di bawahnya flex:1
+        // sehingga selalu mencapai dasar layar.
+        margin: "-1rem",
+        padding: 24,
+        minHeight: "calc(100% + 2rem)",
+        display: "flex",
+        flexDirection: "column",
+      }}
+    >
       <RefreshContext.Provider value={reload}>
         <RunExecutor
           runId={data.runId}

@@ -76,12 +76,41 @@ type Props = {
 
 const inputStyle: React.CSSProperties = {
   width: "100%",
-  padding: "0.5rem 0.75rem",
-  border: "1px solid var(--border-strong)",
-  borderRadius: 8,
-  fontSize: "0.875rem",
+  height: 40,
+  boxSizing: "border-box",
+  padding: "0 12px",
+  border: "1px solid #DDE2E9",
+  borderRadius: 10,
+  fontSize: 14,
+  color: "#0F172A",
   background: "#fff",
+  outline: "none",
 };
+
+/** Heading tiap langkah: nomor (tile 24×24) + judul. */
+const stepHeading: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 10,
+  fontSize: 15,
+  fontWeight: 600,
+  color: "#0F172A",
+};
+
+const stepTile = (variant: 1 | 2): React.CSSProperties => ({
+  width: 24,
+  height: 24,
+  borderRadius: 7,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  fontFamily: '"Geist Mono", ui-monospace, monospace',
+  fontSize: 12,
+  fontWeight: 600,
+  background: variant === 1 ? "#FFC348" : "#F1F5F9",
+  color: variant === 1 ? "#0F172A" : "#475569",
+  flexShrink: 0,
+});
 
 const ACTIVITY_OPTIONS = [
   "Enhancement",
@@ -151,7 +180,7 @@ function FieldError({ message }: { message?: string }) {
   return (
     <p
       role="alert"
-      style={{ color: "#EF4444", fontSize: "0.75rem", margin: "0.25rem 0 0", lineHeight: 1.4 }}
+      style={{ color: "#B91C1C", fontSize: "0.75rem", margin: "0.25rem 0 0", lineHeight: 1.4 }}
     >
       {message}
     </p>
@@ -173,15 +202,28 @@ function ListEmptyState({ icon, text }: { icon: React.ReactNode; text: string })
         flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
-        gap: "0.5rem",
+        gap: 10,
         padding: "1rem 0.75rem",
+        background: "#FCFCFD",
         textAlign: "center",
       }}
     >
-      <span style={{ color: "#CBD5E1", display: "inline-flex" }} aria-hidden="true">
+      <span
+        aria-hidden="true"
+        style={{
+          width: 40,
+          height: 40,
+          borderRadius: 12,
+          background: "#F1F5F9",
+          color: "#94A3B8",
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
         {icon}
       </span>
-      <p style={{ margin: 0, fontSize: "0.8rem", color: "var(--text-muted)", lineHeight: 1.5 }}>
+      <p style={{ margin: 0, fontSize: 13, color: "#64748B", lineHeight: 1.5 }}>
         {text}
       </p>
     </div>
@@ -640,18 +682,19 @@ export function ExpressRunForm({
   };
 
   const listBoxStyle: React.CSSProperties = {
-    border: "1px solid var(--border)",
-    borderRadius: 10,
+    border: "1px solid #E3E7EE",
+    borderRadius: 14,
     overflow: "hidden",
     display: "flex",
     flexDirection: "column",
-    height: 260,
   };
 
   const listScrollStyle: React.CSSProperties = {
-    flex: 1,
+    height: 240,
     overflowY: "auto",
     padding: "0.35rem",
+    borderTop: "1px solid #EEF1F5",
+    background: "#FFFFFF",
   };
 
   const itemStyle = (checked: boolean): React.CSSProperties => ({
@@ -694,16 +737,39 @@ export function ExpressRunForm({
     return Array.from(groups.values());
   }, [selectedTCList, sections]);
 
+  /** Jumlah project BERBEDA di antara TC terpilih (ringkasan footer). */
+  const selectedProjectCount = useMemo(
+    () => new Set(selectedTCList.map((t) => t.projectId).filter((x): x is string => !!x)).size,
+    [selectedTCList]
+  );
+
   return (
-    <div ref={formRef} style={{ width: "100%", display: "flex", flexDirection: "column" }}>
+    <div ref={formRef} style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
       {/* Body */}
-      <div style={{ padding: "1.25rem" }}>
-        {/* Form inputs: 4 baris — Run Name full width, sisanya 2 kolom */}
+      <div
+        style={{
+          flex: 1,
+          minHeight: 0,
+          overflowY: "auto",
+          padding: "24px 22px 28px",
+          display: "flex",
+          flexDirection: "column",
+          gap: 32,
+        }}
+      >
+        {/* Step 1 — Detail Run */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+        <div style={stepHeading}>
+          <span style={stepTile(1)} aria-hidden="true">1</span>
+          Detail Run
+        </div>
+        {/* Form inputs: Run Name full width, sisanya 2 kolom */}
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: "16px",
+            gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+            columnGap: 20,
+            rowGap: 16,
           }}
         >
           <div
@@ -715,8 +781,8 @@ export function ExpressRunForm({
               gridColumn: "1 / -1",
             }}
           >
-            <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)" }}>
-              Run Name<span style={{ color: "#EF4444" }}>*</span>
+            <label style={{ fontSize: 13, fontWeight: 500, color: "#334155" }}>
+              Run Name<span style={{ color: "#B91C1C" }}>*</span>
             </label>
             <input
               value={runName}
@@ -733,12 +799,20 @@ export function ExpressRunForm({
             data-field="activityType"
             style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}
           >
-            <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)" }}>
-              Tipe Activity <span style={{ color: "#EF4444" }}>*</span>
+            <label style={{ fontSize: 13, fontWeight: 500, color: "#334155" }}>
+              Tipe Activity <span style={{ color: "#B91C1C" }}>*</span>
             </label>
             <Select
               value={activityType}
               ariaLabel="Tipe activity"
+              style={{
+                height: 40,
+                borderRadius: 10,
+                border: "1px solid #DDE2E9",
+                fontSize: 14,
+                color: activityType ? "#0F172A" : "#94A3B8",
+                fontWeight: activityType ? 500 : 400,
+              }}
               onChange={(e) => {
                 setActivityType(e.target.value);
                 clearFieldError("activityType");
@@ -757,12 +831,20 @@ export function ExpressRunForm({
             data-field="environment"
             style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}
           >
-            <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)" }}>
-              Environment <span style={{ color: "#EF4444" }}>*</span>
+            <label style={{ fontSize: 13, fontWeight: 500, color: "#334155" }}>
+              Environment <span style={{ color: "#B91C1C" }}>*</span>
             </label>
             <Select
               value={environment}
               ariaLabel="Environment"
+              style={{
+                height: 40,
+                borderRadius: 10,
+                border: "1px solid #DDE2E9",
+                fontSize: 14,
+                color: environment ? "#0F172A" : "#94A3B8",
+                fontWeight: environment ? 500 : 400,
+              }}
               onChange={(e) => {
                 setEnvironment(e.target.value);
                 clearFieldError("environment");
@@ -781,8 +863,8 @@ export function ExpressRunForm({
             data-field="sprint"
             style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}
           >
-            <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)" }}>
-              Sprint <span style={{ color: "#EF4444" }}>*</span>
+            <label style={{ fontSize: 13, fontWeight: 500, color: "#334155" }}>
+              Sprint <span style={{ color: "#B91C1C" }}>*</span>
             </label>
             <input
               value={sprint}
@@ -799,8 +881,8 @@ export function ExpressRunForm({
             data-field="taskLink"
             style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}
           >
-            <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)" }}>
-              Task / Card Link <span style={{ color: "#EF4444" }}>*</span>
+            <label style={{ fontSize: 13, fontWeight: 500, color: "#334155" }}>
+              Task / Card Link <span style={{ color: "#B91C1C" }}>*</span>
             </label>
             <input
               type="url"
@@ -816,150 +898,199 @@ export function ExpressRunForm({
           </div>
           <div
             data-field="platforms"
-            style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}
+            style={{ display: "flex", flexDirection: "column", gap: 6 }}
           >
-            <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)" }}>
-              Platform <span style={{ color: "#EF4444" }}>*</span>
-            </label>
-            {/* Checkbox inline — tanpa box pembungkus & tanpa pill, karena
-                Platform mendukung multi-selection. */}
-            <div
-              style={{
-                display: "flex",
-                flexWrap: "wrap",
-                alignItems: "center",
-                gap: "1.25rem",
-                minHeight: 38,
-              }}
-            >
-              {PLATFORM_OPTIONS.map((opt) => {
-                const checked = platforms.has(opt);
-                return (
-                  <label
-                    key={opt}
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: "0.4rem",
-                      fontSize: 13,
-                      fontWeight: 500,
-                      color: "#334155",
-                      cursor: "pointer",
-                    }}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => {
-                        clearFieldError("platforms");
-                        setPlatforms((prev) => {
-                          const next = new Set(prev);
-                          if (next.has(opt)) next.delete(opt);
-                          else next.add(opt);
-                          return next;
-                        });
+            <fieldset style={{ border: "none", padding: 0, margin: 0 }}>
+              <legend
+                style={{
+                  fontSize: 13,
+                  fontWeight: 500,
+                  color: "#334155",
+                  padding: 0,
+                  marginBottom: 6,
+                }}
+              >
+                Platform <span style={{ color: "#B91C1C" }}>*</span>
+              </legend>
+              <div
+                style={{
+                  height: 40,
+                  display: "flex",
+                  flexWrap: "wrap",
+                  alignItems: "center",
+                  columnGap: 24,
+                  rowGap: 8,
+                }}
+              >
+                {PLATFORM_OPTIONS.map((opt) => {
+                  const checked = platforms.has(opt);
+                  return (
+                    <label
+                      key={opt}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 8,
+                        fontSize: 14,
+                        color: "#334155",
+                        cursor: "pointer",
                       }}
-                      style={{ margin: 0, cursor: "pointer" }}
-                    />
-                    {opt}
-                  </label>
-                );
-              })}
-            </div>
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => {
+                          clearFieldError("platforms");
+                          setPlatforms((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(opt)) next.delete(opt);
+                            else next.add(opt);
+                            return next;
+                          });
+                        }}
+                      />
+                      {opt}
+                    </label>
+                  );
+                })}
+              </div>
+            </fieldset>
             <FieldError message={fieldErrors.platforms} />
           </div>
           <div
             data-field="projects"
-            style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}
+            style={{ display: "flex", flexDirection: "column", gap: 6 }}
           >
-            <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)" }}>
-              Project <span style={{ color: "#EF4444" }}>*</span>
+            <label style={{ fontSize: 13, fontWeight: 500, color: "#334155" }}>
+              Project <span style={{ color: "#B91C1C" }}>*</span>
             </label>
-            {/* Multi-Select Tag Input — terkunci sampai Platform dipilih,
-                karena daftar project memang bergantung pada Platform. */}
-            <div
-              style={{
-                display: "flex",
-                flexWrap: "wrap",
-                gap: "0.35rem",
-                padding: "0.35rem 0.4rem",
-                border: "1px solid var(--border-strong)",
-                borderRadius: 8,
-                minHeight: 38,
-                background: hasSelectedPlatform ? "#fff" : "#F8FAFC",
-                alignItems: "center",
-                opacity: hasSelectedPlatform ? 1 : 0.7,
-              }}
-            >
-              {/* Saat disabled tidak ada badge sama sekali — hanya placeholder. */}
-              {hasSelectedPlatform &&
-                Array.from(selectedProjectIds).map((pid) => (
-                <span
-                  key={pid}
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "0.3rem",
-                    background: "#FCD34D",
-                    color: "#0F172A",
-                    fontSize: 12,
-                    fontWeight: 600,
-                    padding: "0.2rem 0.45rem",
-                    borderRadius: 999,
-                  }}
-                >
-                  {projectNameMap.get(pid)}
-                  <button
-                    type="button"
-                    aria-label={`Hapus ${projectNameMap.get(pid)}`}
-                    onClick={() => toggleProject(pid)}
-                    style={{
-                      border: "none",
-                      background: "transparent",
-                      padding: 0,
-                      display: "inline-flex",
-                      cursor: "pointer",
-                      color: "#334155",
-                    }}
-                    onMouseEnter={(e) => (e.currentTarget.style.color = "#000000")}
-                    onMouseLeave={(e) => (e.currentTarget.style.color = "#334155")}
-                  >
-                    <X size={12} />
-                  </button>
-                </span>
-              ))}
-              <Select
-                value=""
-                ariaLabel="Tambah project"
-                disabled={!hasSelectedPlatform}
+            <div style={{ position: "relative" }}>
+              <div
                 style={{
-                  flex: 1,
-                  minWidth: 90,
-                  border: "none",
-                  background: "transparent",
-                }}
-                onChange={(e) => {
-                  if (e.target.value) toggleProject(e.target.value);
+                  minHeight: 40,
+                  boxSizing: "border-box",
+                  padding: "4px 34px 4px 6px",
+                  border: `1px solid ${hasSelectedPlatform ? "#DDE2E9" : "#E3E7EE"}`,
+                  borderRadius: 10,
+                  display: "flex",
+                  flexWrap: "wrap",
+                  alignItems: "center",
+                  gap: 6,
+                  background: hasSelectedPlatform ? "#fff" : "#F8FAFC",
+                  cursor: hasSelectedPlatform ? "text" : "not-allowed",
                 }}
               >
-                <option value="">
-                  {hasSelectedPlatform ? "+ Tambah project" : "Pilih Platform terlebih dahulu"}
-                </option>
-                {selectableProjects
-                  .filter((p) => !selectedProjectIds.has(p.id))
-                  .map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-              </Select>
+                {!hasSelectedPlatform ? (
+                  <span style={{ padding: "0 6px", fontSize: 14, color: "#94A3B8" }}>
+                    Pilih Platform terlebih dahulu
+                  </span>
+                ) : (
+                  <>
+                    {Array.from(selectedProjectIds).map((pid) => (
+                      <span
+                        key={pid}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 2,
+                          height: 30,
+                          boxSizing: "border-box",
+                          padding: "0 4px 0 10px",
+                          border: "1px solid #E3E7EE",
+                          borderRadius: 7,
+                          background: "#F8FAFC",
+                          fontSize: 13,
+                          fontWeight: 500,
+                          color: "#0F172A",
+                        }}
+                      >
+                        {projectNameMap.get(pid)}
+                        <button
+                          type="button"
+                          aria-label={`Hapus ${projectNameMap.get(pid)}`}
+                          onClick={() => toggleProject(pid)}
+                          style={{
+                            width: 22,
+                            height: 22,
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            border: "none",
+                            background: "transparent",
+                            padding: 0,
+                            cursor: "pointer",
+                            color: "#64748B",
+                          }}
+                        >
+                          <X size={12} aria-hidden="true" />
+                        </button>
+                      </span>
+                    ))}
+                    <Select
+                      value=""
+                      ariaLabel="Tambah project"
+                      chevronColor="transparent"
+                      style={{
+                        flex: 1,
+                        minWidth: 120,
+                        border: "none",
+                        background: "transparent",
+                        padding: 0,
+                        height: 30,
+                        boxShadow: "none",
+                        fontSize: 13,
+                        fontWeight: 500,
+                        color: "#475569",
+                      }}
+                      onChange={(e) => {
+                        if (e.target.value) toggleProject(e.target.value);
+                      }}
+                    >
+                      <option value="">+ Tambah project</option>
+                      {selectableProjects
+                        .filter((p) => !selectedProjectIds.has(p.id))
+                        .map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name}
+                          </option>
+                        ))}
+                    </Select>
+                  </>
+                )}
+              </div>
+              <ChevronDown
+                size={14}
+                aria-hidden="true"
+                style={{
+                  position: "absolute",
+                  right: 12,
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  color: hasSelectedPlatform ? "#64748B" : "#CBD5E1",
+                  pointerEvents: "none",
+                }}
+              />
             </div>
             <FieldError message={fieldErrors.projects} />
           </div>
         </div>
 
+        </div>
+
+        {/* Inset divider antara Step 1 dan Step 2 (~26px atas/bawah). */}
+        <div
+          aria-hidden="true"
+          style={{ height: 1, background: "#EEF1F5", margin: "-6px 0" }}
+        />
+
+        {/* Step 2 — Pilih Suite & Test Case */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+        <div style={stepHeading}>
+          <span style={stepTile(selectedProjectIds.size > 0 ? 1 : 2)} aria-hidden="true">2</span>
+          Pilih Suite &amp; Test Case
+        </div>
         {/* Selection area: Suites (unified + badge project) | Test Cases */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginTop: "1rem" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 20 }}>
           {/* Suites column: klik suite untuk melihat TC-nya (single active) */}
           <div style={listBoxStyle}>
             <div style={{ padding: "0.6rem 0.75rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
@@ -1015,16 +1146,16 @@ export function ExpressRunForm({
                       <span style={{ fontWeight: 600, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                         {s.name}
                       </span>
-                      {/* Badge project context */}
+                      {/* Nama project — teks polos (bukan pill). */}
                       <span
                         style={{
-                          fontSize: "0.68rem",
-                          fontWeight: 600,
-                          color: "#0F172A",
-                          background: "#FCD34D",
-                          padding: "0.05rem 0.4rem",
-                          borderRadius: 999,
+                          fontSize: 12,
+                          color: "#64748B",
                           flexShrink: 0,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                          maxWidth: 140,
                         }}
                       >
                         {projectNameMap.get(s.projectId) ?? ""}
@@ -1049,9 +1180,9 @@ export function ExpressRunForm({
                     clearFieldError("testCases");
                     setSelectedTCs(new Set());
                   }}
-                  style={{ border: "none", background: "none", color: "#EF4444", fontSize: "0.78rem", fontWeight: 600, cursor: "pointer", padding: 0, transition: "color 0.12s ease" }}
+                  style={{ border: "none", background: "none", color: "#B91C1C", fontSize: "0.78rem", fontWeight: 600, cursor: "pointer", padding: 0, transition: "color 0.12s ease" }}
                   onMouseEnter={(e) => (e.currentTarget.style.color = "#DC2626")}
-                  onMouseLeave={(e) => (e.currentTarget.style.color = "#EF4444")}
+                  onMouseLeave={(e) => (e.currentTarget.style.color = "#B91C1C")}
                 >
                   Clear
                 </button>
@@ -1097,19 +1228,14 @@ export function ExpressRunForm({
                       <div
                         onClick={() => toggleSectionGroup(g.key)}
                         style={{
+                          minHeight: 40,
                           display: "flex",
                           alignItems: "center",
-                          gap: 6,
-                          padding: "4px 8px",
-                          marginTop: 8,
-                          marginBottom: 4,
-                          background: "rgba(241, 245, 249, 0.7)",
-                          borderRadius: 4,
-                          fontSize: 11,
-                          fontWeight: 700,
-                          color: "#475569",
-                          textTransform: "uppercase",
-                          letterSpacing: "0.05em",
+                          gap: 10,
+                          padding: "0 10px",
+                          marginTop: 2,
+                          background: "#F8FAFC",
+                          borderRadius: 9,
                           cursor: "pointer",
                           userSelect: "none",
                         }}
@@ -1124,10 +1250,35 @@ export function ExpressRunForm({
                           onClick={(e) => e.stopPropagation()}
                           title={`Pilih semua test case di section ${g.name}`}
                           aria-label={`Pilih semua test case di section ${g.name}`}
-                          style={{ cursor: "pointer", flexShrink: 0, margin: 0 }}
+                          aria-checked={allOn ? true : selectedInSection > 0 ? "mixed" : false}
                         />
-                        <FolderOpen size={12} style={{ flexShrink: 0 }} />
-                        {/* Chevron di sebelah kiri nama section: rotasi halus saat open/close */}
+                        <FolderOpen size={14} aria-hidden="true" style={{ color: "#64748B", flexShrink: 0 }} />
+                        <span
+                          style={{
+                            flex: 1,
+                            minWidth: 0,
+                            fontSize: 13,
+                            fontWeight: 600,
+                            color: "#334155",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {g.name}
+                        </span>
+                        <span style={{ fontSize: 12, color: "#64748B", flexShrink: 0 }}>
+                          <span
+                            style={{
+                              fontFamily: '"Geist Mono", ui-monospace, monospace',
+                              fontWeight: 600,
+                              color: "#334155",
+                            }}
+                          >
+                            {selectedInSection}
+                          </span>
+                          /{g.items.length}
+                        </span>
                         <button
                           type="button"
                           aria-expanded={open}
@@ -1144,7 +1295,6 @@ export function ExpressRunForm({
                             padding: 0,
                             border: "none",
                             background: "transparent",
-                            color: "#64748B",
                             cursor: "pointer",
                             flexShrink: 0,
                           }}
@@ -1153,12 +1303,12 @@ export function ExpressRunForm({
                             size={14}
                             aria-hidden="true"
                             style={{
+                              color: "#64748B",
                               transform: open ? "rotate(180deg)" : "rotate(0deg)",
                               transition: "transform 0.2s ease",
                             }}
                           />
                         </button>
-                        <span>{g.name}</span>
                       </div>
                       {open &&
                         g.items.map((t) => {
@@ -1191,8 +1341,29 @@ export function ExpressRunForm({
 
         {/* Selected Test Cases Preview */}
         <div style={{ marginTop: "1.25rem" }}>
-          <div style={{ fontSize: 14, fontWeight: 600, color: "#475569", marginBottom: "0.6rem" }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              fontSize: 13,
+              fontWeight: 600,
+              color: "#475569",
+              marginBottom: 10,
+            }}
+          >
             Selected Test Cases Preview
+            <span style={{ fontWeight: 400, color: "#64748B" }}>
+              {" · "}
+              <span
+                style={{
+                  fontFamily: '"Geist Mono", ui-monospace, monospace',
+                  fontWeight: 600,
+                  color: "#334155",
+                }}
+              >
+                {selectedTCList.length}
+              </span>
+            </span>
           </div>
           {selectedTCList.length === 0 ? (
             <p
@@ -1208,14 +1379,27 @@ export function ExpressRunForm({
               Belum ada Test Case yang dipilih.
             </p>
           ) : (
-            <div style={{ border: "1px solid var(--border)", borderRadius: 10, overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem" }}>
+            <div style={{ border: "1px solid #E3E7EE", borderRadius: 12, overflowX: "auto" }}>
+              <table style={{ width: "100%", minWidth: 760, tableLayout: "fixed", borderCollapse: "collapse", fontSize: 14 }}>
                 <thead>
-                  <tr style={{ color: "#6B7280", textAlign: "left", background: "#F9FAFB", borderBottom: "1px solid var(--border)" }}>
-                    <th style={{ padding: "0.5rem 0.75rem", fontWeight: 600, width: 180 }}>Project</th>
-                    <th style={{ padding: "0.5rem 0.75rem", fontWeight: 600, width: 180 }}>Suite</th>
-                    <th style={{ padding: "0.5rem 0.75rem", fontWeight: 600 }}>Test Case</th>
-                    <th style={{ padding: "0.5rem 0.75rem", fontWeight: 600, width: 60, textAlign: "center" }}></th>
+                  <tr style={{ color: "#64748B", textAlign: "left", background: "#F8FAFC", borderBottom: "1px solid #EEF1F5" }}>
+                    <th style={{ padding: "10px 12px 10px 16px", fontWeight: 500, fontSize: 12, width: 200 }}>Project</th>
+                    <th style={{ padding: "10px 12px", fontWeight: 500, fontSize: 12, width: 220 }}>Suite</th>
+                    <th style={{ padding: "10px 12px", fontWeight: 500, fontSize: 12 }}>Test Case</th>
+                    <th style={{ padding: "10px 12px", fontWeight: 500, fontSize: 12, width: 56, textAlign: "right" }}>
+                      <span
+                        style={{
+                          position: "absolute",
+                          width: 1,
+                          height: 1,
+                          overflow: "hidden",
+                          clip: "rect(0 0 0 0)",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        Hapus
+                      </span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1223,67 +1407,105 @@ export function ExpressRunForm({
                     <Fragment key={g.key}>
                       {/* Baris header Section di dalam tabel preview */}
                       <tr>
-                        <td colSpan={4} style={{ padding: "4px 8px 0" }}>
+                        <td colSpan={4} style={{ padding: 0 }}>
                           <div
                             style={{
                               display: "flex",
                               alignItems: "center",
-                              gap: 6,
-                              padding: "4px 8px",
-                              background: "rgba(241, 245, 249, 0.7)",
-                              borderRadius: 4,
-                              fontSize: 11,
-                              fontWeight: 700,
-                              color: "#475569",
-                              textTransform: "uppercase",
-                              letterSpacing: "0.05em",
+                              gap: 8,
+                              padding: "8px 16px",
+                              background: "#FCFCFD",
+                              borderBottom: "1px solid #EEF1F5",
+                              fontSize: 12,
+                              fontWeight: 600,
+                              color: "#334155",
                             }}
                           >
-                            <FolderOpen size={12} style={{ flexShrink: 0 }} />
+                            <FolderOpen size={13} aria-hidden="true" style={{ color: "#64748B", flexShrink: 0 }} />
                             {g.name}
+                            <span style={{ fontWeight: 400, color: "#64748B" }}>
+                              · {g.items.length} test case
+                            </span>
                           </div>
                         </td>
                       </tr>
                       {g.items.map((t) => (
-                    <tr key={t.id} style={{ borderTop: "1px solid var(--border)" }}>
-                      <td style={{ padding: "0.45rem 0.75rem" }}>
-                        <span
-                          style={{
-                            fontSize: "0.7rem",
-                            fontWeight: 600,
-                            color: "#0F172A",
-                            background: "#FCD34D",
-                            padding: "0.1rem 0.45rem",
-                            borderRadius: 999,
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          {t.projectId ? (projectNameMap.get(t.projectId) ?? "—") : "—"}
-                        </span>
+                    <tr key={t.id} style={{ height: 48, borderBottom: "1px solid #F1F4F8" }}>
+                      <td style={{ paddingLeft: 16, paddingRight: 12, fontSize: 14, color: "#475569" }}>
+                        {t.projectId ? (projectNameMap.get(t.projectId) ?? "—") : "—"}
                       </td>
-                      <td style={{ padding: "0.45rem 0.75rem", color: "#374151" }}>{t.suiteName || "—"}</td>
-                      <td style={{ padding: "0.45rem 0.75rem" }}>
-                        <span style={{ fontFamily: "var(--font-mono, monospace)", fontSize: "0.72rem", color: "#1D4ED8", fontWeight: 600 }}>
-                          {t.tcId}
-                        </span>
-                        <span style={{ color: "#374151", marginLeft: "0.4rem" }}>{t.title}</span>
+                      <td
+                        style={{
+                          padding: "0 12px",
+                          fontSize: 14,
+                          color: "#475569",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {t.suiteName || "—"}
                       </td>
-                      <td style={{ padding: "0.45rem 0.75rem", textAlign: "center" }}>
+                      <td style={{ padding: "0 12px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
+                          <span
+                            style={{
+                              width: 128,
+                              flexShrink: 0,
+                              fontFamily: '"Geist Mono", ui-monospace, monospace',
+                              fontSize: 12,
+                              fontWeight: 400,
+                              color: "#64748B",
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {t.tcId}
+                          </span>
+                          <span
+                            style={{
+                              fontSize: 14,
+                              fontWeight: 500,
+                              color: "#0F172A",
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {t.title}
+                          </span>
+                        </div>
+                      </td>
+                      <td style={{ padding: "0 12px", textAlign: "right" }}>
                         <button
                           type="button"
-                          aria-label={`Hapus ${t.tcId}`}
+                          aria-label={`Hapus ${t.tcId} dari pilihan`}
+                          title="Hapus dari pilihan"
                           onClick={() => toggleTC(t.id)}
                           style={{
+                            width: 32,
+                            height: 32,
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
                             border: "none",
                             background: "transparent",
-                            color: "#9CA3AF",
+                            borderRadius: 8,
+                            color: "#94A3B8",
                             cursor: "pointer",
-                            padding: "0.2rem",
-                            display: "inline-flex",
+                            transition: "background-color 0.15s ease, color 0.15s ease",
                           }}
-                          title="Hapus dari pilihan"
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.background = "#FEF2F2";
+                            e.currentTarget.style.color = "#B91C1C";
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.background = "transparent";
+                            e.currentTarget.style.color = "#94A3B8";
+                          }}
                         >
-                          <X size={14} />
+                          <X size={15} aria-hidden="true" />
                         </button>
                       </td>
                     </tr>
@@ -1294,6 +1516,7 @@ export function ExpressRunForm({
               </table>
             </div>
           )}
+        </div>
         </div>
 
         {error && (
@@ -1312,20 +1535,25 @@ export function ExpressRunForm({
           alignItems: "center",
           justifyContent: "space-between",
           gap: "0.6rem",
-          padding: "0.9rem 1.25rem",
-          borderTop: "1px solid var(--border)",
-          background: "rgba(248, 250, 252, 0.9)",
-          backdropFilter: "blur(6px)",
+          padding: "14px 22px",
+          borderTop: "1px solid #EEF1F5",
+          background: "#FAFBFC",
           flexWrap: "wrap",
         }}
       >
         {/* Summary counter (kiri) */}
-        <span style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--text-secondary)" }}>
-          {selectedCount} Test Case{selectedCount === 1 ? "" : "s"} Selected across{" "}
-          {selectedProjectIds.size} Project{selectedProjectIds.size === 1 ? "" : "s"}
+        <span style={{ fontSize: 14, color: "#475569" }}>
+          <span style={{ fontFamily: '"Geist Mono", ui-monospace, monospace', fontWeight: 600, color: "#0F172A" }}>
+            {selectedCount}
+          </span>{" "}
+          Test Case{selectedCount === 1 ? "" : "s"} Selected across{" "}
+          <span style={{ fontFamily: '"Geist Mono", ui-monospace, monospace', fontWeight: 600, color: "#0F172A" }}>
+            {selectedProjectCount}
+          </span>{" "}
+          Project{selectedProjectCount === 1 ? "" : "s"}
         </span>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <button
             type="button"
             onClick={reset}
@@ -1336,24 +1564,51 @@ export function ExpressRunForm({
               justifyContent: "center",
               gap: 8,
               height: 40,
-              minWidth: 170,
-              padding: "0 16px",
-              borderRadius: 8,
-              border: "1px solid #CBD5E1",
-              background: "#fff",
-              color: "#334155",
-              fontWeight: 600,
-              fontSize: 12,
+              boxSizing: "border-box",
+              padding: "0 12px",
+              borderRadius: 10,
+              border: "none",
+              background: "transparent",
+              color: "#475569",
+              fontWeight: 500,
+              fontSize: 14,
+              lineHeight: 1,
               cursor: pending ? "not-allowed" : "pointer",
-              transition: "background-color 0.15s ease",
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.color = "#0F172A")}
+            onMouseLeave={(e) => (e.currentTarget.style.color = "#475569")}
+          >
+            <RotateCcw size={15} /> Reset
+          </button>
+          <a
+            href="/test-runs"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              height: 40,
+              padding: "0 16px",
+              borderRadius: 10,
+              border: "1px solid #DDE2E9",
+              background: "#FFFFFF",
+              color: "#0F172A",
+              fontWeight: 500,
+              fontSize: 14,
+              textDecoration: "none",
+              whiteSpace: "nowrap",
+              transition: "background-color 0.15s, border-color 0.15s",
             }}
             onMouseEnter={(e) => {
-              if (!pending) e.currentTarget.style.background = "#F1F5F9";
+              e.currentTarget.style.background = "#FFF8E8";
+              e.currentTarget.style.borderColor = "#FFC348";
             }}
-            onMouseLeave={(e) => (e.currentTarget.style.background = "#fff")}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = "#FFFFFF";
+              e.currentTarget.style.borderColor = "#DDE2E9";
+            }}
           >
-            <RotateCcw size={14} /> Reset
-          </button>
+            Batal
+          </a>
           <button
             type="button"
             onClick={() => void handleRun()}
@@ -1364,17 +1619,17 @@ export function ExpressRunForm({
               justifyContent: "center",
               gap: 8,
               height: 40,
-              minWidth: 170,
-              padding: "0 16px",
-              borderRadius: 8,
-              border: "none",
+              boxSizing: "border-box",
+              padding: "0 18px",
+              borderRadius: 10,
+              border: "1px solid #FFC348",
               background: "#FFC348",
               color: "#0F172A",
               fontWeight: 600,
-              fontSize: 12,
+              fontSize: 14,
+              lineHeight: 1,
               cursor: pending ? "not-allowed" : "pointer",
               opacity: pending ? 0.7 : 1,
-              boxShadow: "0 1px 2px rgba(15, 23, 42, 0.08)",
               transition: "background-color 0.15s ease",
             }}
             onMouseEnter={(e) => {

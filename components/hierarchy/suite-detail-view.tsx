@@ -67,21 +67,32 @@ export function SuiteDetailView({
   return (
     <main
       className="content-fade-in"
-      style={{ fontFamily: "var(--font-sans, system-ui, sans-serif)", width: "100%" }}
+      style={{
+        fontFamily: "var(--font-sans, system-ui, sans-serif)",
+        // Flex column yang mengisi tinggi area konten; card di bawahnya flex:1
+        // sehingga selalu mencapai dasar layar.
+        margin: "-1rem",
+        padding: 16,
+        minHeight: "calc(100% + 2rem)",
+        display: "flex",
+        flexDirection: "column",
+      }}
     >
-      {/* Kartu header utama */}
+      {/* SATU card gabungan: header suite → divider inset → daftar section. */}
       <div
         style={{
           width: "100%",
           background: "#fff",
           border: "1px solid rgba(226, 232, 240, 0.8)",
           borderRadius: 16,
-          padding: "1.5rem",
           boxShadow: "0 1px 3px rgba(15, 23, 42, 0.06)",
-          // mb-3: jarak header suite ke card tabel/accordion di bawahnya dipadatkan.
-          marginBottom: "0.75rem",
+          flex: 1,
+          display: "flex",
+          flexDirection: "column",
         }}
       >
+        {/* Konten header — padding 1.5rem dipertahankan seperti semula. */}
+        <div style={{ padding: "1.5rem" }}>
         {/* 1. Breadcrumb */}
         <nav
           aria-label="Breadcrumb"
@@ -319,18 +330,22 @@ export function SuiteDetailView({
             )}
           </div>
         </div>
-      </div>
+        </div>
 
-      <RefreshContext.Provider value={reload}>
-        <TestCasesManager
-          suiteId={suite.id}
-          suiteName={suite.name}
-          testCases={data.testCases}
-          sections={data.sections}
-          canEdit={data.canEdit}
-          initialEditTcId={initialEditTcId}
-        />
-      </RefreshContext.Provider>
+        {/* Satu divider tipis INSET antara header dan section pertama. */}
+        <div style={{ margin: "0 22px", height: 1, background: "#EEF0F3", flexShrink: 0 }} />
+
+        <RefreshContext.Provider value={reload}>
+          <TestCasesManager
+            suiteId={suite.id}
+            suiteName={suite.name}
+            testCases={data.testCases}
+            sections={data.sections}
+            canEdit={data.canEdit}
+            initialEditTcId={initialEditTcId}
+          />
+        </RefreshContext.Provider>
+      </div>
     </main>
   );
 }

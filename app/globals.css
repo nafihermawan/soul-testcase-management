@@ -208,6 +208,27 @@ button,
   border-radius: 8px !important;
 }
 
+/* Item di dalam grup tombol (Template | Import | CSV) — tanpa radius sendiri. */
+.btn-radius-0 {
+  border-radius: 0 !important;
+}
+
+.btn-radius-9 {
+  border-radius: 9px !important;
+}
+
+.btn-radius-12 {
+  border-radius: 12px !important;
+}
+
+/* Field di panel Eksekusi: fokus kuning (border + ring). */
+.exec-field:focus,
+.exec-field:focus-visible {
+  border-color: #FFC348 !important;
+  box-shadow: 0 0 0 3px #FFF1D1 !important;
+  outline: none !important;
+}
+
 /* Sidebar menu item: unified base + hover state */
 .sidebar-item {
   color: var(--text-secondary);
@@ -687,4 +708,68 @@ button,
    sisa tinggi supaya batas bawah kedua kolom sejajar. */
 .tc-form-col > * {
   flex-shrink: 0;
+}
+
+/* ===== Checkbox & radio — kuning + centang/titik putih (Create Express Run) =====
+   Menimpa aturan lama di atas (selector sama, urutan belakangan menang). */
+input[type="checkbox"],
+input[type="radio"] {
+  appearance: none;
+  -webkit-appearance: none;
+  position: static;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  border: 1.5px solid #CBD5E1;
+  background: #FFFFFF;
+  display: inline-grid;
+  place-content: center;
+  cursor: pointer;
+  transition: background-color 0.12s, border-color 0.12s;
+  background-image: none !important;
+}
+input[type="checkbox"]::after,
+input[type="radio"]::after {
+  content: none !important;
+  display: none !important;
+}
+input[type="checkbox"] { border-radius: 4px; }
+input[type="radio"] { border-radius: 50%; }
+input[type="checkbox"]:hover:not(:disabled):not(:checked):not(:indeterminate),
+input[type="radio"]:hover:not(:disabled):not(:checked) {
+  border-color: #FFC348;
+}
+input[type="checkbox"]:checked,
+input[type="checkbox"]:indeterminate,
+input[type="radio"]:checked {
+  background-color: #FFC348;
+  border-color: #FFC348;
+}
+input[type="checkbox"]:checked::before {
+  content: "";
+  width: 10px;
+  height: 10px;
+  background: #FFFFFF;
+  clip-path: polygon(14% 44%, 0 66%, 40% 100%, 100% 20%, 82% 0%, 38% 62%);
+}
+input[type="checkbox"]:indeterminate::before {
+  content: "";
+  width: 8px;
+  height: 2px;
+  border-radius: 1px;
+  background: #FFFFFF;
+}
+input[type="radio"]:checked::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #FFFFFF;
+}
+input[type="checkbox"]:focus-visible,
+input[type="radio"]:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px #FFF1D1;
 }

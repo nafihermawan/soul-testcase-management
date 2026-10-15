@@ -77,78 +77,53 @@ export function CreateRunView({ searchParams }: { searchParams?: CreateRunSearch
   }
 
   return (
-    <main style={{ fontFamily: "var(--font-sans)", width: "100%" }}>
-      {/* Header Card Banner */}
+    <main
+      style={{
+        fontFamily: "var(--font-sans)",
+        margin: "-1rem",
+        padding: 24,
+        minHeight: "calc(100% + 2rem)",
+        display: "flex",
+        flexDirection: "column",
+        background: "#F1F3F6",
+      }}
+    >
+      {/* SATU card: Header → inset divider → Body → Footer. */}
       <div
         style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: "1rem",
-          flexWrap: "wrap",
           background: "#FFFFFF",
-          borderRadius: 12,
-          padding: "20px 24px",
-          border: "1px solid #E5E7EB",
-          boxShadow: "0px 1px 2px rgba(16, 24, 40, 0.04), 0px 4px 12px rgba(16, 24, 40, 0.06)",
-          marginBottom: 20,
+          border: "1px solid #E3E7EE",
+          borderRadius: 18,
+          overflow: "hidden",
+          flex: 1,
+          minHeight: 0,
+          display: "flex",
+          flexDirection: "column",
+          fontFamily: '"Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif',
         }}
       >
-        <div>
+        {/* Header */}
+        <div style={{ padding: "22px 22px 20px", flexShrink: 0 }}>
           <h1
             style={{
-              fontSize: 20,
-              fontWeight: 700,
-              color: "#1E293B",
-              letterSpacing: "-0.025em",
+              fontSize: 24,
+              fontWeight: 600,
+              color: "#0F172A",
+              letterSpacing: "-0.02em",
               margin: 0,
               lineHeight: 1.2,
             }}
           >
             Create Express Run
           </h1>
-        </div>
-        {/* Batal -> kembali ke /test-runs */}
-        <a
-          href="/test-runs"
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            padding: "10px 16px",
-            borderRadius: 8,
-            border: "1px solid #D1D5DB",
-            background: "#fff",
-            color: "#374151",
-            fontSize: 14,
-            fontWeight: 600,
-            textDecoration: "none",
-            whiteSpace: "nowrap",
-            transition: "background-color 0.15s ease",
-          }}
-        >
-          Batal
-        </a>
-      </div>
-
-      {/* Main Form Card */}
-      <div
-        style={{
-          background: "#FFFFFF",
-          border: "1px solid #E5E7EB",
-          borderRadius: 12,
-          boxShadow: "0px 1px 2px rgba(16, 24, 40, 0.04), 0px 4px 12px rgba(16, 24, 40, 0.06)",
-          overflow: "hidden",
-        }}
-      >
-        <div style={{ padding: "1rem 1.25rem" }}>
-          <div style={{ fontWeight: 700, fontSize: 16, color: "#0F172A" }}>Express Run</div>
-          <p style={{ fontSize: 13, color: "#6B7280", margin: "0.25rem 0 0" }}>
+          <p style={{ fontSize: 14, lineHeight: 1.5, color: "#475569", margin: "6px 0 0" }}>
             Isi detail run dan pilih suite/test case yang ingin dieksekusi.
           </p>
         </div>
-        {/* Garis pemisah di-inset mengikuti padding body form (1.25rem) supaya
-            sejajar vertikal dengan input field, bukan full-width kartu. */}
-        <div style={{ height: 1, background: "#E5E7EB", margin: "0 1.25rem" }} />
+
+        {/* Inset divider */}
+        <div aria-hidden="true" style={{ height: 1, background: "#E8ECF1", margin: "0 22px", flexShrink: 0 }} />
+
         <ExpressRunForm
           // Form membaca `prefill` hanya sekali di initial state, jadi re-init
           // saat referensi bug-nya berubah (mis. navigasi ke bug lain).

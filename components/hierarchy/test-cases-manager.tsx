@@ -18,6 +18,7 @@ import {
   Layers,
   Loader2,
   Pencil,
+  Plus,
   Trash2,
   Upload,
   X,
@@ -124,19 +125,38 @@ const btnYellow: React.CSSProperties = {
   cursor: "pointer",
 };
 
-/** Button sekunder standar untuk toolbar header (compact: px-3 py-1.5, text-xs). */
-const btnHeader: React.CSSProperties = {
+/** Item dalam grup aksi file (Template · Import · CSV). */
+const fileGroupItem: React.CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
-  gap: "0.35rem",
-  padding: "6px 12px",
-  borderRadius: 8,
-  border: "1px solid #E5E7EB",
-  background: "#fff",
-  color: "#111827",
-  fontWeight: 600,
-  fontSize: "0.75rem",
+  gap: 7,
+  height: "100%",
+  padding: "0 14px",
+  border: "none",
+  borderRight: "1px solid #DDE2E9",
+  background: "#FFFFFF",
+  color: "#334155",
+  fontSize: 13,
+  fontWeight: 500,
   cursor: "pointer",
+  whiteSpace: "nowrap",
+};
+
+/** Tombol aksi primer kuning (Tambah Section / Tambah Case). */
+const primaryBtn: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 8,
+  height: 40,
+  boxSizing: "border-box",
+  padding: "0 16px",
+  border: "1px solid #FFC348",
+  background: "#FFC348",
+  color: "#0F172A",
+  fontSize: 14,
+  fontWeight: 600,
+  cursor: "pointer",
+  whiteSpace: "nowrap",
 };
 
 function TestCaseForm({
@@ -711,7 +731,9 @@ function SectionCard({
           display: "flex",
           alignItems: "center",
           gap: "0.5rem",
-          padding: "0.6rem 0.9rem",
+          // Padding vertikal 8px: tombol "Tambah Case" kini 40px, jadi header
+          // dijaga tetap proporsional.
+          padding: "8px 0.9rem",
           background: "var(--surface-muted)",
           borderBottom: section.open ? "1px solid var(--border)" : "none",
           cursor: "pointer",
@@ -815,28 +837,16 @@ function SectionCard({
           {canEdit && !addingTc && editingTcId === null && (
             <button
               type="button"
+              className="btn-radius-10"
               onClick={(e) => {
                 e.stopPropagation();
                 onAddCase();
               }}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "0.3rem",
-                padding: "6px 12px",
-                fontSize: "0.75rem",
-                fontWeight: 600,
-                color: "#000000",
-                background: "#F59E0B",
-                borderRadius: 3,
-                border: "none",
-                cursor: "pointer",
-                transition: "background-color 0.15s ease",
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = "#D97706")}
-              onMouseLeave={(e) => (e.currentTarget.style.background = "#F59E0B")}
+              style={primaryBtn}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "#F0B53D")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "#FFC348")}
             >
-              <CirclePlus size={14} /> Tambah Case
+              <Plus size={16} strokeWidth={2.4} /> Tambah Case
             </button>
           )}
           <div
@@ -1754,53 +1764,62 @@ export function TestCasesManager({
               style={{ display: "none" }}
               onChange={handleImportFile}
             />
-            <button type="button" onClick={handleDownloadTemplate} style={btnHeader}>
-              <Download size={16} /> Template
-            </button>
-            <button type="button" onClick={() => fileRef.current?.click()} style={btnHeader}>
-              <Upload size={16} /> Import
-            </button>
-            <button type="button" onClick={() => handleExport("csv")} style={btnHeader}>
-              <Download size={16} /> CSV
-            </button>
+            {/* Grup aksi file: satu container bordered (Template | Import | CSV). */}
+            <div
+              style={{
+                display: "flex",
+                height: 40,
+                boxSizing: "border-box",
+                border: "1px solid #DDE2E9",
+                borderRadius: 10,
+                overflow: "hidden",
+                background: "#FFFFFF",
+              }}
+            >
+              <button
+                type="button"
+                className="btn-radius-0"
+                onClick={handleDownloadTemplate}
+                style={fileGroupItem}
+              >
+                <Download size={15} /> Template
+              </button>
+              <button
+                type="button"
+                className="btn-radius-0"
+                onClick={() => fileRef.current?.click()}
+                style={fileGroupItem}
+              >
+                <Upload size={15} /> Import
+              </button>
+              <button
+                type="button"
+                className="btn-radius-0"
+                onClick={() => handleExport("csv")}
+                style={{ ...fileGroupItem, borderRight: "none" }}
+              >
+                <Download size={15} /> CSV
+              </button>
+            </div>
+
             {!showAddSection && (
               <button
                 type="button"
+                className="btn-radius-10"
                 onClick={() => setShowAddSection(true)}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "0.3rem",
-                  padding: "6px 12px",
-                  borderRadius: 8,
-                  border: "none",
-                  background: "#F59E0B",
-                  color: "#111827",
-                  fontWeight: 600,
-                  fontSize: "0.75rem",
-                  cursor: "pointer",
-                  transition: "background-color 0.15s ease",
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = "#D97706")}
-                onMouseLeave={(e) => (e.currentTarget.style.background = "#F59E0B")}
+                style={primaryBtn}
+                onMouseEnter={(e) => (e.currentTarget.style.background = "#F0B53D")}
+                onMouseLeave={(e) => (e.currentTarget.style.background = "#FFC348")}
               >
-                <CirclePlus size={14} /> Tambah Section
+                <Plus size={16} strokeWidth={2.4} /> Tambah Section
               </button>
             )}
           </div>,
           headerAnchor
         )}
 
-      <div
-        style={{
-          width: "100%",
-          background: "#ffffff",
-          border: "1px solid var(--border)",
-          borderRadius: "var(--radius-lg)",
-          boxShadow: "var(--shadow-md)",
-        }}
-      >
-        <div style={{ padding: "1.25rem" }}>
+      {/* Wrapper card dihapus — bagian ini kini menyatu dengan card header suite. */}
+      <div style={{ padding: "1.25rem" }}>
           {addingTc && (
             <div style={{ padding: "0 0 1rem" }}>
               <TestCaseForm
@@ -1919,7 +1938,8 @@ export function TestCasesManager({
                   display: "flex",
                   alignItems: "center",
                   gap: "0.5rem",
-                  padding: "0.6rem 0.9rem",
+                  // Padding vertikal 8px agar proporsional dengan tombol 40px.
+                  padding: "8px 0.9rem",
                   background: "var(--surface-muted)",
                   borderBottom: "1px solid var(--border)",
                 }}
@@ -1948,25 +1968,16 @@ export function TestCasesManager({
                   {canEdit && !addingTc && editingTcId === null && (
                     <button
                       type="button"
+                      className="btn-radius-10"
                       onClick={() => {
                         setAddingTcFor(null);
                         setAddingTc(true);
                       }}
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: "0.3rem",
-                        padding: "6px 12px",
-                        fontSize: "0.75rem",
-                        fontWeight: 600,
-                        color: "#000000",
-                        background: "#F59E0B",
-                        borderRadius: 3,
-                        border: "none",
-                        cursor: "pointer",
-                      }}
+                      style={primaryBtn}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = "#F0B53D")}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = "#FFC348")}
                     >
-                      <CirclePlus size={14} /> Tambah Case
+                      <Plus size={16} strokeWidth={2.4} /> Tambah Case
                     </button>
                   )}
                 </div>
@@ -2000,7 +2011,6 @@ export function TestCasesManager({
               onQuickUpdate={handleQuickUpdate}
             />
           )}
-        </div>
       </div>
 
       {/* Modal: Tambah Section Baru */}

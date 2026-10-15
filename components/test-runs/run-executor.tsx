@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRefresh } from "@/lib/client/refresh-context";
-import { AlertTriangle, Bug, Check, CheckCircle2, ChevronDown, ChevronRight, CircleSlash, Copy, ExternalLink, FileDown, FolderOpen, MinusCircle, Paperclip, Pencil, X, XCircle } from "lucide-react";
+import { AlertTriangle, Bug, Check, CheckCircle2, ChevronDown, CircleSlash, Copy, ExternalLink, FileDown, FolderOpen, Lock, MinusCircle, Paperclip, Pencil, Phone, Plus, X, XCircle } from "lucide-react";
 import { completeRun, completeRunWithSkip, deleteRun, updateRunResult } from "@/lib/actions/test-runs";
 import { createBug, updateBug, updateBugStatus } from "@/lib/actions/automation-bugs";
 import { downloadBugPdf } from "@/lib/bug-pdf";
@@ -64,13 +64,6 @@ export type RunResultItem = {
   } | null;
 };
 
-const STATUSES = [
-  { value: "PASS", label: "Pass", icon: CheckCircle2, color: "#059669", bg: "#ECFDF5", activeBg: "#059669" },
-  { value: "FAIL", label: "Fail", icon: XCircle, color: "#E11D48", bg: "#FFF1F2", activeBg: "#E11D48" },
-  { value: "BLOCKED", label: "Blocked", icon: CircleSlash, color: "#D97706", bg: "#FFFBEB", activeBg: "#D97706" },
-  { value: "SKIPPED", label: "Skipped", icon: MinusCircle, color: "#374151", bg: "#F9FAFB", activeBg: "#374151" },
-] as const;
-
 /**
  * Gaya badge status pasif pada baris TC. Status tidak lagi bisa diubah dari
  * baris — QA harus membuka modal detail eksekusi.
@@ -103,6 +96,91 @@ const statusPillStyle = (
   fontWeight: badge.weight,
   whiteSpace: "nowrap",
 });
+
+/** Warna status pada BARIS test case: dot + teks (tanpa pill). */
+const ROW_STATUS: Record<RunResultItem["status"], { label: string; dot: string; text: string }> = {
+  PASS: { label: "Passed", dot: "#15803D", text: "#15803D" },
+  FAIL: { label: "Failed", dot: "#DC2626", text: "#B91C1C" },
+  BLOCKED: { label: "Blocked", dot: "#D97706", text: "#B45309" },
+  SKIPPED: { label: "Skipped", dot: "#7E22CE", text: "#7E22CE" },
+  NOT_RUN: { label: "Untested", dot: "#CBD5E1", text: "#64748B" },
+};
+
+/** Opsi segmented control hasil eksekusi di panel Eksekusi. */
+const RESULT_OPTIONS: {
+  value: "PASS" | "FAIL" | "BLOCKED" | "SKIPPED";
+  label: string;
+  icon: typeof CheckCircle2;
+  color: string;
+  tint: string;
+}[] = [
+  { value: "PASS", label: "Pass", icon: CheckCircle2, color: "#15803D", tint: "#BBE7CB" },
+  { value: "FAIL", label: "Fail", icon: XCircle, color: "#B91C1C", tint: "#FBCACA" },
+  { value: "BLOCKED", label: "Blocked", icon: CircleSlash, color: "#D97706", tint: "#FDE3B8" },
+  { value: "SKIPPED", label: "Skipped", icon: MinusCircle, color: "#64748B", tint: "#DDE3EA" },
+];
+
+const FONT_MONO = '"Geist Mono", ui-monospace, monospace';
+const FONT_SANS = '"Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif';
+
+/** Tombol sekunder (Edit / Export Report). */
+const BTN_SECONDARY: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 8,
+  height: 40,
+  padding: "0 14px",
+  border: "1px solid #DDE2E9",
+  borderRadius: 10,
+  background: "#fff",
+  color: "#0F172A",
+  fontSize: 14,
+  fontWeight: 500,
+  cursor: "pointer",
+  whiteSpace: "nowrap",
+};
+
+/** Tombol primer kuning (Complete Run). */
+const BTN_PRIMARY: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 8,
+  height: 40,
+  padding: "0 16px",
+  border: "1px solid #FFC348",
+  borderRadius: 10,
+  background: "#FFC348",
+  color: "#0F172A",
+  fontSize: 14,
+  fontWeight: 600,
+  cursor: "pointer",
+  whiteSpace: "nowrap",
+};
+
+/** Kotak 8×8 penanda status pada ringkasan header. */
+function Sq({ color }: { color: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: color, flexShrink: 0 }}
+    />
+  );
+}
+
+/** Pemisah vertikal 1×14 pada baris ringkasan. */
+function VSep() {
+  return (
+    <span
+      aria-hidden="true"
+      style={{ display: "inline-block", width: 1, height: 14, background: "#E2E8F0", flexShrink: 0 }}
+    />
+  );
+}
+
+/** Angka dengan font Geist Mono 600. */
+function MNum({ children, color }: { children: React.ReactNode; color: string }) {
+  return <span style={{ fontFamily: FONT_MONO, fontWeight: 600, color }}>{children}</span>;
+}
 
 /**
  * Badge status bug untuk section riwayat bug di modal eksekusi — sekaligus
@@ -529,7 +607,20 @@ export function RunExecutor({
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+    <div
+      style={{
+        fontFamily: FONT_SANS,
+        color: "#0F172A",
+        background: "#fff",
+        border: "1px solid #E3E7EE",
+        borderRadius: 18,
+        overflow: "hidden",
+        flex: 1,
+        minHeight: 0,
+        display: "flex",
+        flexDirection: "column",
+      }}
+    >
       {/* Modal Edit Run — setelah simpan, data run di halaman ini disegarkan
           (refresh dari RefreshContext) sehingga daftar TC & metadata ikut
           berubah tanpa reload halaman. */}
@@ -547,207 +638,142 @@ export function RunExecutor({
         />
       )}
 
-      {/* Summary / Page Header Card */}
-      <div
-        style={{
-          background: "#fff",
-          border: "1px solid #E5E7EB",
-          borderRadius: 12,
-          boxShadow: "0px 1px 2px rgba(16, 24, 40, 0.04)",
-          padding: 24,
-        }}
-      >
-        {/* Row 1: Judul (kiri, boleh melipat) | aksi (kanan, tidak menyusut) */}
-        <div
-          style={{
-            display: "flex",
-            // `flex-start` + TANPA `flexWrap`: judul panjang melipat di kolomnya
-            // sendiri, tombol aksi tidak pernah terdorong ke baris bawah.
-            alignItems: "flex-start",
-            justifyContent: "space-between",
-            gap: "1rem",
-            marginBottom: "0.75rem",
-          }}
-        >
-          <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 12 }}>
-            <div
-              style={{
-                minWidth: 0,
-                fontSize: 22,
-                fontWeight: 700,
-                color: "#111827",
-                lineHeight: 1.3,
-                // Kata panjang tanpa spasi pun tetap dipatahkan, tidak melebar.
-                overflowWrap: "break-word",
-              }}
-            >
-              {runName}
-            </div>
-          </div>
-          <div
+      {/* Header — padding 22px, baris demi baris gap 16px. */}
+      <div style={{ padding: 22, display: "flex", flexDirection: "column", gap: 16, flexShrink: 0 }}>
+        {/* Row 1: judul | aksi */}
+        <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: 16 }}>
+          <h1
             style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "0.5rem",
-              // Tombol mempertahankan ukuran aslinya di sisi kanan.
-              flexShrink: 0,
-              whiteSpace: "nowrap",
+              fontSize: 24,
+              fontWeight: 600,
+              letterSpacing: "-0.02em",
+              color: "#0F172A",
+              margin: 0,
+              lineHeight: 1.2,
+              minWidth: 0,
+              // Kata panjang tanpa spasi pun tetap dipatahkan, tidak melebar.
+              overflowWrap: "break-word",
             }}
           >
-            {/* Aksi sekunder: buka modal Edit Run, tepat di kiri Complete Run.
-                Base style kedua tombol sengaja identik (tinggi, radius, padding,
-                font) — bedanya hanya warna/border. */}
+            {runName}
+          </h1>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
             {!isCompleted && canEdit && (
               <button
                 type="button"
+                className="btn-radius-10"
                 onClick={() => setEditOpen(true)}
                 title="Edit run ini"
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 6,
-                  // Tinggi ditentukan padding saja (tanpa `height` tetap) supaya
-                  // ringkas dan sejajar dengan tombol action lain di app.
-                  padding: "0.375rem 0.75rem",
-                  borderRadius: 8,
-                  border: "1px solid #CBD5E1",
-                  background: "#fff",
-                  color: "#334155",
-                  fontWeight: 600,
-                  fontSize: "0.75rem",
-                  cursor: "pointer",
-                  transition: "background-color 0.15s ease, color 0.15s ease",
-                }}
+                style={BTN_SECONDARY}
                 onMouseEnter={(e) => (e.currentTarget.style.background = "#F8FAFC")}
                 onMouseLeave={(e) => (e.currentTarget.style.background = "#fff")}
               >
-                <Pencil size={13} /> Edit
+                <Pencil size={15} aria-hidden="true" /> Edit
               </button>
             )}
             {!isCompleted && canEdit ? (
-            <button
-              type="button"
-              onClick={handleCompleteClick}
-              disabled={completing}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 6,
-                padding: "0.375rem 0.75rem",
-                borderRadius: 8,
-                border: "none",
-                background: "#FFC348",
-                color: "#0F172A",
-                fontWeight: 700,
-                fontSize: "0.75rem",
-                cursor: completing ? "wait" : "pointer",
-                boxShadow: "0 1px 2px rgba(15, 23, 42, 0.08)",
-                transition: "background-color 0.15s ease",
-              }}
-              onMouseEnter={(e) => {
-                if (!completing) e.currentTarget.style.background = "#F0B53D";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = "#FFC348";
-              }}
-            >
-              {completing ? "Menyelesaikan..." : "Complete Run"}
-            </button>
-          ) : (
-            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-              <div
-                style={{
-                  padding: "0.4rem 1rem",
-                  borderRadius: 999,
-                  background: "#ECFDF5",
-                  color: "#047857",
-                  border: "1px solid #A7F3D0",
-                  fontWeight: 600,
-                  fontSize: "0.85rem",
-                }}
-              >
-                Run Completed
-              </div>
               <button
                 type="button"
-                onClick={() => setReportOpen(true)}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "0.35rem",
-                  padding: "0.375rem 0.75rem",
-                  borderRadius: 8,
-                  border: "1px solid #D1D5DB",
-                  background: "#fff",
-                  color: "#374151",
-                  fontWeight: 600,
-                  fontSize: "0.75rem",
-                  cursor: "pointer",
+                className="btn-radius-10"
+                onClick={handleCompleteClick}
+                disabled={completing}
+                style={{ ...BTN_PRIMARY, cursor: completing ? "wait" : "pointer" }}
+                onMouseEnter={(e) => {
+                  if (!completing) e.currentTarget.style.background = "#F0B53D";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = "#FFC348";
                 }}
               >
-                Export Report <ChevronDown size={13} aria-hidden="true" />
+                <Check size={16} strokeWidth={2.4} aria-hidden="true" />
+                {completing ? "Menyelesaikan..." : "Complete Run"}
               </button>
-            </div>
-          )}
+            ) : (
+              <>
+                <span
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 7,
+                    fontSize: 13,
+                    fontWeight: 600,
+                    color: "#15803D",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  <span
+                    aria-hidden="true"
+                    style={{ width: 7, height: 7, borderRadius: "50%", background: "#15803D", flexShrink: 0 }}
+                  />
+                  Run Completed
+                </span>
+                <button
+                  type="button"
+                  className="btn-radius-10"
+                  onClick={() => setReportOpen(true)}
+                  style={BTN_SECONDARY}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = "#F8FAFC")}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = "#fff")}
+                >
+                  Export Report <ChevronDown size={14} aria-hidden="true" />
+                </button>
+              </>
+            )}
           </div>
         </div>
 
-        {/* Row 2: Overall Execution Bar — jaraknya diatur `marginBottom` Row 1. */}
-        <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap" }}>
-          <span style={{ fontSize: 12, fontWeight: 500, color: "#64748B" }}>
-            Total: {items.length} TC
-          </span>
-          <span style={{ margin: "0 0.5rem", fontSize: 12, color: "#CBD5E1" }}>|</span>
-          <span style={{ fontSize: 12, fontWeight: 500, color: "#059669" }}>
-            Passed: {passed}
-          </span>
-          <span style={{ margin: "0 0.5rem", fontSize: 12, color: "#CBD5E1" }}>|</span>
-          <span style={{ fontSize: 12, fontWeight: 500, color: "#E11D48" }}>
-            Failed: {failed}
-          </span>
-          <span style={{ margin: "0 0.5rem", fontSize: 12, color: "#CBD5E1" }}>|</span>
-          <span style={{ fontSize: 12, fontWeight: 500, color: "#64748B" }}>
-            Untested: {untested}
-          </span>
-          <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6 }}>
-            <button
-              type="button"
-              onClick={() => setMetaOpen((v) => !v)}
-              aria-expanded={metaOpen}
-              title={metaOpen ? "Tutup rincian" : "Lihat rincian"}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "0.35rem",
-                padding: "0.2rem 0.1rem",
-                border: "none",
-                background: "transparent",
-                color: metaOpen ? "#1E293B" : "#64748B",
-                cursor: "pointer",
-                fontSize: 12,
-                fontWeight: 600,
-                lineHeight: 1,
-                transition: "color 0.15s ease",
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.color = "#1E293B")}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.color = metaOpen ? "#1E293B" : "#64748B";
-              }}
-            >
-              <span>Detail</span>
-              {/* ChevronDown sbg dasar: 180° = menunjuk ke atas saat terbuka. */}
-              <ChevronDown
-                size={14}
-                aria-hidden="true"
-                style={{
-                  transform: metaOpen ? "rotate(180deg)" : "rotate(0deg)",
-                  transition: "transform 0.3s ease-in-out",
-                }}
-              />
-            </button>
+        {/* Row 2: ringkasan hasil | toggle Detail */}
+        <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap", fontSize: 13, color: "#475569" }}>
+            <span>
+              Total <MNum color="#0F172A">{items.length}</MNum> TC
+            </span>
+            <VSep />
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 7 }}>
+              <Sq color="#15803D" /> Passed <MNum color="#15803D">{passed}</MNum>
+            </span>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 7 }}>
+              <Sq color="#DC2626" /> Failed <MNum color="#B91C1C">{failed}</MNum>
+            </span>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 7 }}>
+              <Sq color="#CBD5E1" /> Untested <MNum color="#334155">{untested}</MNum>
+            </span>
           </div>
+
+          <button
+            type="button"
+            onClick={() => setMetaOpen((v) => !v)}
+            aria-expanded={metaOpen}
+            title={metaOpen ? "Tutup rincian" : "Lihat rincian"}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 4,
+              height: 30,
+              padding: 0,
+              border: "none",
+              background: "transparent",
+              color: "#64748B",
+              fontSize: 13,
+              fontWeight: 500,
+              cursor: "pointer",
+              transition: "color 0.15s ease",
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.color = "#1E293B")}
+            onMouseLeave={(e) => (e.currentTarget.style.color = "#64748B")}
+          >
+            <span>Detail</span>
+            {/* ChevronDown sbg dasar: 180° = menunjuk ke atas saat terbuka. */}
+            <ChevronDown
+              size={14}
+              aria-hidden="true"
+              style={{
+                transform: metaOpen ? "rotate(180deg)" : "rotate(0deg)",
+                transition: "transform 0.3s ease-in-out",
+              }}
+            />
+          </button>
         </div>
 
         {/* Collapsible halus: grid-rows 0fr <-> 1fr */}
@@ -758,7 +784,7 @@ export function RunExecutor({
               "grid-template-rows 0.3s ease-in-out, opacity 0.3s ease-in-out, padding-top 0.3s ease-in-out, border-top 0.3s ease-in-out, margin-top 0.3s ease-in-out",
             gridTemplateRows: metaOpen ? "1fr" : "0fr",
             opacity: metaOpen ? 1 : 0,
-            marginTop: metaOpen ? "1rem" : 0,
+            marginTop: metaOpen ? 0 : -16,
             paddingTop: metaOpen ? "1rem" : 0,
             borderTop: metaOpen ? "1px solid #F1F5F9" : "1px solid transparent",
           }}
@@ -895,8 +921,21 @@ export function RunExecutor({
       </div>
     </div>
 
-      {/* Daftar eksekusi: kartu teratas = SUITE, di dalamnya Section (folder),
-          baru kartu TC. Section tidak lagi digabung lintas suite. */}
+      {/* Inset divider (bukan full width). */}
+      <div style={{ margin: "0 22px", height: 1, background: "#E8ECF1", flexShrink: 0 }} />
+
+      {/* Daftar suite — mengisi sisa tinggi card & scroll sendiri. */}
+      <div
+        style={{
+          flex: 1,
+          minHeight: 0,
+          overflowY: "auto",
+          display: "flex",
+          flexDirection: "column",
+          gap: 14,
+          padding: "20px 22px 24px",
+        }}
+      >
       {suiteStats.length === 0 && (
         <div style={{ padding: "1.5rem", textAlign: "center", color: "var(--text-muted)", fontSize: "0.9rem" }}>
           Belum ada test case dalam run ini.
@@ -908,81 +947,75 @@ export function RunExecutor({
           <div
             key={s.key}
             style={{
-              background: "#fff",
-              border: "1px solid var(--border)",
-              borderRadius: 12,
-              boxShadow: "0px 1px 2px rgba(16, 24, 40, 0.04)",
+              border: "1px solid #E3E7EE",
+              borderRadius: 14,
               overflow: "hidden",
+              // 8px ruang kosong di dasar box.
+              paddingBottom: 8,
             }}
           >
-            {/* Header Suite Card: nama suite + breadcrumb project (kiri);
-                badge Platform + jumlah TC + chevron (kanan). */}
+            {/* Suite header */}
             <div
               style={{
                 display: "flex",
+                justifyContent: "space-between",
                 alignItems: "center",
-                gap: "0.6rem",
-                padding: "0.85rem 1.25rem",
+                gap: 12,
+                padding: "8px 12px 8px 10px",
                 background: "#F8FAFC",
-                // Border dibuat transparan (bukan `none`) + di-transition agar
-                // tingginya tidak "melompat" 1px saat buka/tutup.
-                borderBottom: `1px solid ${open ? "var(--border)" : "transparent"}`,
+                borderBottom: `1px solid ${open ? "#EEF1F5" : "transparent"}`,
                 transition: "border-color 300ms ease-in-out",
-                cursor: "pointer",
-                flexWrap: "wrap",
               }}
-              onClick={() => setOpenSuites((prev) => ({ ...prev, [s.key]: !open }))}
             >
-              <span style={{ fontWeight: 700, fontSize: "0.95rem", color: "#111827" }}>
-                {s.name}
-              </span>
-              {/* Konteks project (dulu kartu tersendiri) kini jadi breadcrumb. */}
-              <span style={{ fontSize: "0.72rem", color: "#94A3B8" }}>{s.projectName}</span>
+              <button
+                type="button"
+                onClick={() => setOpenSuites((prev) => ({ ...prev, [s.key]: !open }))}
+                aria-expanded={open}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 10,
+                  minHeight: 44,
+                  padding: 0,
+                  border: "none",
+                  background: "transparent",
+                  cursor: "pointer",
+                  textAlign: "left",
+                  minWidth: 0,
+                }}
+              >
+                <ChevronDown
+                  size={16}
+                  aria-hidden="true"
+                  style={{
+                    color: "#64748B",
+                    flexShrink: 0,
+                    transform: open ? "rotate(180deg)" : "rotate(0deg)",
+                    transition: "transform 300ms ease-in-out",
+                  }}
+                />
+                <span style={{ fontSize: 16, fontWeight: 600, color: "#0F172A" }}>{s.name}</span>
+                <span style={{ fontSize: 13, color: "#64748B", whiteSpace: "nowrap" }}>{s.projectName}</span>
+              </button>
 
               <div
                 style={{
-                  marginLeft: "auto",
                   display: "flex",
                   alignItems: "center",
-                  gap: "0.5rem",
+                  gap: 14,
+                  paddingRight: 6,
+                  fontSize: 13,
+                  color: "#475569",
                 }}
               >
                 {s.platform && (
-                  <span
-                    style={{
-                      padding: "0.1rem 0.45rem",
-                      borderRadius: 999,
-                      fontSize: "0.6875rem",
-                      fontWeight: 700,
-                      letterSpacing: "0.02em",
-                      background: "#F1F5F9",
-                      color: "#475569",
-                      border: "1px solid #E2E8F0",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {platformLabel(s.platform)}
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}>
+                    <Phone size={14} aria-hidden="true" /> {platformLabel(s.platform)}
                   </span>
                 )}
-                <span
-                  style={{
-                    fontSize: "0.72rem",
-                    fontWeight: 600,
-                    color: "#64748B",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {s.items.length} TC
-                </span>
-                <span
-                  style={{
-                    color: "#6B7280",
-                    display: "inline-flex",
-                    transition: "transform 300ms ease-in-out",
-                    transform: open ? "rotate(180deg)" : "rotate(0deg)",
-                  }}
-                >
-                  <ChevronDown size={16} aria-hidden="true" />
+                {s.platform && <VSep />}
+                <span style={{ whiteSpace: "nowrap" }}>
+                  <MNum color="#0F172A">{s.items.length}</MNum> TC
                 </span>
               </div>
             </div>
@@ -999,63 +1032,50 @@ export function RunExecutor({
               }}
             >
               <div style={{ overflow: "hidden", minHeight: 0 }}>
-                <div
-                  style={{
-                    padding: "0.5rem 0.75rem 0.75rem",
-                    display: "flex",
-                    flexDirection: "column",
-                  }}
-                >
+                <div style={{ display: "flex", flexDirection: "column" }}>
                   {groupItemsBySection(s.items).map((sec) => {
                     const secOpen = !collapsedSections[sec.key];
                     return (
                       <div key={sec.key}>
-                        {/* Header Section — klik untuk collapse/expand. Chevron
-                            berputar halus; ikon folder tetap sebagai penanda. */}
+                        {/* Header Section — tanpa background; toggle via tombol chevron. */}
                         <div
-                          role="button"
-                          tabIndex={0}
-                          onClick={() => toggleSection(sec.key)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter" || e.key === " ") {
-                              e.preventDefault();
-                              toggleSection(sec.key);
-                            }
-                          }}
-                          aria-expanded={secOpen}
-                          aria-label={`${sec.name} — ${sec.items.length} test case`}
                           style={{
                             display: "flex",
                             alignItems: "center",
-                            gap: 8,
-                            padding: "8px 10px",
-                            marginTop: 8,
-                            // Folder parent: latar slate-50 tipis + teks tegas.
-                            background: "rgba(248, 250, 252, 0.8)",
-                            borderRadius: 6,
-                            cursor: "pointer",
-                            userSelect: "none",
+                            gap: 10,
+                            padding: "14px 18px 8px",
                           }}
                         >
-                          <ChevronRight
-                            size={13}
+                          <button
+                            type="button"
+                            onClick={() => toggleSection(sec.key)}
+                            aria-expanded={secOpen}
+                            aria-label={`${sec.name} — ${sec.items.length} test case`}
                             style={{
-                              color: "#64748B",
+                              width: 24,
+                              height: 24,
+                              display: "inline-flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              padding: 0,
+                              border: "none",
+                              background: "transparent",
+                              cursor: "pointer",
                               flexShrink: 0,
-                              transform: secOpen ? "rotate(90deg)" : "rotate(0deg)",
-                              transition: "transform 300ms ease-in-out",
-                            }}
-                          />
-                          <FolderOpen size={13} style={{ color: "#64748B", flexShrink: 0 }} />
-                          <span
-                            style={{
-                              fontSize: 13,
-                              fontWeight: 600,
-                              color: "#1E293B",
                             }}
                           >
-                            {sec.name}
-                          </span>
+                            <ChevronDown
+                              size={14}
+                              aria-hidden="true"
+                              style={{
+                                color: "#94A3B8",
+                                transform: secOpen ? "rotate(0deg)" : "rotate(-90deg)",
+                                transition: "transform 200ms ease-in-out",
+                              }}
+                            />
+                          </button>
+                          <FolderOpen size={15} aria-hidden="true" style={{ color: "#64748B", flexShrink: 0 }} />
+                          <span style={{ fontSize: 13, fontWeight: 600, color: "#334155" }}>{sec.name}</span>
                         </div>
 
                         {/* Isi Section — juga pakai grid-rows agar animasinya
@@ -1102,6 +1122,8 @@ export function RunExecutor({
           </div>
         );
       })}
+
+      </div>
 
       {/* Modal: Detail & Execution */}
       {modalItem && (
@@ -1513,16 +1535,30 @@ function RunItemCard({
   onOpenBug: () => void;
 }) {
   const attachedBugs = item.bugs ?? [];
-  const badge = STATUS_BADGE[item.status];
+  const st = ROW_STATUS[item.status];
   const evidenceCount = item.attachments?.length ?? 0;
-  /** Actual result hanya ditampilkan saat eksekusi gagal atau terblokir. */
-  const showActualResult = item.status === "FAIL" || item.status === "BLOCKED";
-  /** Slot bug: ada bug ter-link, atau tautan "Buat Bug" (FAIL & belum ada bug). */
-  const hasBugLinks =
-    attachedBugs.length > 0 ||
-    (attachedBugs.length === 0 && item.status === "FAIL" && !isCompleted && canEdit);
+  /** Actual result ditampilkan saat eksekusi gagal atau terblokir. */
+  const showActualResult =
+    (item.status === "FAIL" || item.status === "BLOCKED") && !!item.actualResult;
+  /** Tautan "Buat Bug" muncul saat FAIL, belum ada bug, run masih aktif. */
+  const canCreateBug = attachedBugs.length === 0 && item.status === "FAIL" && !isCompleted && canEdit;
 
-  /** Link bug polos (ikon + ID) — hover = underline sederhana, tanpa pill/box. */
+  /** Link bug polos (ikon + ID) — tanpa underline, hover menggelap. */
+  const bugLinkStyle: React.CSSProperties = {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 6,
+    padding: 0,
+    border: "none",
+    background: "transparent",
+    color: "#B91C1C",
+    fontFamily: FONT_MONO,
+    fontSize: 12,
+    fontWeight: 600,
+    cursor: "pointer",
+    whiteSpace: "nowrap",
+  };
+
   const renderBugLinks = () => (
     <>
       {attachedBugs.map((b) => (
@@ -1530,30 +1566,19 @@ function RunItemCard({
           key={b.id}
           type="button"
           title="Buka detail bug"
+          aria-label={`Buka bug ${entityCode("BUG", b.id)}`}
           onClick={(e) => {
             e.stopPropagation();
             onOpenBugDetail(b.id);
           }}
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: "0.3rem",
-            padding: 0,
-            border: "none",
-            background: "transparent",
-            color: "#BE123C",
-            fontFamily: "var(--font-mono, monospace)",
-            fontSize: "0.6875rem",
-            fontWeight: 600,
-            cursor: "pointer",
-          }}
-          onMouseEnter={(e) => (e.currentTarget.style.textDecoration = "underline")}
-          onMouseLeave={(e) => (e.currentTarget.style.textDecoration = "none")}
+          style={bugLinkStyle}
+          onMouseEnter={(e) => (e.currentTarget.style.color = "#7F1D1D")}
+          onMouseLeave={(e) => (e.currentTarget.style.color = "#B91C1C")}
         >
-          <Bug size={12} /> {entityCode("BUG", b.id)}
+          <Bug size={14} aria-hidden="true" /> {entityCode("BUG", b.id)}
         </button>
       ))}
-      {attachedBugs.length === 0 && item.status === "FAIL" && !isCompleted && canEdit && (
+      {canCreateBug && (
         <button
           type="button"
           title="Buat bug dari hasil eksekusi ini"
@@ -1561,22 +1586,11 @@ function RunItemCard({
             e.stopPropagation();
             onOpenBug();
           }}
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: "0.3rem",
-            padding: 0,
-            border: "none",
-            background: "transparent",
-            color: "#BE123C",
-            fontSize: "0.6875rem",
-            fontWeight: 600,
-            cursor: "pointer",
-          }}
-          onMouseEnter={(e) => (e.currentTarget.style.textDecoration = "underline")}
-          onMouseLeave={(e) => (e.currentTarget.style.textDecoration = "none")}
+          style={bugLinkStyle}
+          onMouseEnter={(e) => (e.currentTarget.style.color = "#7F1D1D")}
+          onMouseLeave={(e) => (e.currentTarget.style.color = "#B91C1C")}
         >
-          <Bug size={12} /> Buat Bug
+          <Bug size={14} aria-hidden="true" /> Buat Bug
         </button>
       )}
     </>
@@ -1587,141 +1601,128 @@ function RunItemCard({
       onMouseEnter={(e) => (e.currentTarget.style.background = "#F8FAFC")}
       onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
       style={{
-        display: "flex",
-        flexDirection: "column",
-        gap: "0.4rem",
-        // Flat list: tanpa border/card individual — cukup garis pemisah tipis.
-        // Indentasi kiri 2.5rem (pl-10) menegaskan TC ini anak dari folder di atas.
-        padding: "0.7rem 0.75rem 0.7rem 2.5rem",
-        borderBottom: "1px solid #F1F5F9",
+        margin: "0 18px 0 52px",
+        padding: "12px 0",
+        borderBottom: "1px solid #F1F4F8",
         background: "transparent",
         cursor: "pointer",
         transition: "background-color 0.15s ease",
       }}
     >
-      {/* Blok 1 — judul (kiri) | indikator evidence + badge status pasif (kanan) */}
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "1rem" }}>
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontWeight: 500, fontSize: "0.85rem", color: "#334155", lineHeight: 1.4 }}>
-            {item.testCase?.tcId && (
-              <span
-                style={{
-                  display: "inline-block",
-                  marginRight: 6,
-                  padding: "1px 6px",
-                  borderRadius: 4,
-                  background: "#F1F5F9",
-                  color: "#64748B",
-                  fontFamily: "var(--font-mono, monospace)",
-                  fontSize: 11,
-                  fontWeight: 500,
-                  verticalAlign: "middle",
-                }}
-              >
-                {item.testCase.tcId}
-              </span>
-            )}
-            {item.titleSnapshot}
-          </div>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexShrink: 0 }}>
-          {/* Indikator evidence: ikon paperclip polos, sejajar dengan badge status.
-              Angka hanya muncul kalau file lebih dari satu. */}
-          {evidenceCount > 0 && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onOpenDetail();
-              }}
-              title={`${evidenceCount} Evidence Attached`}
-              aria-label={`${evidenceCount} Evidence Attached`}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 3,
-                padding: 2,
-                border: "none",
-                background: "transparent",
-                color: "#94A3B8",
-                fontSize: "0.72rem",
-                fontWeight: 600,
-                lineHeight: 1,
-                cursor: "pointer",
-                transition: "color 0.15s ease",
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.color = "#475569")}
-              onMouseLeave={(e) => (e.currentTarget.style.color = "#94A3B8")}
-            >
-              <Paperclip size={13} />
-              {evidenceCount > 1 && evidenceCount}
-            </button>
-          )}
-
-          {/* Pill status hasil eksekusi (Passed/Failed/Untested/…) — kontras. */}
-          <span style={statusPillStyle(badge)}>{badge.label}</span>
-        </div>
-      </div>
-
-      {/* Sub-card Actual Result — 1 baris ringkas (truncate). Tidak ada toggle
-          sendiri: klik di mana pun pada row (termasuk box ini) dipropagasi ke
-          root row yang membuka Modal Execution. Tag bug di kanan tetap punya
-          aksinya sendiri. Hanya tampil saat gagal/terblokir. */}
-      {showActualResult && item.actualResult && (
-        <div
+      {/* Satu baris: TC ID · judul · lampiran · status */}
+      <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+        <span
           style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: "0.75rem",
-            fontSize: "0.75rem",
-            color: "#475569",
-            lineHeight: 1.55,
-            background: "rgba(248, 250, 252, 0.5)",
-            borderLeft: "2px solid #CBD5E1",
-            paddingLeft: "0.75rem",
-            paddingRight: "0.6rem",
-            paddingTop: "0.375rem",
-            paddingBottom: "0.375rem",
-            borderRadius: "0 6px 6px 0",
+            width: 118,
+            flexShrink: 0,
+            fontFamily: FONT_MONO,
+            fontSize: 12,
+            fontWeight: 500,
+            color: "#64748B",
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
           }}
         >
-          <span style={{ fontWeight: 700, color: "#334155", flexShrink: 0 }}>
-            Actual Result:
-          </span>
-          <span
+          {item.testCase?.tcId ?? "—"}
+        </span>
+
+        <span
+          title={item.titleSnapshot}
+          style={{
+            flex: 1,
+            minWidth: 0,
+            fontSize: 14,
+            fontWeight: 500,
+            color: "#0F172A",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {item.titleSnapshot}
+        </span>
+
+        {evidenceCount > 0 && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenDetail();
+            }}
+            title={`${evidenceCount} lampiran`}
+            aria-label={`${evidenceCount} lampiran`}
             style={{
-              flex: 1,
-              minWidth: 0,
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 3,
+              padding: 0,
+              border: "none",
+              background: "transparent",
+              color: "#64748B",
+              fontSize: 12,
+              fontWeight: 500,
+              cursor: "pointer",
+              flexShrink: 0,
             }}
           >
-            {item.actualResult}
-          </span>
+            <Paperclip size={14} aria-hidden="true" />
+            {evidenceCount}
+          </button>
+        )}
 
-          {hasBugLinks && (
-            <div
-              style={{
-                flexShrink: 0,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "flex-end",
-                gap: "0.5rem",
-                flexWrap: "wrap",
-              }}
-            >
+        <span
+          style={{
+            width: 96,
+            flexShrink: 0,
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 7,
+            fontSize: 13,
+            fontWeight: 600,
+            color: st.text,
+            whiteSpace: "nowrap",
+          }}
+        >
+          <span
+            aria-hidden="true"
+            style={{ width: 7, height: 7, borderRadius: "50%", background: st.dot, flexShrink: 0 }}
+          />
+          {st.label}
+        </span>
+      </div>
+
+      {/* Box Actual Result — hanya saat Failed/Blocked; tepi kiri rata dengan judul. */}
+      {showActualResult && (
+        <div
+          style={{
+            margin: "10px 0 2px 132px",
+            padding: "10px 14px",
+            background: "#FFFBFB",
+            border: "1px solid #FBE1E1",
+            borderRadius: 10,
+            display: "flex",
+            alignItems: "flex-start",
+            gap: 16,
+          }}
+        >
+          <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
+            <span style={{ fontSize: 12, fontWeight: 600, color: "#991B1B" }}>Actual Result</span>
+            <span style={{ fontSize: 13, lineHeight: 1.55, color: "#334155", whiteSpace: "pre-wrap" }}>
+              {item.actualResult}
+            </span>
+          </div>
+          {(attachedBugs.length > 0 || canCreateBug) && (
+            <div style={{ flexShrink: 0, display: "flex", flexDirection: "column", gap: 6 }}>
               {renderBugLinks()}
             </div>
           )}
         </div>
       )}
 
-      {/* Kalau box Actual Result tidak tampil (mis. TC sudah Passed karena
-          bug-nya selesai), link bug tetap muncul sebagai teks polos. */}
-      {!(showActualResult && item.actualResult) && hasBugLinks && (
-        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+      {/* Kalau box Actual Result tidak tampil, link bug tetap muncul. */}
+      {!showActualResult && (attachedBugs.length > 0 || canCreateBug) && (
+        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginTop: 8 }}>
           {renderBugLinks()}
         </div>
       )}
@@ -3061,29 +3062,6 @@ function ExecutionModal({
    */
   const showBugForm = isFail && editable;
 
-  /**
-   * Teks polos hasil eksekusi untuk mode view — tanpa border/background/shadow.
-   * Nilai kosong jatuh ke placeholder italic muted.
-   */
-  const renderResultText = (value: string | null | undefined, empty: string) =>
-    (value ?? "").trim() ? (
-      <p
-        style={{
-          margin: 0,
-          fontSize: "0.75rem",
-          color: "#1E293B",
-          whiteSpace: "pre-wrap",
-          lineHeight: 1.6,
-        }}
-      >
-        {value}
-      </p>
-    ) : (
-      <p style={{ margin: 0, fontSize: "0.75rem", color: "#94A3B8", fontStyle: "italic" }}>
-        {empty}
-      </p>
-    );
-
   /** Salin Test Data ke clipboard (tombol ringkas di samping nilainya). */
   const copyTestData = async () => {
     const value = tc?.testData ?? "";
@@ -3110,38 +3088,199 @@ function ExecutionModal({
     setIsEditing(false);
   };
 
-  const bugLabelStyle: React.CSSProperties = {
-    display: "block",
-    fontSize: "0.69rem",
-    fontWeight: 700,
-    color: "#64748B",
-    textTransform: "none",
-    letterSpacing: "0.04em",
-    marginBottom: "0.3rem",
+  /** Kotak warna severity (8×8) untuk field Severity. */
+  const sevColor = (sev: string): string =>
+    sev === "CRITICAL" ? "#B91C1C" : sev === "HIGH" ? "#EA580C" : sev === "MEDIUM" ? "#CA8A04" : "#94A3B8";
+
+  /** Render teks hasil: baris bullet jadi <ul>, sisanya <p>. */
+  const renderActualBlocks = (text: string) => {
+    const blocks: React.ReactNode[] = [];
+    let bullets: string[] = [];
+    const flush = (key: string) => {
+      if (bullets.length === 0) return;
+      const items = bullets;
+      bullets = [];
+      blocks.push(
+        <ul key={key} style={{ margin: 0, paddingLeft: 18, display: "flex", flexDirection: "column", gap: 2 }}>
+          {items.map((b, i) => (
+            <li key={i} style={{ fontSize: 14, lineHeight: 1.6, color: "#1E293B" }}>
+              {b}
+            </li>
+          ))}
+        </ul>
+      );
+    };
+    text.split("\n").forEach((raw, i) => {
+      const line = raw.trim();
+      if (!line) return;
+      const m = line.match(/^[•\-*]\s*(.+)$/);
+      if (m) {
+        bullets.push(m[1]);
+      } else {
+        flush(`u${i}`);
+        blocks.push(
+          <p key={`p${i}`} style={{ margin: 0, fontSize: 14, lineHeight: 1.6, color: "#1E293B" }}>
+            {line}
+          </p>
+        );
+      }
+    });
+    flush("ulast");
+    return <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>{blocks}</div>;
   };
 
-  const bugFieldStyle: React.CSSProperties = {
-    width: "100%",
-    border: "1px solid #E2E8F0",
-    borderRadius: 8,
-    padding: "0 0.75rem",
-    fontSize: "0.75rem",
-    color: "#1F2937",
-    background: "#fff",
-    outline: "none",
-    boxSizing: "border-box",
-  };
+  /** Blok Bug History (accordion) — satu kotak bordered, dipakai kedua state. */
+  const renderBugHistory = () => (
+    <div style={{ border: "1px solid #E3E7EE", borderRadius: 12, overflow: "hidden" }}>
+      <button
+        type="button"
+        aria-expanded={bugHistoryOpen}
+        onClick={() => setBugHistoryOpen((v) => !v)}
+        style={{
+          padding: "12px 14px",
+          border: "none",
+          background: "#FFFFFF",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: 8,
+          width: "100%",
+          cursor: "pointer",
+        }}
+      >
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+          <Bug size={15} aria-hidden="true" style={{ color: "#B91C1C" }} />
+          <span style={{ fontSize: 13, fontWeight: 600, color: "#334155" }}>Bug History</span>
+          {!bugsLoading && linkedBugs.length > 0 && (
+            <span style={{ fontFamily: FONT_MONO, fontWeight: 600, color: "#64748B" }}>
+              {linkedBugs.length}
+            </span>
+          )}
+        </span>
+        <ChevronDown
+          size={15}
+          aria-hidden="true"
+          style={{
+            color: "#64748B",
+            transform: bugHistoryOpen ? "rotate(180deg)" : "rotate(0deg)",
+            transition: "transform 300ms ease-in-out",
+          }}
+        />
+      </button>
 
-  /** Gaya field eksekusi (Actual Result / Notes) — disamakan dengan field modal. */
-  const execFieldStyle: React.CSSProperties = {
-    border: "1px solid #D1D5DB",
-    borderRadius: 6,
-    padding: "0.5rem 0.6rem",
-    fontSize: "0.78rem",
-    outline: "none",
-  };
+      {bugHistoryOpen && (
+        <div style={{ borderTop: "1px solid #EEF1F5" }}>
+          {bugsLoading ? (
+            <div style={{ padding: "12px 14px", fontSize: 13, color: "#94A3B8" }}>
+              Memuat riwayat bug…
+            </div>
+          ) : linkedBugs.length === 0 ? (
+            <div style={{ padding: "12px 14px", fontSize: 13, color: "#94A3B8" }}>
+              Belum ada bug yang pernah dilaporkan untuk test case ini.
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column" }}>
+              {linkedBugs.map((b, idx) => {
+                const meta = [
+                  new Date(b.createdAt).toLocaleDateString("id-ID", {
+                    day: "2-digit",
+                    month: "short",
+                    year: "numeric",
+                  }),
+                  b.resolvedAt
+                    ? `Selesai ${new Date(b.resolvedAt).toLocaleDateString("id-ID", {
+                        day: "2-digit",
+                        month: "short",
+                        year: "numeric",
+                      })}`
+                    : "",
+                  b.run ? b.run.name : "",
+                ]
+                  .filter(Boolean)
+                  .join(" · ");
 
-  /** Tab "✎ Edit Bug Aktif": isi form dari bug aktif supaya bisa diperbarui. */
+                return (
+                  <div
+                    key={b.id}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 12,
+                      padding: "12px 14px",
+                      borderBottom: idx < linkedBugs.length - 1 ? "1px solid #F1F4F8" : "none",
+                    }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => onOpenBugDetail?.(b.id)}
+                      title={meta ? `${b.title} — ${meta}` : b.title}
+                      style={{
+                        flex: 1,
+                        minWidth: 0,
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 2,
+                        border: "none",
+                        background: "none",
+                        padding: 0,
+                        textAlign: "left",
+                        cursor: onOpenBugDetail ? "pointer" : "default",
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontSize: 14,
+                          fontWeight: 500,
+                          color: "#0F172A",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {b.title}
+                      </span>
+                      <span style={{ fontFamily: FONT_MONO, fontSize: 12, color: "#64748B" }}>
+                        {entityCode("BUG", b.id)}
+                      </span>
+                    </button>
+
+                    {/* Dropdown status bug — polos, tanpa pill/latar warna. */}
+                    <Select
+                      size="sm"
+                      value={b.status === "RESOLVED" ? "CLOSED" : b.status}
+                      disabled={!canEdit || statusPendingId === b.id}
+                      ariaLabel={`Ubah status bug ${entityCode("BUG", b.id)}`}
+                      chevronColor="#94A3B8"
+                      style={{
+                        flexShrink: 0,
+                        width: "auto",
+                        height: 32,
+                        padding: "0 8px 0 10px",
+                        border: "1px solid #E3E7EE",
+                        background: "#FFFFFF",
+                        color: "#0F172A",
+                        fontSize: 13,
+                        fontWeight: 500,
+                        boxShadow: "none",
+                        gap: 7,
+                      }}
+                      onChange={(e) => void changeBugStatus(b.id, e.target.value as BugStatus)}
+                    >
+                      <option value="OPEN">Open</option>
+                      <option value="IN_PROGRESS">In Progress</option>
+                      <option value="CLOSED">Closed</option>
+                    </Select>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+
+  /** Tab "Edit Bug Aktif": isi form dari bug aktif supaya bisa diperbarui. */
   const useCurrentBug = () => {
     setUserChoseNewBug(false);
     setBugMode("edit");
@@ -3171,24 +3310,6 @@ function ExecutionModal({
    * aktif = bg amber-100 + teks amber-800 semibold + border amber-300,
    * non-aktif = netral (slate-500) dengan border tipis.
    */
-  const bugTabStyle = (active: boolean): React.CSSProperties => ({
-    display: "inline-flex",
-    alignItems: "center",
-    gap: "0.3rem",
-    padding: "0.35rem 0.6rem",
-    borderRadius: 8,
-    border: `1px solid ${active ? "#FCD34D" : "#E2E8F0"}`,
-    background: active ? "#FEF3C7" : "#fff",
-    color: active ? "#92400E" : "#64748B",
-    fontSize: "0.7rem",
-    fontWeight: active ? 600 : 500,
-    cursor: "pointer",
-    whiteSpace: "nowrap",
-    // Ring fokus senada brand (dipakai browser saat tab di-fokus keyboard).
-    outlineColor: "#F59E0B",
-    transition: "background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease",
-  });
-
   const save = async () => {
     if (saving) return; // penjaga double-click
     setMsg(null);
@@ -3301,17 +3422,12 @@ function ExecutionModal({
         style={{
           position: "relative",
           width: "100%",
-          // max-w-6xl (sebelumnya 1024 = max-w-5xl) supaya isi dua kolom lebih lega.
-          maxWidth: 1152,
-          // Tinggi DIPATOK 85vh (sebelumnya hanya `maxHeight` 90vh, jadi ikut
-          // menyusut kalau isinya pendek); `minHeight` menjaga modal tetap
-          // proporsional dan kedua kolomnya memakai tinggi penuh.
-          height: "85vh",
-          minHeight: 600,
-          display: "grid",
-          // Tiga track: kolom kiri (persen, bisa di-resize) — divider — kanan.
-          gridTemplateColumns: `${splitPct}% ${SPLIT_DIVIDER_W}px minmax(0, 1fr)`,
-          gridTemplateRows: "minmax(0, 1fr)",
+          maxWidth: "min(1280px, calc(100vw - 48px))",
+          height: "min(860px, calc(100vh - 48px))",
+          // Flex row: lebar HANYA diatur di panel (bukan di kontennya).
+          display: "flex",
+          flexDirection: "row",
+          userSelect: dragging ? "none" : undefined,
           background: "#fff",
           borderRadius: 12,
           boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)",
@@ -3325,38 +3441,13 @@ function ExecutionModal({
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Tombol tutup — melayang di sudut kanan atas modal. */}
-        <button
-          type="button"
-          aria-label="Tutup"
-          onClick={() => setClosing(true)}
-          style={{
-            position: "absolute",
-            top: 16,
-            right: 16,
-            zIndex: 2,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: "0.25rem",
-            lineHeight: 1,
-            border: "none",
-            background: "transparent",
-            color: "#64748B",
-            borderRadius: 6,
-            cursor: "pointer",
-          }}
-        >
-          <X size={14} />
-        </button>
-
         {/* ===== KOLOM KIRI — info detail Test Case =====
             Berisi ID & judul, metadata, skenario, expected result, dan test
             steps. Lebarnya bisa diubah lewat divider di sebelah kanannya. */}
         <div
           style={{
-            gridColumn: "1",
-            minWidth: 0,
+            flex: "1 1 0",
+            minWidth: 480,
             minHeight: 0,
             overflowY: "auto",
             padding: "1.5rem",
@@ -3563,7 +3654,7 @@ function ExecutionModal({
             }
           }}
           style={{
-            gridColumn: "2",
+            flex: `0 0 ${SPLIT_DIVIDER_W}px`,
             display: "flex",
             justifyContent: "center",
             cursor: "col-resize",
@@ -3590,586 +3681,572 @@ function ExecutionModal({
             scroll); isi form + tombol simpan berada di bawahnya. */}
         <div
           style={{
-            gridColumn: "3",
-            minWidth: 0,
+            // Lebar panel (bukan kontennya). Konten di dalam selalu 100%.
+            flex: "0 0 auto",
+            width: `${100 - splitPct}%`,
+            minWidth: 420,
+            maxWidth: "60%",
             minHeight: 0,
             display: "flex",
             flexDirection: "column",
-            // Disamakan dengan card metadata di kolom kiri (bg-slate-50/50).
-            background: "rgba(248, 250, 252, 0.5)",
-            borderLeft: "1px solid rgba(226, 232, 240, 0.8)",
+            // Panel putih, sama seperti kolom kiri — pemisahnya hanya garis tipis.
+            background: "#FFFFFF",
+            borderLeft: "1px solid #EEF1F5",
+            fontFamily: FONT_SANS,
           }}
         >
-          {/* Judul panel eksekusi — tetap di atas, tidak ikut scroll. */}
-          <div style={{ flexShrink: 0, padding: "1.5rem 1.5rem 0" }}>
-            <h4
-              style={{
-                ...sectionLabel,
-                fontSize: "1.125rem",
-                fontWeight: 600,
-                textTransform: "none",
-                margin: "0 0 0.25rem",
-              }}
-            >
-              Eksekusi
-            </h4>
-
-            {/* Catatan subtle: bug lama di-Resolve otomatis saat bug baru disimpan. */}
-            {isFail && activeBug && bugMode === "new" && (
-              <div
-                style={{
-                  fontSize: 12,
-                  fontWeight: 400,
-                  color: "#64748B",
-                  margin: "0 0 0.6rem",
-                }}
-              >
-                Bug lama akan otomatis ditandai Closed saat bug baru disimpan.
-              </div>
-            )}
-
-            {/* Garis pemisah tipis (inset) antara judul panel dan isi form. */}
-            <div aria-hidden="true" style={{ flexShrink: 0, height: 1, background: "#E2E8F0" }} />
-          </div>
-
-          {/* Isi eksekusi — HANYA bagian ini yang scroll. Judul panel &
-              tombol status di atasnya tetap di tempat (flexShrink: 0). */}
-          <div
-            style={{
-              flex: 1,
-              minHeight: 0,
-              overflowY: "auto",
-              padding: "0.9rem 1.5rem 1.5rem",
-              display: "flex",
-              flexDirection: "column",
-              gap: "0.9rem",
-            }}
-          >
-            {showBugForm ? (
-              <>
-                {/* Dua tab sederhana: perbarui bug aktif atau laporkan bug baru. */}
-                {activeBug && (
-                  <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
-                    <button
-                      type="button"
-                      onClick={useCurrentBug}
-                      disabled={!editable}
-                      style={bugTabStyle(bugMode === "edit")}
-                    >
-                      ✎ Edit Bug Aktif
-                    </button>
-                    <button
-                      type="button"
-                      onClick={startNewBug}
-                      disabled={!editable}
-                      style={bugTabStyle(bugMode === "new")}
-                    >
-                      + Laporkan Bug Baru
-                    </button>
-                  </div>
-                )}
-
-                <div>
-                  <label style={bugLabelStyle}>
-                    Bug Title <span style={{ color: "#E11D48" }}>*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={bugTitle}
-                    onChange={(e) => setBugTitle(e.target.value)}
-                    disabled={!editable}
-                    placeholder="Ringkasan singkat isu/bug yang ditemukan..."
-                    style={{ ...bugFieldStyle, height: 36 }}
-                  />
-                </div>
-
-                <div>
-                  <label style={bugLabelStyle}>Severity</label>
-                  <Select
-                    value={bugSeverity}
-                    onChange={(e) => setBugSeverity(e.target.value)}
-                    disabled={!editable}
-                    ariaLabel="Severity bug"
-                  >
-                    {SEVERITIES.map((s) => (
-                      <option key={s.value} value={s.value}>
-                        {s.label}
-                      </option>
-                    ))}
-                  </Select>
-                </div>
-
-                <div>
-                  <label style={bugLabelStyle}>
-                    Environment{" "}
-                    <span style={{ fontWeight: 500, color: "#9CA3AF" }}>(dari Test Run)</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={environment ?? "—"}
-                    readOnly
-                    disabled
-                    title="Environment mengikuti Test Run terkait."
-                    style={{
-                      ...bugFieldStyle,
-                      height: 36,
-                      background: "#F9FAFB",
-                      color: "#6B7280",
-                    }}
-                  />
-                </div>
-
-                <div>
-                  <label style={bugLabelStyle}>
-                    Bug Detail <span style={{ color: "#E11D48" }}>*</span>
-                  </label>
-                  <ListTextarea
-                    value={actualResult}
-                    onChange={setActualResult}
-                    disabled={!editable}
-                    rows={4}
-                    ariaLabel="Actual Result / Reproduction Steps"
-                    placeholder="Jelaskan hasil aktual dan langkah reproduksi ditemukannya bug..."
-                    style={{ ...bugFieldStyle, padding: "0.5rem 0.75rem" }}
-                  />
-                </div>
-              </>
-            ) : (
-              <>
-                <div>
-                  <label style={{ ...sectionLabel, display: "block" }}>
-                    Actual Result
-                  </label>
-                  {editable ? (
-                    <ListTextarea
-                      value={actualResult}
-                      onChange={setActualResult}
-                      rows={2}
-                      ariaLabel="Actual Result"
-                      placeholder="Tulis hasil aktual eksekusi..."
-                      style={execFieldStyle}
-                    />
-                  ) : (
-                    /* Mode view: teks polos tanpa border/background. */
-                    renderResultText(actualResult, "Belum ada hasil aktual.")
-                  )}
-                </div>
-
-                <div>
-                  <label style={{ ...sectionLabel, display: "block" }}>
-                    Notes
-                  </label>
-                  {editable ? (
-                    <ListTextarea
-                      value={notes}
-                      onChange={setNotes}
-                      rows={2}
-                      ariaLabel="Notes"
-                      placeholder="Catatan tambahan..."
-                      style={execFieldStyle}
-                    />
-                  ) : (
-                    renderResultText(notes, "Tidak ada catatan.")
-                  )}
-                </div>
-              </>
-            )}
-
-            {/* Evidence: header inline (label kiri + tombol kanan), lalu preview
-                file yang diunggah. */}
-            <div style={{ marginTop: "0.9rem" }}>
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: "0.5rem",
-                  marginBottom: "0.5rem",
-                }}
-              >
-                <span style={{ ...sectionLabel, margin: 0, fontWeight: 600 }}>Evidence</span>
-                {editable && (
-                  <button
-                    type="button"
-                    onClick={() => evidenceRef.current?.pick()}
-                    title="Tambah file evidence"
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: "0.3rem",
-                      padding: 0,
-                      border: "none",
-                      background: "transparent",
-                      color: "#D97706",
-                      fontSize: "0.76rem",
-                      fontWeight: 600,
-                      cursor: "pointer",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    <Paperclip size={12} /> Tambah File
-                  </button>
-                )}
-              </div>
-              <AttachmentsPanel
-                owner={{ testRunResultId: item.id }}
-                attachments={item.attachments ?? []}
-                canEdit={editable}
-                onChange={onAttachmentsChange}
-                handleRef={evidenceRef}
-                deferred
-                compact
-                plain
-                hideTrigger
-              />
-            </div>
-
-            {/* Riwayat bug Test Case ini — termasuk yang sudah resolved/closed,
-                supaya jejak bug tidak hilang setelah TC-nya jadi Pass.
-                Berbentuk accordion (default tertutup) agar hemat ruang. */}
-            <div style={{ marginTop: "0.9rem" }}>
-              <button
-                type="button"
-                aria-expanded={bugHistoryOpen}
-                onClick={() => setBugHistoryOpen((v) => !v)}
-                title={bugHistoryOpen ? "Tutup riwayat bug" : "Buka riwayat bug"}
-                style={{
-                  ...sectionLabel,
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "0.35rem",
-                  width: "100%",
-                  padding: 0,
-                  border: "none",
-                  background: "transparent",
-                  cursor: "pointer",
-                }}
-              >
-                <ChevronDown
-                  size={13}
-                  aria-hidden="true"
-                  style={{
-                    flexShrink: 0,
-                    transform: bugHistoryOpen ? "rotate(180deg)" : "rotate(0deg)",
-                    transition: "transform 300ms ease-in-out",
-                  }}
-                />
-                Bug History{!bugsLoading && linkedBugs.length > 0 ? ` (${linkedBugs.length})` : ""}
-              </button>
-
-              {/* Buka/tutup pakai trik `grid-template-rows` 0fr ↔ 1fr supaya
-                  halus — konten tetap ter-mount, tidak muncul/hilang patah. */}
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateRows: bugHistoryOpen ? "1fr" : "0fr",
-                  opacity: bugHistoryOpen ? 1 : 0,
-                  transition: "grid-template-rows 300ms ease-in-out, opacity 300ms ease-in-out",
-                }}
-              >
-                <div
-                  style={{
-                    overflow: "hidden",
-                    minHeight: 0,
-                    paddingTop: bugHistoryOpen ? "0.5rem" : 0,
-                    transition: "padding-top 300ms ease-in-out",
-                  }}
-                >
-                  {bugsLoading ? (
-                    <div style={{ fontSize: "0.75rem", color: "#94A3B8" }}>
-                      Memuat riwayat bug…
-                    </div>
-                  ) : linkedBugs.length === 0 ? (
-                    <div style={{ fontSize: "0.75rem", color: "#94A3B8", fontStyle: "italic" }}>
-                      Belum ada bug yang pernah dilaporkan untuk test case ini.
-                    </div>
-                  ) : (
-                    /* List polos: SATU baris per bug — ikon + judul di kiri, badge
-                       status di kanan — tanpa kotak pembungkus; batas tinggi +
-                       scroll supaya tidak memanjang. */
-                    <div
-                      style={{
-                        display: "flex",
-                        flexDirection: "column",
-                        maxHeight: "12rem",
-                        overflowY: "auto",
-                      }}
-                    >
-                      {linkedBugs.map((b, idx) => {
-                        const st = BUG_STATUS_BADGE[b.status];
-                        // Metadata tetap dibawa sebagai tooltip judul — baris
-                        // metadatanya sendiri sudah dihapus agar tetap 1 baris.
-                        const meta = [
-                          new Date(b.createdAt).toLocaleDateString("id-ID", {
-                            day: "2-digit",
-                            month: "short",
-                            year: "numeric",
-                          }),
-                          b.resolvedAt
-                            ? `Selesai ${new Date(b.resolvedAt).toLocaleDateString("id-ID", {
-                                day: "2-digit",
-                                month: "short",
-                                year: "numeric",
-                              })}`
-                            : "",
-                          b.run ? b.run.name : "",
-                        ]
-                          .filter(Boolean)
-                          .join(" · ");
-
-                        return (
-                          <div
-                            key={b.id}
-                            style={{
-                              display: "flex",
-                              alignItems: "center",
-                              gap: "0.5rem",
-                              // Baris polos: tanpa kotak/border card — hanya garis
-                              // pemisah halus antar baris (kalau lebih dari satu).
-                              padding: "0.4rem 0",
-                              borderBottom:
-                                idx < linkedBugs.length - 1 ? "1px solid #F1F5F9" : "none",
-                            }}
-                          >
-                            {/* Ikon bug + judulnya. Judul tetap jadi pintu
-                                masuk ke Bug Detail (ID-nya sudah dihapus). */}
-                            <Bug size={12} style={{ flexShrink: 0, color: "#DC2626" }} />
-                            <button
-                              type="button"
-                              onClick={() => onOpenBugDetail?.(b.id)}
-                              title={meta ? `${b.title} — ${meta}` : b.title}
-                              style={{
-                                flex: 1,
-                                minWidth: 0,
-                                border: "none",
-                                background: "none",
-                                padding: 0,
-                                textAlign: "left",
-                                fontSize: "0.75rem",
-                                color: "#334155",
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                                whiteSpace: "nowrap",
-                                cursor: onOpenBugDetail ? "pointer" : "default",
-                              }}
-                              onMouseEnter={(e) => {
-                                if (onOpenBugDetail)
-                                  e.currentTarget.style.textDecoration = "underline";
-                              }}
-                              onMouseLeave={(e) =>
-                                (e.currentTarget.style.textDecoration = "none")
-                              }
-                            >
-                              {b.title}
-                            </button>
-
-                            {/* Badge status = dropdown (komponen Select app yang
-                                menunya dirender lewat portal, jadi tidak terpotong
-                                scroll/overflow daftar ini). */}
-                            <Select
-                              size="sm"
-                              value={b.status === "RESOLVED" ? "CLOSED" : b.status}
-                              disabled={!canEdit || statusPendingId === b.id}
-                              ariaLabel="Ubah status bug"
-                              title="Ubah status bug"
-                              chevronColor="currentColor"
-                              style={{
-                                flexShrink: 0,
-                                width: "auto",
-                                height: 22,
-                                padding: "0 0.4rem 0 0.55rem",
-                                borderRadius: 999,
-                                fontSize: "0.6875rem",
-                                fontWeight: 700,
-                                letterSpacing: "0.02em",
-                                background: st.bg,
-                                color: st.color,
-                                border: `1px solid ${st.border}`,
-                                // Select bawaan punya ring fokus amber + border hover
-                                // abu; di sini warnanya harus tetap ikut status.
-                                boxShadow: "none",
-                              }}
-                              onChange={(e) =>
-                                void changeBugStatus(b.id, e.target.value as BugStatus)
-                              }
-                            >
-                              <option value="OPEN">Open</option>
-                              <option value="IN_PROGRESS">In Progress</option>
-                              <option value="CLOSED">Closed</option>
-                            </Select>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Blok bawah panel: pilihan status eksekusi + tombol Simpan, diam di
-              dasar panel (bukan ikut scroll). Blok ini selalu tampil supaya
-              status tetap terlihat saat read-only; tombol Simpan hanya dirender
-              saat punya hak edit. Diberi garis pemisah tipis di atasnya supaya
-              batas dengan isi yang men-scroll jelas. */}
+          {/* Panel header */}
           <div
             style={{
               flexShrink: 0,
+              padding: "20px 18px 14px 24px",
               display: "flex",
-              flexDirection: "column",
-              gap: "0.75rem",
-              padding: "0.9rem 1.5rem",
-              background: "#fff",
-              borderTop: "1px solid #F1F5F9",
+              justifyContent: "space-between",
+              alignItems: "center",
             }}
           >
-            <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
-              {STATUSES.map((s) => {
-                const Icon = s.icon;
-                const isActive = status === s.value;
+            <span style={{ fontSize: 16, fontWeight: 600, color: "#0F172A" }}>Eksekusi</span>
+            <button
+              type="button"
+              className="btn-radius-9"
+              onClick={onClose}
+              aria-label="Tutup"
+              style={{
+                width: 36,
+                height: 36,
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                border: "none",
+                background: "transparent",
+                cursor: "pointer",
+                flexShrink: 0,
+              }}
+            >
+              <X size={18} color="#64748B" aria-hidden="true" />
+            </button>
+          </div>
+
+          {/* Result selector — di ATAS, langsung di bawah header. */}
+          <div style={{ flexShrink: 0, padding: "0 24px 18px 24px" }}>
+            <div
+              role="radiogroup"
+              aria-label="Hasil eksekusi"
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+                gap: 4,
+                padding: 4,
+                background: "#EEF1F5",
+                borderRadius: 12,
+              }}
+            >
+              {RESULT_OPTIONS.map((o) => {
+                const active = status === o.value;
+                const Icon = o.icon;
                 return (
                   <button
-                    key={s.value}
+                    key={o.value}
                     type="button"
+                    role="radio"
+                    aria-checked={active}
                     disabled={!editable}
-                    aria-pressed={isActive}
-                    title={isActive ? "Klik lagi untuk membatalkan (Untested)" : `Tandai ${s.label}`}
-                    onClick={() => setStatus(isActive ? "NOT_RUN" : s.value)}
+                    title={active ? "Klik lagi untuk membatalkan (Untested)" : `Tandai ${o.label}`}
+                    onClick={() => setStatus(active ? "NOT_RUN" : o.value)}
+                    className="btn-radius-9"
                     style={{
-                      display: "inline-flex",
+                      height: 40,
+                      display: "flex",
+                      justifyContent: "center",
                       alignItems: "center",
-                      gap: "0.25rem",
-                      padding: "0.375rem 0.5rem",
-                      borderRadius: 6,
-                      // Tidak aktif: border tipis senada (lembut). Aktif: solid penuh.
-                      border: `1px solid ${isActive ? s.color : `${s.color}4D`}`,
-                      background: isActive ? s.activeBg : s.bg,
-                      color: isActive ? "#fff" : s.color,
-                      fontSize: "0.6875rem",
-                      fontWeight: 600,
-                      // Mode view: tombol status ikut diredupkan agar state
-                      // read-only terbaca (bukan hanya tidak bisa diklik).
-                      opacity: editable ? 1 : 0.6,
+                      gap: 6,
+                      fontSize: 13,
+                      fontWeight: active ? 600 : 500,
+                      color: active ? o.color : "#475569",
+                      background: active ? "#FFFFFF" : "transparent",
+                      border: active ? `1px solid ${o.tint}` : "none",
+                      boxShadow: active ? "0 1px 2px rgba(15, 23, 42, 0.06)" : "none",
                       cursor: editable ? "pointer" : "not-allowed",
-                      transition: "background-color 0.15s ease, color 0.15s ease",
+                      opacity: editable ? 1 : 0.6,
                     }}
                   >
-                    <Icon size={14} /> {s.label}
+                    <Icon size={15} strokeWidth={2.2} aria-hidden="true" style={{ color: o.color }} />
+                    {o.label}
                   </button>
                 );
               })}
             </div>
 
-            {canEdit && (
-              <>
-                {/* Garis pembatas tipis non-full-width (inset dari padding blok)
-                    di atas tombol aksi. */}
-                <div aria-hidden="true" style={{ height: 1, background: "#E2E8F0" }} />
+            {/* Catatan subtle: bug lama di-Closed otomatis saat bug baru disimpan. */}
+            {isFail && activeBug && bugMode === "new" && (
+              <div style={{ fontSize: 12, fontWeight: 400, color: "#64748B", marginTop: 8 }}>
+                Bug lama akan otomatis ditandai Closed saat bug baru disimpan.
+              </div>
+            )}
+          </div>
 
-                {editable && msg && (
-                  <div style={{ fontSize: "0.75rem", color: "#B91C1C" }}>{msg}</div>
+          {/* Inset divider (bukan full width). */}
+          <div aria-hidden="true" style={{ flexShrink: 0, height: 1, background: "#EEF1F5", margin: "0 24px" }} />
+
+          {/* Isi eksekusi — HANYA bagian ini yang scroll. */}
+          <div
+            style={{
+              flex: 1,
+              minHeight: 0,
+              minWidth: 0,
+              overflowY: "auto",
+              padding: "20px 24px 22px",
+              display: "flex",
+              flexDirection: "column",
+              gap: 22,
+            }}
+          >
+            {showBugForm ? (
+              /* ===== State B — Fail terpilih, laporkan bug baru ===== */
+              <>
+                {activeBug && (
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button
+                      type="button"
+                      onClick={useCurrentBug}
+                      disabled={!editable}
+                      style={{
+                        padding: 0,
+                        border: "none",
+                        background: "transparent",
+                        fontSize: 13,
+                        fontWeight: bugMode === "edit" ? 600 : 500,
+                        color: bugMode === "edit" ? "#0F172A" : "#64748B",
+                        textDecoration: bugMode === "edit" ? "underline" : "none",
+                        cursor: "pointer",
+                      }}
+                    >
+                      Edit Bug Aktif
+                    </button>
+                    <button
+                      type="button"
+                      onClick={startNewBug}
+                      disabled={!editable}
+                      style={{
+                        padding: 0,
+                        border: "none",
+                        background: "transparent",
+                        fontSize: 13,
+                        fontWeight: bugMode === "new" ? 600 : 500,
+                        color: bugMode === "new" ? "#0F172A" : "#64748B",
+                        textDecoration: bugMode === "new" ? "underline" : "none",
+                        cursor: "pointer",
+                      }}
+                    >
+                      Laporkan Bug Baru
+                    </button>
+                  </div>
                 )}
 
-                {/* Mode view: satu tombol "Edit". Mode edit: "Batal" + simpan.
-                    Tombol hug-contents, rata kanan. */}
-                <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.5rem", flexWrap: "wrap" }}>
-                  {/* Ekspor laporan bug ringkas (PDF) — sebelah tombol simpan. */}
-                  {(isFail || (item.bugs?.length ?? 0) > 0) && (
-                    <button
-                      type="button"
-                      onClick={downloadPdf}
-                      title="Download laporan bug (PDF) — link evidence bisa diklik tanpa login"
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: 5,
-                        padding: "0.5rem 0.75rem",
-                        border: "1px solid #E2E8F0",
-                        borderRadius: 6,
-                        background: "#fff",
-                        color: "#334155",
-                        fontSize: "0.75rem",
-                        fontWeight: 600,
-                        cursor: "pointer",
-                        transition: "background-color 0.15s ease",
-                      }}
-                      onMouseEnter={(e) => (e.currentTarget.style.background = "#F8FAFC")}
-                      onMouseLeave={(e) => (e.currentTarget.style.background = "#fff")}
-                    >
-                      <FileDown size={14} /> Download PDF Bug
-                    </button>
-                  )}
-                  {!editable ? (
-                    <button
-                      type="button"
-                      onClick={() => setIsEditing(true)}
-                      style={{
-                        padding: "0.5rem 1.25rem",
-                        border: "none",
-                        borderRadius: 6,
-                        background: "#FFC107",
-                        color: "#0F172A",
-                        fontSize: "0.75rem",
-                        fontWeight: 600,
-                        cursor: "pointer",
-                        transition: "background-color 0.15s ease",
-                      }}
-                      onMouseEnter={(e) => (e.currentTarget.style.background = "#E0A800")}
-                      onMouseLeave={(e) => (e.currentTarget.style.background = "#FFC107")}
-                    >
-                      Edit
-                    </button>
-                  ) : (
-                    <>
-                      <button
-                        type="button"
-                        onClick={cancelEdit}
-                        disabled={saving}
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  <label htmlFor="bug-title" style={{ fontSize: 13, fontWeight: 500, color: "#334155" }}>
+                    Bug Title <span style={{ color: "#B91C1C" }}>*</span>
+                  </label>
+                  <input
+                    id="bug-title"
+                    type="text"
+                    value={bugTitle}
+                    onChange={(e) => setBugTitle(e.target.value)}
+                    disabled={!editable}
+                    placeholder="Ringkasan singkat isu/bug yang ditemukan…"
+                    className="exec-field"
+                    style={{
+                      height: 40,
+                      boxSizing: "border-box",
+                      padding: "0 12px",
+                      border: "1px solid #DDE2E9",
+                      borderRadius: 10,
+                      fontSize: 14,
+                      color: "#0F172A",
+                      background: "#fff",
+                      outline: "none",
+                    }}
+                  />
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    <label htmlFor="bug-severity" style={{ fontSize: 13, fontWeight: 500, color: "#334155" }}>
+                      Severity
+                    </label>
+                    <div style={{ position: "relative" }}>
+                      <span
+                        aria-hidden="true"
                         style={{
-                          padding: "0.5rem 1rem",
-                          border: "1px solid #E2E8F0",
-                          borderRadius: 6,
+                          position: "absolute",
+                          left: 12,
+                          top: "50%",
+                          transform: "translateY(-50%)",
+                          width: 8,
+                          height: 8,
+                          borderRadius: 2,
+                          background: sevColor(bugSeverity),
+                        }}
+                      />
+                      <select
+                        id="bug-severity"
+                        value={bugSeverity}
+                        onChange={(e) => setBugSeverity(e.target.value)}
+                        disabled={!editable}
+                        className="exec-field"
+                        style={{
+                          width: "100%",
+                          height: 40,
+                          boxSizing: "border-box",
+                          appearance: "none",
+                          padding: "0 32px 0 28px",
+                          border: "1px solid #DDE2E9",
+                          borderRadius: 10,
+                          fontSize: 14,
+                          fontWeight: 500,
+                          color: "#0F172A",
+                          background: "#fff",
+                          outline: "none",
+                        }}
+                      >
+                        {SEVERITIES.map((s) => (
+                          <option key={s.value} value={s.value}>
+                            {s.label}
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown
+                        size={14}
+                        aria-hidden="true"
+                        style={{
+                          position: "absolute",
+                          right: 12,
+                          top: "50%",
+                          transform: "translateY(-50%)",
+                          color: "#64748B",
+                          pointerEvents: "none",
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    <label htmlFor="bug-env" style={{ fontSize: 13, fontWeight: 500, color: "#334155" }}>
+                      Environment{" "}
+                      <span style={{ fontWeight: 400, color: "#64748B" }}>(dari Test Run)</span>
+                    </label>
+                    <div style={{ position: "relative" }}>
+                      <input
+                        id="bug-env"
+                        type="text"
+                        value={environment ?? "—"}
+                        readOnly
+                        disabled
+                        title="Environment mengikuti Test Run terkait."
+                        style={{
+                          width: "100%",
+                          height: 40,
+                          boxSizing: "border-box",
+                          padding: "0 32px 0 12px",
+                          border: "1px solid #E3E7EE",
+                          borderRadius: 10,
+                          fontSize: 14,
+                          fontWeight: 600,
+                          color: "#475569",
                           background: "#F8FAFC",
-                          color: "#334155",
-                          fontSize: "0.75rem",
-                          fontWeight: 600,
-                          cursor: saving ? "not-allowed" : "pointer",
-                          transition: "background-color 0.15s ease",
+                          outline: "none",
                         }}
-                        onMouseEnter={(e) => (e.currentTarget.style.background = "#F1F5F9")}
-                        onMouseLeave={(e) => (e.currentTarget.style.background = "#F8FAFC")}
-                      >
-                        Batal
-                      </button>
+                      />
+                      <Lock
+                        size={14}
+                        aria-label="Tidak bisa diubah"
+                        style={{
+                          position: "absolute",
+                          right: 12,
+                          top: "50%",
+                          transform: "translateY(-50%)",
+                          color: "#94A3B8",
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  <label style={{ fontSize: 13, fontWeight: 500, color: "#334155" }}>
+                    Bug Detail <span style={{ color: "#B91C1C" }}>*</span>
+                  </label>
+                  <ListTextarea
+                    value={actualResult}
+                    onChange={setActualResult}
+                    disabled={!editable}
+                    rows={5}
+                    ariaLabel="Bug Detail"
+                    placeholder="Jelaskan hasil aktual dan langkah reproduksi ditemukannya bug…"
+                    style={{
+                      height: 112,
+                      padding: "10px 12px",
+                      lineHeight: 1.5,
+                      resize: "vertical",
+                      border: "1px solid #DDE2E9",
+                      borderRadius: 10,
+                      fontSize: 14,
+                      color: "#0F172A",
+                      background: "#fff",
+                      outline: "none",
+                    }}
+                  />
+                </div>
+
+                {/* Evidence */}
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: "#475569" }}>Evidence</span>
+                    {editable && (
                       <button
                         type="button"
-                        onClick={() => void save()}
-                        disabled={saving}
+                        onClick={() => evidenceRef.current?.pick()}
                         style={{
-                          padding: "0.5rem 1.25rem",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 6,
+                          padding: 0,
                           border: "none",
-                          borderRadius: 6,
-                          background: isFail ? "#E11D48" : "#FFC107",
-                          color: isFail ? "#fff" : "#0F172A",
-                          fontSize: "0.75rem",
+                          background: "transparent",
+                          fontSize: 13,
                           fontWeight: 600,
-                          cursor: saving ? "wait" : "pointer",
-                          transition: "background-color 0.15s ease",
+                          color: "#0F172A",
+                          cursor: "pointer",
+                          whiteSpace: "nowrap",
                         }}
-                        onMouseEnter={(e) => (e.currentTarget.style.background = isFail ? "#BE123C" : "#E0A800")}
-                        onMouseLeave={(e) => (e.currentTarget.style.background = isFail ? "#E11D48" : "#FFC107")}
                       >
-                        {saving
-                          ? "Menyimpan..."
-                          : isFail && bugMode === "new"
-                            ? "Simpan Bug Baru"
-                            : "Simpan Eksekusi"}
+                        <Plus size={14} aria-hidden="true" /> Tambah File
                       </button>
-                    </>
+                    )}
+                  </div>
+                  <AttachmentsPanel
+                    owner={{ testRunResultId: item.id }}
+                    attachments={item.attachments ?? []}
+                    canEdit={editable}
+                    onChange={onAttachmentsChange}
+                    handleRef={evidenceRef}
+                    deferred
+                    compact
+                    plain
+                    hideTrigger
+                  />
+                </div>
+
+                {renderBugHistory()}
+              </>
+            ) : (
+              /* ===== State A — hasil sudah tercatat ===== */
+              <>
+                {(actualResult ?? "").trim() !== "" && (
+                  <div
+                    style={{
+                      background: "#FFFBFB",
+                      border: "1px solid #FBE1E1",
+                      borderRadius: 12,
+                      padding: "14px 16px",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 8,
+                    }}
+                  >
+                    <span style={{ fontSize: 13, fontWeight: 600, color: "#991B1B" }}>
+                      Actual Result
+                    </span>
+                    {renderActualBlocks(actualResult)}
+                  </div>
+                )}
+
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: "#475569" }}>Notes</span>
+                  {(notes ?? "").trim() ? (
+                    <p style={{ margin: 0, fontSize: 14, color: "#1E293B", lineHeight: 1.5, whiteSpace: "pre-wrap" }}>
+                      {notes}
+                    </p>
+                  ) : (
+                    <p style={{ margin: 0, fontSize: 14, color: "#94A3B8" }}>Tidak ada catatan.</p>
                   )}
                 </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: "#475569" }}>
+                      Evidence{" "}
+                      <span style={{ fontWeight: 400, color: "#64748B" }}>
+                        · {(item.attachments ?? []).length}
+                      </span>
+                    </span>
+                    {editable && (
+                      <button
+                        type="button"
+                        onClick={() => evidenceRef.current?.pick()}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 6,
+                          padding: 0,
+                          border: "none",
+                          background: "transparent",
+                          fontSize: 13,
+                          fontWeight: 600,
+                          color: "#0F172A",
+                          cursor: "pointer",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        <Plus size={14} aria-hidden="true" /> Tambah File
+                      </button>
+                    )}
+                  </div>
+                  <AttachmentsPanel
+                    owner={{ testRunResultId: item.id }}
+                    attachments={item.attachments ?? []}
+                    canEdit={editable}
+                    onChange={onAttachmentsChange}
+                    handleRef={evidenceRef}
+                    deferred
+                    compact
+                    plain
+                    hideTrigger
+                  />
+                </div>
+
+                {renderBugHistory()}
               </>
             )}
+          </div>
+
+          {/* Footer — selalu di dasar panel (bukan ikut scroll). */}
+          <div
+            style={{
+              flexShrink: 0,
+              display: "flex",
+              justifyContent: "flex-end",
+              alignItems: "center",
+              gap: 8,
+              padding: "14px 24px",
+              borderTop: "1px solid #EEF1F5",
+              background: "#FFFFFF",
+              flexWrap: "wrap",
+            }}
+          >
+            {editable && msg && (
+              <span style={{ marginRight: "auto", fontSize: 13, color: "#B91C1C" }}>{msg}</span>
+            )}
+
+            {(isFail || (item.bugs?.length ?? 0) > 0) && (
+              <button
+                type="button"
+                onClick={downloadPdf}
+                title="Download laporan bug (PDF) — link evidence bisa diklik tanpa login"
+                className="btn-radius-10"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 8,
+                  height: 40,
+                  padding: "0 14px",
+                  border: "1px solid #DDE2E9",
+                  background: "#fff",
+                  color: "#0F172A",
+                  fontSize: 14,
+                  fontWeight: 500,
+                  cursor: "pointer",
+                  whiteSpace: "nowrap",
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = "#F8FAFC")}
+                onMouseLeave={(e) => (e.currentTarget.style.background = "#fff")}
+              >
+                <FileDown size={16} aria-hidden="true" /> Download PDF Bug
+              </button>
+            )}
+
+            {canEdit &&
+              (!editable ? (
+                <button
+                  type="button"
+                  onClick={() => setIsEditing(true)}
+                  className="btn-radius-10"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 8,
+                    height: 40,
+                    padding: "0 16px",
+                    border: "1px solid #FFC348",
+                    background: "#FFC348",
+                    color: "#0F172A",
+                    fontSize: 14,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    whiteSpace: "nowrap",
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = "#F0B53D")}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = "#FFC348")}
+                >
+                  <Pencil size={16} aria-hidden="true" /> Edit
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={cancelEdit}
+                    disabled={saving}
+                    className="btn-radius-10"
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 8,
+                      height: 40,
+                      padding: "0 14px",
+                      border: "1px solid #DDE2E9",
+                      background: "#fff",
+                      color: "#0F172A",
+                      fontSize: 14,
+                      fontWeight: 500,
+                      cursor: saving ? "not-allowed" : "pointer",
+                      whiteSpace: "nowrap",
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = "#F8FAFC")}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = "#fff")}
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void save()}
+                    disabled={saving}
+                    className="btn-radius-10"
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 8,
+                      height: 40,
+                      padding: "0 16px",
+                      border: "1px solid #FFC348",
+                      background: "#FFC348",
+                      color: "#0F172A",
+                      fontSize: 14,
+                      fontWeight: 600,
+                      cursor: saving ? "wait" : "pointer",
+                      whiteSpace: "nowrap",
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = "#F0B53D")}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = "#FFC348")}
+                  >
+                    <Bug size={16} aria-hidden="true" />
+                    {saving
+                      ? "Menyimpan..."
+                      : isFail && bugMode === "new"
+                        ? "Simpan Bug Baru"
+                        : "Simpan Eksekusi"}
+                  </button>
+                </>
+              ))}
           </div>
         </div>
       </div>

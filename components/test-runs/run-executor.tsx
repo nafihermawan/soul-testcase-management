@@ -1135,6 +1135,12 @@ export function RunExecutor({
           runName={`${runName}${runCode ? ` (${runCode})` : ""}`}
           onClose={() => setModalItem(null)}
           onOpenBugDetail={setBugDetailId}
+          /**
+           * Bug ditutup dari Bug History → aksi server membalik hasil FAIL yang
+           * tertaut jadi PASS, jadi cermin lokal (kartu + penghitung) ikut
+           * di-patch di tempat — tanpa refetch halaman.
+           */
+          onAutoPass={() => patchResult(modalItem.id, { status: "PASS" })}
           bugPatch={bugPatch}
           onSave={async (data) => {
             const res = await updateRunResult(modalItem.id, {
@@ -2777,6 +2783,7 @@ function ExecutionModal({
   runName,
   onClose,
   onOpenBugDetail,
+  onAutoPass,
   bugPatch,
   onSave,
 }: {
@@ -2789,6 +2796,11 @@ function ExecutionModal({
   onClose: () => void;
   /** Buka Bug Detail Modal dari daftar riwayat bug TC ini. */
   onOpenBugDetail?: (bugId: string) => void;
+  /**
+   * Bug ditutup dari Bug History → hasil eksekusi ini otomatis PASS. Parent
+   * memakai ini untuk ikut memperbarui kartu/daftar lokalnya tanpa refetch.
+   */
+  onAutoPass?: () => void;
   /** Patch bug hasil Edit Bug dari parent — dipakai untuk update `linkedBugs` in-place. */
   bugPatch?: { id: string; patch: BugEditableFields } | null;
   onSave: (data: {
@@ -2913,7 +2925,24 @@ function ExecutionModal({
           : b
       )
     );
-    showToast(`Status bug berhasil diubah ke ${BUG_STATUS_BADGE[status].label}.`, "success");
+    /**
+     * Bug ditutup = defect sudah diperbaiki, jadi eksekusi ini ikut PASS —
+     * disetel LANGSUNG di state modal (tombol hasil jadi Pass aktif) tanpa
+     * refetch halaman. "Actual Result" lama dibuang dari state supaya artefak
+     * hasil Fail yang sudah diperbaiki tidak ikut tersimpan lagi; aksi server
+     * sendiri juga sudah membalik hasil FAIL yang tertaut jadi PASS.
+     */
+    if (isDone) {
+      setStatus("PASS");
+      setActualResult("");
+      onAutoPass?.();
+    }
+    showToast(
+      isDone
+        ? `Status bug diubah ke ${BUG_STATUS_BADGE[status].label} — status eksekusi diset ke Pass.`
+        : `Status bug berhasil diubah ke ${BUG_STATUS_BADGE[status].label}.`,
+      "success"
+    );
   };
 
   /**
@@ -3064,6 +3093,19 @@ function ExecutionModal({
    * cukup tampilkan hasil eksekusi sebagai teks polos tanpa input box.
    */
   const showBugForm = isFail && editable;
+
+  /**
+   * "Actual Result" hanya dipakai hasil Fail/Blocked (dipakai untuk menentukan
+   * apakah nilainya ikut disimpan).
+   */
+  const usesActualResult = status === "FAIL" || status === "BLOCKED";
+
+  /**
+   * Section "Actual Result" hanya relevan untuk hasil Fail/Blocked — artefak
+   * hasil lama tidak boleh muncul lagi setelah eksekusi berpindah ke Pass
+   * (mis. karena bug-nya sudah ditutup).
+   */
+  const showActualResultBlock = usesActualResult && (actualResult ?? "").trim() !== "";
 
   /**
    * Tombol "Simpan Eksekusi" DISABLED sampai penguji memilih status
@@ -3339,7 +3381,12 @@ function ExecutionModal({
 
     const res = await onSave({
       status,
-      actualResult,
+      /**
+       * Actual Result hanya milik hasil Fail/Blocked (section-nya pun cuma
+       * muncul di status itu). Untuk status lain, kirim BALIK nilai tersimpan
+       * apa adanya supaya tidak ada draft tak terlihat yang ikut tersimpan.
+       */
+      actualResult: usesActualResult ? actualResult : item.actualResult ?? "",
       /**
        * Notes hanya milik hasil PASS (field-nya pun cuma muncul di status itu).
        * Untuk status lain, kirim BALIK nilai tersimpan apa adanya supaya catatan
@@ -4032,7 +4079,8 @@ function ExecutionModal({
             ) : (
               /* ===== State A — hasil sudah tercatat ===== */
               <>
-                {(actualResult ?? "").trim() !== "" && (
+                {/* Section Actual Result hanya relevan untuk hasil Fail/Blocked. */}
+                {showActualResultBlock && (
                   <div
                     style={{
                       background: "#FFFBFB",

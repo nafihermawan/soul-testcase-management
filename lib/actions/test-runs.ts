@@ -253,6 +253,8 @@ export async function updateRunResult(
     status: ResultStatus;
     actualResult?: string;
     notes?: string;
+    /** Hanya relevan saat status SKIPPED; status lain selalu dikosongkan. */
+    skipReason?: string;
   }
 ): Promise<TestRunActionState> {
   const user = await requireRole("QA");
@@ -269,6 +271,8 @@ export async function updateRunResult(
         status: data.status,
         actualResult: data.actualResult?.trim() || null,
         notes: data.notes?.trim() || null,
+        skipReason:
+          data.status === "SKIPPED" ? data.skipReason?.trim() || null : null,
         updatedById: user.id,
       },
     });

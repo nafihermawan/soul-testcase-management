@@ -5,17 +5,13 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRefresh } from "@/lib/client/refresh-context";
-import { AlertTriangle, Bug, Check, CheckCircle2, ChevronDown, CircleSlash, Copy, ExternalLink, FileDown, FolderOpen, Lock, MinusCircle, Paperclip, Pencil, Phone, Plus, X, XCircle } from "lucide-react";
+import { AlertTriangle, Bug, Check, CheckCircle2, ChevronDown, CircleSlash, Copy, ExternalLink, FileDown, FolderOpen, Lock, MinusCircle, Paperclip, Pencil, Phone, X, XCircle } from "lucide-react";
 import { completeRun, completeRunWithSkip, deleteRun, updateRunResult } from "@/lib/actions/test-runs";
 import { createBug, updateBug, updateBugStatus } from "@/lib/actions/automation-bugs";
 import { downloadBugPdf } from "@/lib/bug-pdf";
 import { useMe } from "@/lib/client/me-context";
 import { ConfirmDialog, Spinner, Toast, useToast } from "@/components/ui/feedback";
 import { entityCode, formatCase, runCodeOf } from "@/lib/format";
-import {
-  AttachmentsPanel,
-  type AttachmentsPanelHandle,
-} from "@/components/attachments/attachments-panel";
 import { ListTextarea } from "@/components/ui/list-textarea";
 import { Select } from "@/components/ui/select";
 import { BugDetailModal } from "@/components/bugs/bug-detail-modal";
@@ -29,6 +25,8 @@ export type RunResultItem = {
   titleSnapshot: string;
   actualResult: string | null;
   notes: string | null;
+  /** Alasan yang dipilih saat status SKIPPED (null untuk status lain). */
+  skipReason?: string | null;
   testCaseId: string;
   /** Evidence yang di-upload pada hasil eksekusi ini. */
   attachments?: AttachmentItem[];
@@ -119,6 +117,9 @@ const RESULT_OPTIONS: {
   { value: "BLOCKED", label: "Blocked", icon: CircleSlash, color: "#D97706", tint: "#FDE3B8" },
   { value: "SKIPPED", label: "Skipped", icon: MinusCircle, color: "#64748B", tint: "#DDE3EA" },
 ];
+
+/** Alasan wajib saat TC di-Skip (dropdown kondisional di panel Eksekusi). */
+const SKIP_REASON_OPTIONS = ["Deprecated", "Di luar scope"];
 
 const FONT_MONO = '"Geist Mono", ui-monospace, monospace';
 const FONT_SANS = '"Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif';
@@ -1133,7 +1134,6 @@ export function RunExecutor({
           environment={environment ?? null}
           runName={`${runName}${runCode ? ` (${runCode})` : ""}`}
           onClose={() => setModalItem(null)}
-          onAttachmentsChange={(list) => patchResult(modalItem.id, { attachments: list })}
           onOpenBugDetail={setBugDetailId}
           bugPatch={bugPatch}
           onSave={async (data) => {
@@ -1141,6 +1141,7 @@ export function RunExecutor({
               status: data.status,
               actualResult: data.actualResult,
               notes: data.notes,
+              skipReason: data.skipReason,
             });
             if (res.error) return res;
 
@@ -1149,6 +1150,9 @@ export function RunExecutor({
               status: data.status,
               actualResult: data.actualResult ?? null,
               notes: data.notes ?? null,
+              // Server mengosongkan alasan untuk status non-SKIPPED — samakan.
+              skipReason:
+                data.status === "SKIPPED" ? data.skipReason?.trim() || null : null,
             });
 
             if (data.bug) {
@@ -2772,7 +2776,6 @@ function ExecutionModal({
   environment,
   runName,
   onClose,
-  onAttachmentsChange,
   onOpenBugDetail,
   bugPatch,
   onSave,
@@ -2784,8 +2787,6 @@ function ExecutionModal({
   /** Nama + kode run, dipakai di header laporan PDF bug. */
   runName?: string | null;
   onClose: () => void;
-  /** Teruskan daftar attachment terbaru ke parent (update in-place). */
-  onAttachmentsChange?: (list: AttachmentItem[]) => void;
   /** Buka Bug Detail Modal dari daftar riwayat bug TC ini. */
   onOpenBugDetail?: (bugId: string) => void;
   /** Patch bug hasil Edit Bug dari parent — dipakai untuk update `linkedBugs` in-place. */
@@ -2794,6 +2795,8 @@ function ExecutionModal({
     status: RunResultItem["status"];
     actualResult?: string;
     notes?: string;
+    /** Diisi hanya saat status SKIPPED. */
+    skipReason?: string;
     /**
      * Mode Fail saja:
      * - `new`  → buat Bug BARU (ID baru) ter-link ke TC + hasil run ini;
@@ -2811,6 +2814,8 @@ function ExecutionModal({
   }) => Promise<{ success?: boolean; error?: string }>;
 }) {
   const [status, setStatus] = useState<RunResultItem["status"]>(item.status);
+  /** Alasan wajib saat status SKIPPED (lihat SKIP_REASON_OPTIONS). */
+  const [skippedReason, setSkippedReason] = useState(item.skipReason ?? "");
   const [actualResult, setActualResult] = useState(item.actualResult ?? "");
   const [notes, setNotes] = useState(item.notes ?? "");
   const { me } = useMe();
@@ -2954,8 +2959,6 @@ function ExecutionModal({
   // Divider "aktif" = sedang di-hover atau di-fokus (keyboard).
   const [dividerActive, setDividerActive] = useState(false);
   const gridRef = useRef<HTMLDivElement>(null);
-  // Handle panel Evidence (mode deferred): commit saat Simpan, reset saat Batal.
-  const evidenceRef = useRef<AttachmentsPanelHandle>(null);
 
   // Pantau pergeseran mouse real-time selama drag; berhenti saat mouseup.
   useEffect(() => {
@@ -3062,6 +3065,13 @@ function ExecutionModal({
    */
   const showBugForm = isFail && editable;
 
+  /**
+   * Tombol "Simpan Eksekusi" DISABLED sampai penguji memilih status
+   * (selain NOT_RUN) — dan, khusus SKIPPED, juga sampai alasan diisi.
+   */
+  const saveBlocked =
+    status === "NOT_RUN" || (status === "SKIPPED" && skippedReason === "");
+
   /** Salin Test Data ke clipboard (tombol ringkas di samping nilainya). */
   const copyTestData = async () => {
     const value = tc?.testData ?? "";
@@ -3075,11 +3085,10 @@ function ExecutionModal({
     }
   };
 
-  /** Tombol "Batal": buang draft form + evidence tertunda, kembali ke mode view. */
+  /** Tombol "Batal": buang draft form, kembali ke mode view. */
   const cancelEdit = () => {
-    // Evidence yang belum di-commit dibuang; tidak ada API yang pernah dipanggil.
-    evidenceRef.current?.reset();
     setStatus(item.status);
+    setSkippedReason(item.skipReason ?? "");
     setActualResult(item.actualResult ?? "");
     setNotes(item.notes ?? "");
     setBugTitle("");
@@ -3328,21 +3337,11 @@ function ExecutionModal({
 
     setSaving(true);
 
-    // Evidence (mode edit) baru diunggah/dihapus ke server saat Simpan diklik.
-    // Kalau gagal, modal tetap terbuka supaya QA bisa mengulang.
-    if (editable) {
-      const ev = await evidenceRef.current?.commit();
-      if (ev && !ev.ok) {
-        setSaving(false);
-        setMsg(ev.error ?? "Gagal menyimpan evidence.");
-        return;
-      }
-    }
-
     const res = await onSave({
       status,
       actualResult,
       notes,
+      skipReason: skippedReason,
       // Mode Fail: "edit" memperbarui bug yang sudah ter-link, "new" membuat bug
       // BARU (dipakai saat retest gagal karena issue berbeda).
       bug: isFail
@@ -3777,6 +3776,30 @@ function ExecutionModal({
               })}
             </div>
 
+            {/* Field kondisional: SKIPPED wajib menyertakan alasan. */}
+            {status === "SKIPPED" && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 12 }}>
+                <label htmlFor="skip-reason" style={{ fontSize: 13, fontWeight: 500, color: "#334155" }}>
+                  Alasan Skipped <span style={{ color: "#B91C1C" }}>*</span>
+                </label>
+                <Select
+                  id="skip-reason"
+                  value={skippedReason}
+                  onChange={(e) => setSkippedReason(e.target.value)}
+                  disabled={!editable}
+                  ariaLabel="Alasan Skipped"
+                  style={{ height: 40, fontSize: 14, fontWeight: 500 }}
+                >
+                  <option value="">Pilih alasan…</option>
+                  {SKIP_REASON_OPTIONS.map((r) => (
+                    <option key={r} value={r}>
+                      {r}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            )}
+
             {/* Catatan subtle: bug lama di-Closed otomatis saat bug baru disimpan. */}
             {isFail && activeBug && bugMode === "new" && (
               <div style={{ fontSize: 12, fontWeight: 400, color: "#64748B", marginTop: 8 }}>
@@ -3998,45 +4021,6 @@ function ExecutionModal({
                   />
                 </div>
 
-                {/* Evidence */}
-                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: "#475569" }}>Evidence</span>
-                    {editable && (
-                      <button
-                        type="button"
-                        onClick={() => evidenceRef.current?.pick()}
-                        style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: 6,
-                          padding: 0,
-                          border: "none",
-                          background: "transparent",
-                          fontSize: 13,
-                          fontWeight: 600,
-                          color: "#0F172A",
-                          cursor: "pointer",
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        <Plus size={14} aria-hidden="true" /> Tambah File
-                      </button>
-                    )}
-                  </div>
-                  <AttachmentsPanel
-                    owner={{ testRunResultId: item.id }}
-                    attachments={item.attachments ?? []}
-                    canEdit={editable}
-                    onChange={onAttachmentsChange}
-                    handleRef={evidenceRef}
-                    deferred
-                    compact
-                    plain
-                    hideTrigger
-                  />
-                </div>
-
                 {renderBugHistory()}
               </>
             ) : (
@@ -4070,49 +4054,6 @@ function ExecutionModal({
                   ) : (
                     <p style={{ margin: 0, fontSize: 14, color: "#94A3B8" }}>Tidak ada catatan.</p>
                   )}
-                </div>
-
-                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: "#475569" }}>
-                      Evidence{" "}
-                      <span style={{ fontWeight: 400, color: "#64748B" }}>
-                        · {(item.attachments ?? []).length}
-                      </span>
-                    </span>
-                    {editable && (
-                      <button
-                        type="button"
-                        onClick={() => evidenceRef.current?.pick()}
-                        style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: 6,
-                          padding: 0,
-                          border: "none",
-                          background: "transparent",
-                          fontSize: 13,
-                          fontWeight: 600,
-                          color: "#0F172A",
-                          cursor: "pointer",
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        <Plus size={14} aria-hidden="true" /> Tambah File
-                      </button>
-                    )}
-                  </div>
-                  <AttachmentsPanel
-                    owner={{ testRunResultId: item.id }}
-                    attachments={item.attachments ?? []}
-                    canEdit={editable}
-                    onChange={onAttachmentsChange}
-                    handleRef={evidenceRef}
-                    deferred
-                    compact
-                    plain
-                    hideTrigger
-                  />
                 </div>
 
                 {renderBugHistory()}
@@ -4219,7 +4160,7 @@ function ExecutionModal({
                   <button
                     type="button"
                     onClick={() => void save()}
-                    disabled={saving}
+                    disabled={saving || saveBlocked}
                     className="btn-radius-10"
                     style={{
                       display: "inline-flex",
@@ -4227,23 +4168,20 @@ function ExecutionModal({
                       gap: 8,
                       height: 40,
                       padding: "0 16px",
-                      border: "1px solid #FFC348",
-                      background: "#FFC348",
-                      color: "#0F172A",
+                      border: `1px solid ${saveBlocked ? "#FDE68A" : "#FFC348"}`,
+                      background: saveBlocked ? "#FDE68A" : "#FFC348",
+                      color: saveBlocked ? "rgba(217, 119, 6, 0.7)" : "#0F172A",
                       fontSize: 14,
                       fontWeight: 600,
-                      cursor: saving ? "wait" : "pointer",
+                      cursor: saving ? "wait" : saveBlocked ? "not-allowed" : "pointer",
                       whiteSpace: "nowrap",
+                      opacity: saveBlocked ? 0.6 : 1,
+                      pointerEvents: saveBlocked ? "none" : undefined,
                     }}
                     onMouseEnter={(e) => (e.currentTarget.style.background = "#F0B53D")}
                     onMouseLeave={(e) => (e.currentTarget.style.background = "#FFC348")}
                   >
-                    <Bug size={16} aria-hidden="true" />
-                    {saving
-                      ? "Menyimpan..."
-                      : isFail && bugMode === "new"
-                        ? "Simpan Bug Baru"
-                        : "Simpan Eksekusi"}
+                    {saving ? "Menyimpan..." : isFail && bugMode === "new" ? "Simpan Bug Baru" : "Simpan Eksekusi"}
                   </button>
                 </>
               ))}

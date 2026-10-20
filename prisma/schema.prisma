@@ -292,6 +292,8 @@ model TestRunResult {
   status        RunResultStatus @default(NOT_RUN)
   actualResult  String?
   notes         String?
+  /// Alasan wajib saat status SKIPPED (mis. "Deprecated" / "Di luar scope").
+  skipReason    String?
   updatedById   String?
   updatedAt     DateTime        @updatedAt
 

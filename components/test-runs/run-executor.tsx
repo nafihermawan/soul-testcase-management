@@ -5,11 +5,9 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRefresh } from "@/lib/client/refresh-context";
-import { AlertTriangle, Bug, Check, CheckCircle2, ChevronDown, CircleSlash, Copy, ExternalLink, FileDown, FolderOpen, Lock, MinusCircle, Paperclip, Pencil, Phone, X, XCircle } from "lucide-react";
+import { AlertTriangle, Bug, Check, CheckCircle2, ChevronDown, CircleSlash, Copy, Cpu, ExternalLink, FolderOpen, Lock, MinusCircle, Monitor, Paperclip, Pencil, Server, Smartphone, X, XCircle } from "lucide-react";
 import { completeRun, completeRunWithSkip, deleteRun, updateRunResult } from "@/lib/actions/test-runs";
 import { createBug, updateBug, updateBugStatus } from "@/lib/actions/automation-bugs";
-import { downloadBugPdf } from "@/lib/bug-pdf";
-import { useMe } from "@/lib/client/me-context";
 import { ConfirmDialog, Spinner, Toast, useToast } from "@/components/ui/feedback";
 import { entityCode, formatCase, runCodeOf } from "@/lib/format";
 import { ListTextarea } from "@/components/ui/list-textarea";
@@ -459,6 +457,20 @@ export function RunExecutor({
           .filter(Boolean)
           .join(", ")
       : "—";
+
+  /**
+   * Ikon per platform — label platform tidak boleh memakai ikon yang salah
+   * (ikon HP untuk suite Hardware, dsb). Nilai CSV multi-platform (mis.
+   * "WEB,MOBILE") memakai ikon platform PERTAMANYA.
+   */
+  const PLATFORM_ICONS: Record<string, typeof Smartphone> = {
+    WEB: Monitor,
+    MOBILE: Smartphone,
+    HARDWARE: Cpu,
+    API: Server,
+  };
+  const platformIcon = (v: string | null | undefined): typeof Smartphone =>
+    PLATFORM_ICONS[(v ?? "").split(",")[0].trim().toUpperCase()] ?? Smartphone;
 
   // Stats per project
   const projectStats = groups.map((p) => {
@@ -944,6 +956,7 @@ export function RunExecutor({
       )}
       {suiteStats.map((s) => {
         const open = openSuites[s.key] ?? true;
+        const PlatformIcon = platformIcon(s.platform);
         return (
           <div
             key={s.key}
@@ -1011,7 +1024,7 @@ export function RunExecutor({
               >
                 {s.platform && (
                   <span style={{ display: "inline-flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}>
-                    <Phone size={14} aria-hidden="true" /> {platformLabel(s.platform)}
+                    <PlatformIcon size={14} aria-hidden="true" /> {platformLabel(s.platform)}
                   </span>
                 )}
                 {s.platform && <VSep />}
@@ -1132,7 +1145,6 @@ export function RunExecutor({
           item={modalItem}
           canEdit={canEdit}
           environment={environment ?? null}
-          runName={`${runName}${runCode ? ` (${runCode})` : ""}`}
           onClose={() => setModalItem(null)}
           onOpenBugDetail={setBugDetailId}
           /**
@@ -2780,7 +2792,6 @@ function ExecutionModal({
   item,
   canEdit,
   environment,
-  runName,
   onClose,
   onOpenBugDetail,
   onAutoPass,
@@ -2791,8 +2802,6 @@ function ExecutionModal({
   canEdit: boolean;
   /** Environment run — read-only, ditampilkan di form bug mode Fail. */
   environment: string | null;
-  /** Nama + kode run, dipakai di header laporan PDF bug. */
-  runName?: string | null;
   onClose: () => void;
   /** Buka Bug Detail Modal dari daftar riwayat bug TC ini. */
   onOpenBugDetail?: (bugId: string) => void;
@@ -2830,7 +2839,6 @@ function ExecutionModal({
   const [skippedReason, setSkippedReason] = useState(item.skipReason ?? "");
   const [actualResult, setActualResult] = useState(item.actualResult ?? "");
   const [notes, setNotes] = useState(item.notes ?? "");
-  const { me } = useMe();
   // Judul bug default KOSONG — diisi QA, atau ter-prefill dari bug aktif saat
   // mode "edit" (lihat effect activeBug di bawah).
   const [bugTitle, setBugTitle] = useState("");
@@ -3415,37 +3423,6 @@ function ExecutionModal({
     }
     // Sukses: tutup modal dengan animasi (data sudah dipatch ke daftar induk).
     setClosing(true);
-  };
-
-  /**
-   * Unduh laporan bug ringkas (PDF 1 halaman). Hyperlink evidence memakai URL
-   * presigned R2, jadi Dev bisa klik langsung tanpa login sampai masa
-   * berlakunya habis.
-   */
-  const downloadPdf = () => {
-    const bug = activeBug;
-    void downloadBugPdf({
-      bugCode: bug ? entityCode("BUG", bug.id) : (item.testCase?.tcId ?? "—"),
-      title: bugTitle.trim() || bug?.title || item.titleSnapshot,
-      severity: bugSeverity || bug?.severity || null,
-      status: bug ? (BUG_STATUS_BADGE[bug.status as BugStatus]?.label ?? bug.status) : "Open",
-      precondition: item.testCase?.precondition ?? null,
-      expectedResult: item.testCase?.expectedResult ?? null,
-      actualResult: actualResult || item.actualResult,
-      externalLink: bug?.externalLink ?? null,
-      runName: runName ?? null,
-      environment,
-      moduleName: item.testCase?.suite?.name ?? null,
-      reporter: me?.name ?? null,
-      createdAt: item.testCase?.createdAt
-        ? new Date(item.testCase.createdAt).toISOString()
-        : null,
-      evidence: (item.attachments ?? []).map((a) => ({
-        fileName: a.fileName,
-        url: a.url,
-        mimeType: a.mimeType,
-      })),
-    });
   };
 
   return createPortal(
@@ -4158,33 +4135,6 @@ function ExecutionModal({
           >
             {editable && msg && (
               <span style={{ marginRight: "auto", fontSize: 13, color: "#B91C1C" }}>{msg}</span>
-            )}
-
-            {(isFail || (item.bugs?.length ?? 0) > 0) && (
-              <button
-                type="button"
-                onClick={downloadPdf}
-                title="Download laporan bug (PDF) — link evidence bisa diklik tanpa login"
-                className="btn-radius-10"
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 8,
-                  height: 40,
-                  padding: "0 14px",
-                  border: "1px solid #DDE2E9",
-                  background: "#fff",
-                  color: "#0F172A",
-                  fontSize: 14,
-                  fontWeight: 500,
-                  cursor: "pointer",
-                  whiteSpace: "nowrap",
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = "#F8FAFC")}
-                onMouseLeave={(e) => (e.currentTarget.style.background = "#fff")}
-              >
-                <FileDown size={16} aria-hidden="true" /> Download PDF Bug
-              </button>
             )}
 
             {canEdit &&

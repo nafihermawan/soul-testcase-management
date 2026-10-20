@@ -483,6 +483,7 @@ export type ActiveRunRow = {
   suites: { id: string; name: string }[];
   sprint: string | null;
   status: string;
+  /** Progress eksekusi (lib/qa-metrics): (PASS+FAIL+BLOCKED)/(Total−SKIPPED). */
   pct: number;
   createdByName: string | null;
   /** Assignee tersimpan (penugasan manual); null = belum ditugaskan. */
@@ -524,6 +525,7 @@ export type HistoryRunRow = {
   platforms: string | null;
   sprint: string | null;
   status: string;
+  /** Progress eksekusi (lib/qa-metrics): (PASS+FAIL+BLOCKED)/(Total−SKIPPED). */
   pct: number;
   qaName: string | null;
   createdAt: string;
@@ -662,7 +664,7 @@ export type WeeklyReportTask = {
   completedAt: string | null;
   createdAt: string;
   counts: ExecutionCounts;
-  /** executed / total dalam persen; null bila total 0. */
+  /** Progress eksekusi (lib/qa-metrics): (PASS+FAIL+BLOCKED)/(Total−SKIPPED). */
   progressPct: number | null;
   openBugs: number;
   criticalHighBugs: number;

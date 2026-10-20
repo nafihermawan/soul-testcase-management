@@ -1,4 +1,9 @@
-import { formatPct, type ExecutionCounts } from "@/lib/qa-metrics";
+import {
+  effectiveTotal,
+  executedValidCount,
+  formatPct,
+  type ExecutionCounts,
+} from "@/lib/qa-metrics";
 import type { WeeklyReportPayload, WeeklyReportTask } from "@/types/api";
 
 const fmtDate = (iso: string): string =>
@@ -21,6 +26,9 @@ const metaLine = (t: WeeklyReportTask): string =>
 const countsLine = (c: ExecutionCounts): string => {
   const parts = [`Pass ${c.passed}`, `Fail ${c.failed}`];
   if (c.blocked > 0) parts.push(`Blocked ${c.blocked}`);
+  // Skipped selalu ditampilkan bila ada, supaya jelas kenapa pembagi progress
+  // lebih kecil dari total TC (Skipped tidak dihitung sebagai beban).
+  if (c.skipped > 0) parts.push(`Skipped ${c.skipped}`);
   parts.push(`Not Run ${c.notRun}`);
   return parts.join(" · ");
 };
@@ -37,11 +45,13 @@ const taskBlock = (t: WeeklyReportTask, index: number): string[] => {
   if (meta) lines.push(`   ${meta}`);
   if (t.counts.total === 0) {
     lines.push("   Progress: belum ada test case");
-  } else if (t.counts.executed === 0) {
-    lines.push(`   Progress: 0/${t.counts.total} TC — belum ada eksekusi`);
+  } else if (executedValidCount(t.counts) === 0) {
+    lines.push(`   Progress: 0/${effectiveTotal(t.counts)} TC — belum ada eksekusi`);
   } else {
+    // Angka kecil di samping persen memakai rasio yang SAMA dengan progressPct
+    // ((PASS+FAIL+BLOCKED)/(Total−SKIPPED)) agar keduanya tidak bisa beda arti.
     lines.push(
-      `   Progress: ${t.counts.executed}/${t.counts.total} TC (${formatPct(t.progressPct)})`
+      `   Progress: ${executedValidCount(t.counts)}/${effectiveTotal(t.counts)} TC (${formatPct(t.progressPct)})`
     );
   }
   lines.push(`   ${countsLine(t.counts)}`);
@@ -78,7 +88,7 @@ export function buildWeeklyReportEmail(payload: WeeklyReportPayload): {
       const meta = metaLine(t);
       const hasil =
         t.counts.total > 0
-          ? `${formatPct(t.progressPct)} (${t.counts.passed}/${t.counts.total})`
+          ? `${formatPct(t.progressPct)} (${executedValidCount(t.counts)}/${effectiveTotal(t.counts)})`
           : "tidak ada test case";
       const tanggal = t.completedAt ? ` · ${fmtDate(t.completedAt)}` : "";
       lines.push(`${i + 1}. ${t.name} — ${hasil}${tanggal}`);

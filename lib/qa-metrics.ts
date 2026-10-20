@@ -3,7 +3,14 @@
  * persentase menyesatkan (mis. 0% padahal belum ada eksekusi sama sekali).
  *
  * Konvensi penting:
- * - "Executed" = hasil run dengan status != NOT_RUN.
+ * - "Executed" = hasil run dengan status != NOT_RUN (termasuk SKIPPED).
+ * - "Skipped"  = TC yang DILEWATI: tidak diuji, jadi tidak menambah beban
+ *   penyelesaian maupun menurunkan nilai kelulusan. Karena itu dua persentase
+ *   utama (progress & pass rate) sengaja TIDAK memakai SKIPPED sama sekali:
+ *     progress   = (PASS+FAIL+BLOCKED) / (Total − SKIPPED)
+ *     pass rate  = PASS / (PASS+FAIL+BLOCKED)
+ *   Lihat `executedValidCount` / `effectiveTotal` — jangan hitung ulang rumus ini
+ *   di komponen/route, impor dari sini.
  * - "Tested"  = TC unik yang punya hasil executed pada run yang sudah pernah
  *               tuntas (COMPLETED atau RE_OPEN — run yang dibuka ulang tetap
  *               dihitung agar angka coverage tidak turun palsu).
@@ -84,31 +91,42 @@ export function pct(numerator: number, denominator: number): number | null {
   return Math.round((numerator / denominator) * 100);
 }
 
-/** Pass rate dari counts; null bila belum ada eksekusi. */
+/** Pass rate dari counts; null bila belum ada eksekusi valid. */
 export function passRateOf(c: ExecutionCounts): number | null {
-  return pct(c.passed, c.executed);
+  return pct(c.passed, executedValidCount(c));
 }
 
-/* ---------- PROGRESS EKSEKUSI (definisi TUNGGAL untuk semua permukaan) ---------- */
+/* ---------- PROGRESS EKSEKUSI & PASS RATE (definisi TUNGGAL) ---------- */
 
 /**
- * Jumlah TC yang sudah "ditangani" = punya status akhir (PASS/FAIL/BLOCKED/SKIPPED).
- * `SKIPPED` dihitung tertangani; `NOT_RUN` belum.
+ * TC yang dieksekusi secara VALID = PASS/FAIL/BLOCKED.
+ *
+ * `SKIPPED` sengaja DIKELUARKAN: TC yang dilewati tidak diuji, jadi tidak boleh
+ * menambah beban penyelesaian maupun menurunkan nilai kelulusan. Ini penyebut
+ * Pass Rate sekaligus pembilang Progress.
  */
-export function executedCount(c: ExecutionCounts): number {
-  return c.passed + c.failed + c.blocked + c.skipped;
+export function executedValidCount(c: ExecutionCounts): number {
+  return c.passed + c.failed + c.blocked;
+}
+
+/** Beban eksekusi efektif = seluruh TC − SKIPPED (penyebut Progress). */
+export function effectiveTotal(c: ExecutionCounts): number {
+  return Math.max(c.total - c.skipped, 0);
 }
 
 /**
- * Progress eksekusi: TC tertangani / total. 100% berarti setiap TC sudah punya
- * status akhir. SATU-SATUNYA definisi progress — jangan hitung sendiri di
- * komponen/route; impor dari sini agar semua permukaan konsisten.
+ * Progress/completion rate = TC tereksekusi valid / beban efektif.
+ * 100% berarti setiap TC yang MEMANG diuji sudah punya hasil (PASS/FAIL/BLOCKED);
+ * TC yang di-Skip tidak menghambat indikator ini.
+ *
+ * SATU-SATUNYA definisi progress — jangan hitung sendiri di komponen/route;
+ * impor dari sini agar semua permukaan konsisten.
  */
 export function executionProgress(c: ExecutionCounts): number | null {
-  return pct(executedCount(c), c.total);
+  return pct(executedValidCount(c), effectiveTotal(c));
 }
 
-/** Sisa TC yang belum ditangani (NOT_RUN) — prasyarat run boleh ditutup. */
+/** Sisa TC yang belum punya status akhir (NOT_RUN) — prasyarat run boleh ditutup. */
 export function remainingCount(c: ExecutionCounts): number {
   return c.notRun;
 }

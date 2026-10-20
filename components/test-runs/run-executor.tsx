@@ -3340,7 +3340,13 @@ function ExecutionModal({
     const res = await onSave({
       status,
       actualResult,
-      notes,
+      /**
+       * Notes hanya milik hasil PASS (field-nya pun cuma muncul di status itu).
+       * Untuk status lain, kirim BALIK nilai tersimpan apa adanya supaya catatan
+       * lama tidak terhapus hanya karena field-nya tidak ditampilkan — dan draft
+       * yang tidak terlihat tidak pernah ikut tersimpan.
+       */
+      notes: status === "PASS" ? notes : item.notes ?? "",
       skipReason: skippedReason,
       // Mode Fail: "edit" memperbarui bug yang sudah ter-link, "new" membuat bug
       // BARU (dipakai saat retest gagal karena issue berbeda).
@@ -4045,16 +4051,43 @@ function ExecutionModal({
                   </div>
                 )}
 
-                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: "#475569" }}>Notes</span>
-                  {(notes ?? "").trim() ? (
-                    <p style={{ margin: 0, fontSize: 14, color: "#1E293B", lineHeight: 1.5, whiteSpace: "pre-wrap" }}>
-                      {notes}
-                    </p>
-                  ) : (
-                    <p style={{ margin: 0, fontSize: 14, color: "#94A3B8" }}>Tidak ada catatan.</p>
-                  )}
-                </div>
+                {/* Notes — hanya muncul saat status PASS (opsional). */}
+                {status === "PASS" && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: "#475569" }}>
+                      Notes
+                      {editable && (
+                        <span style={{ fontWeight: 400, color: "#64748B" }}> (opsional)</span>
+                      )}
+                    </span>
+                    {editable ? (
+                      <ListTextarea
+                        value={notes}
+                        onChange={setNotes}
+                        rows={3}
+                        ariaLabel="Notes"
+                        placeholder="Tambahkan catatan eksekusi jika ada (opsional)…"
+                        style={{
+                          padding: "10px 12px",
+                          lineHeight: 1.5,
+                          resize: "vertical",
+                          border: "1px solid #DDE2E9",
+                          borderRadius: 10,
+                          fontSize: 14,
+                          color: "#0F172A",
+                          background: "#fff",
+                          outline: "none",
+                        }}
+                      />
+                    ) : (notes ?? "").trim() ? (
+                      <p style={{ margin: 0, fontSize: 14, color: "#1E293B", lineHeight: 1.5, whiteSpace: "pre-wrap" }}>
+                        {notes}
+                      </p>
+                    ) : (
+                      <p style={{ margin: 0, fontSize: 14, color: "#94A3B8" }}>Tidak ada catatan.</p>
+                    )}
+                  </div>
+                )}
 
                 {renderBugHistory()}
               </>

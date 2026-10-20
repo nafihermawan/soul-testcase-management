@@ -1,6 +1,8 @@
 import { Card } from "@/components/ui";
 import {
   ACTIVE_BUG_STATUSES,
+  effectiveTotal,
+  executedValidCount,
   executionProgress,
   formatPct,
   severityRank,
@@ -188,8 +190,10 @@ export function ReleaseReadiness({
             {formatPct(executionProgress(counts))}
           </p>
           <p style={{ fontSize: 11, fontWeight: 500, color: "#475569", margin: 0 }}>Executed</p>
+          {/* Penyebut = beban efektif (Total − Skipped), bukan total mentah,
+              supaya angka kecil di bawah persen ikut rumus yang sama. */}
           <p style={{ fontSize: 9, color: "#94A3B8", margin: 0 }}>
-            {counts.executed} / {counts.total}
+            {executedValidCount(counts)} / {effectiveTotal(counts)}
           </p>
         </div>
       </div>

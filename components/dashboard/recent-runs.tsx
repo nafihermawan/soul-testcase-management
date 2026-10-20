@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Card, PanelHeader, ProgressBar } from "@/components/ui";
 import { Tooltip } from "@/components/ui/tooltip";
 import { EmptyState } from "@/components/dashboard/empty-state";
-import { executionProgress, formatPct, pct } from "@/lib/qa-metrics";
+import { executionProgress, formatPct, passRateOf } from "@/lib/qa-metrics";
 import { RUN_STATUS_LABEL, type RunStatusValue } from "@/lib/run-status";
 import type { DashboardRunItem } from "@/types/api";
 import { CalendarClock } from "lucide-react";
@@ -113,12 +113,15 @@ export function RecentRuns({ runs }: { runs: DashboardRunItem[] }) {
                 const status = r.status as RunStatusValue;
                 // Jaring pengaman: Completed tapi eksekusi belum 100%.
                 const completedIncomplete = status === "COMPLETED" && (progress ?? 0) < 100;
-                // Pass Rate = rasio lolos dari yang dieksekusi (Passed+Failed).
-                const passRate = pct(r.counts.passed, r.counts.passed + r.counts.failed);
+                // Pass Rate = rasio lolos dari TC yang dieksekusi valid
+                // (Passed+Failed+Blocked); Skipped dikecualikan dari penyebut.
+                const passRate = passRateOf(r.counts);
                 // Rincian status dipindah ke tooltip progress (menggantikan sub-teks).
+                // Skipped ikut ditampilkan supaya angka penyebut progress
+                // (Total − Skipped) tetap bisa ditelusuri dari tooltip ini.
                 const statusDetail = `${r.counts.passed} Passed · ${r.counts.failed} Failed · ${r.counts.notRun} Not Run${
                   r.counts.blocked > 0 ? ` · ${r.counts.blocked} Blocked` : ""
-                }`;
+                }${r.counts.skipped > 0 ? ` · ${r.counts.skipped} Skipped` : ""}`;
                 return (
                   <tr
                     key={r.id}

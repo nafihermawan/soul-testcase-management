@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getFormattedDate, runCodeOf, sanitizeFilename } from "@/lib/format";
 import { RUN_STATUS_LABEL, type RunStatusValue } from "@/lib/run-status";
+import { countsFromStatuses, formatPct, passRateOf } from "@/lib/qa-metrics";
 import { requireUser } from "@/lib/hierarchy";
 import { ReportActionBar } from "@/components/test-runs/report-action-bar";
 
@@ -81,7 +82,9 @@ export default async function RunReportPage({
   const failed = run.results.filter((r) => r.status === "FAIL").length;
   const blocked = run.results.filter((r) => r.status === "BLOCKED").length;
   const skipped = run.results.filter((r) => r.status === "SKIPPED").length;
-  const passRate = total > 0 ? Math.round((passed / total) * 100) : 0;
+  // Pass Rate = PASS / (PASS+FAIL+BLOCKED) — definisi tunggal dari lib/qa-metrics,
+  // jadi TC yang di-Skip (dan yang belum dieksekusi) tidak menurunkannya.
+  const passRate = passRateOf(countsFromStatuses(run.results.map((r) => r.status)));
 
   // Bug unik yang ditautkan ke hasil eksekusi run ini (satu bug bisa dirujuk
   // dari beberapa hasil, jadi didedupe berdasarkan id).
@@ -304,7 +307,7 @@ export default async function RunReportPage({
             </td>
             <td style={{ border: "1px solid #E2E8F0", padding: "0.4rem 0.5rem" }}>{blocked}</td>
             <td style={{ border: "1px solid #E2E8F0", padding: "0.4rem 0.5rem" }}>{skipped}</td>
-            <td style={{ border: "1px solid #E2E8F0", padding: "0.4rem 0.5rem" }}>{passRate}%</td>
+            <td style={{ border: "1px solid #E2E8F0", padding: "0.4rem 0.5rem" }}>{formatPct(passRate)}</td>
           </tr>
         </tbody>
       </table>

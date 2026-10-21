@@ -8,7 +8,6 @@ import { AttachmentsPanel } from "@/components/attachments/attachments-panel";
 import { EditBugModal } from "@/components/bugs/edit-bug-modal";
 import { Spinner } from "@/components/ui/feedback";
 import { ScrollCue, useScrollCue } from "@/components/ui/scroll-cue";
-import { downloadBugPdf } from "@/lib/bug-pdf";
 import { entityCode } from "@/lib/format";
 import type { BugDetailPayload, BugEditableFields, BugRow } from "@/types/api";
 
@@ -143,31 +142,13 @@ export function BugDetailModal({
     bug?.precondition?.trim() || bug?.testCase?.precondition?.trim() || "";
 
   /**
-   * Ekspor laporan bug ringkas (PDF). Hyperlink evidence memakai URL presigned
-   * R2, jadi bisa dibuka tanpa login sampai masa berlakunya habis.
+   * Export PDF bug. Dokumen dirakit DI SERVER (`/api/reports/bug-pdf`) — server
+   * yang mengambil byte evidence dari R2 (bebas CORS browser), jadi preview
+   * gambar dijamin muncul. Tab baru langsung menampilkan PDF-nya.
    */
   const exportPdf = () => {
     if (!bug) return;
-    void downloadBugPdf({
-      bugCode: entityCode("BUG", bug.id),
-      title: bug.title,
-      severity: bug.severity,
-      status: bug.status,
-      precondition: preconditionText || null,
-      expectedResult: bug.testCase?.expectedResult ?? bug.expectedResult,
-      actualResult: bug.description,
-      externalLink: bug.externalLink,
-      runName: bug.run?.name ?? null,
-      environment: bug.environment ?? bug.run?.environment ?? null,
-      moduleName: bug.suite?.name ?? null,
-      reporter: bug.createdBy?.name ?? null,
-      createdAt: bug.createdAt,
-      evidence: bug.attachments.map((a) => ({
-        fileName: a.fileName,
-        url: a.url,
-        mimeType: a.mimeType,
-      })),
-    });
+    window.open(`/api/reports/bug-pdf?bugId=${encodeURIComponent(bug.id)}`, "_blank");
   };
 
   return createPortal(

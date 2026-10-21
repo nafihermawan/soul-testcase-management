@@ -3,13 +3,15 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "test": "vitest run",
     "dev": "NODE_ENV=development next dev",
     "build": "NODE_ENV=production next build",
     "start": "next start",
     "lint": "next lint",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1129.0",
@@ -38,6 +40,7 @@
     "eslint-config-prettier": "^10.1.8",
     "prettier": "^3.9.6",
     "prisma": "^7.9.1",
-    "typescript": "^5"
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
   }
 }

@@ -686,6 +686,7 @@ export function HistoryControls({
   dialogTitle = "Filter Run History",
   showFilterButton = true,
   onSearch,
+  fieldSize = "sm",
 }: {
   projects: ProjectFilterOption[];
   initial: HistoryFilterState;
@@ -699,6 +700,11 @@ export function HistoryControls({
    * dikirim ke pemanggil untuk difilter di sisi klien.
    */
   onSearch?: (q: string) => void;
+  /**
+   * Ukuran field pencarian: "sm" (default, baris kontrol rapat di Run History)
+   * atau "md" agar sejajar dengan tombol primer 40px/radius 10 (Active Runs).
+   */
+  fieldSize?: "sm" | "md";
 }) {
   const router = useRouter();
   const [q, setQ] = useState(initial.q);
@@ -850,14 +856,15 @@ export function HistoryControls({
           placeholder="Cari Run ID, Nama Run..."
           className="filter-field"
           style={{
-            // Ringkas: h-8 (32px) & w-52 (208px).
             width: 208,
-            height: 32,
+            // "md" = sejajar tombol primer (40px, radius 10, border #DDE2E9);
+            // "sm" = versi ringkas halaman Run History.
+            height: fieldSize === "md" ? 40 : 32,
             padding: "0 0.75rem 0 2rem",
-            borderRadius: 8,
-            border: "1px solid #CBD5E1",
+            borderRadius: fieldSize === "md" ? 10 : 8,
+            border: `1px solid ${fieldSize === "md" ? "#DDE2E9" : "#CBD5E1"}`,
             background: "#fff",
-            fontSize: "0.83rem",
+            fontSize: fieldSize === "md" ? 13 : "0.83rem",
             color: "#0F172A",
             outline: "none",
           }}

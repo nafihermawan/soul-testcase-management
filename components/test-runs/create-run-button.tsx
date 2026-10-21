@@ -10,26 +10,30 @@ export function CreateRunButton() {
       type="button"
       onClick={() => router.push("/test-runs/create")}
       style={{
-        display: "inline-flex",
+        // Samakan persis dengan tombol primer di app ini (Tambah Section,
+        // Complete Run, Express Run di footer form): tinggi 40, radius 10,
+        // amber brand #FFC348 dengan teks slate gelap.
+        display: "flex",
         alignItems: "center",
-        gap: "0.4rem",
-        // Ringkas: h-8 (32px) & px-3.
-        height: 32,
-        padding: "0 12px",
-        borderRadius: 8,
-        border: "none",
-        background: "#F59E0B",
+        gap: 8,
+        width: "auto",
+        height: 40,
+        boxSizing: "border-box",
+        padding: "0 16px",
+        border: "1px solid #FFC348",
+        borderRadius: 10,
+        background: "#FFC348",
         color: "#0F172A",
-        fontSize: 13,
+        fontSize: 14,
         fontWeight: 600,
         cursor: "pointer",
         whiteSpace: "nowrap",
         transition: "background-color 0.15s ease",
       }}
-      onMouseEnter={(e) => (e.currentTarget.style.background = "#D97706")}
-      onMouseLeave={(e) => (e.currentTarget.style.background = "#F59E0B")}
+      onMouseEnter={(e) => (e.currentTarget.style.background = "#F0B53D")}
+      onMouseLeave={(e) => (e.currentTarget.style.background = "#FFC348")}
     >
-      <Plus size={16} /> Express Run
+      <Plus size={16} strokeWidth={2.4} color="currentColor" /> Express Run
     </button>
   );
 }

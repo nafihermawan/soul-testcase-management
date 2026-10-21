@@ -158,6 +158,12 @@ export function ListTextarea({
         color: "var(--text)",
         background: "#fff",
         boxSizing: "border-box",
+        // Wrap alami: baris baru dipertahankan (`pre-wrap`) dan pemotongan
+        // mengikuti spasi kalimat. Kata panjang tanpa spasi (mis. URL) tetap
+        // dipatahkan `break-word` supaya tidak meluber keluar kotak — bukan
+        // `break-all` yang memotong kata di tengah kalimat.
+        whiteSpace: "pre-wrap",
+        wordBreak: "break-word",
         // Tinggi diatur autoGrow (atau flex container bila `fill`); tanpa handle resize.
         overflowY: fill ? "auto" : "hidden",
         resize: "none",

@@ -32,7 +32,15 @@ export async function GET(request: Request) {
           select: { id: true, tcId: true, title: true, expectedResult: true, precondition: true },
         },
         suite: { select: { id: true, name: true } },
-        testRunResult: { select: { run: { select: { id: true, name: true, environment: true } } } },
+        testRunResult: {
+          select: {
+            run: { select: { id: true, name: true, environment: true } },
+            /** Alasan Skip milik hasil eksekusi yang melahirkan bug ini. */
+            status: true,
+            skipReason: true,
+            skipReasonNote: true,
+          },
+        },
         createdBy: { select: { name: true } },
         attachments: {
           orderBy: { createdAt: "desc" },
@@ -62,6 +70,14 @@ export async function GET(request: Request) {
       moduleName: bug.suite?.name ?? null,
       reporter: bug.createdBy?.name ?? null,
       createdAt: bug.createdAt.toISOString(),
+      // Baris "Alasan Skipped" pada PDF mengambil alasan dari hasil eksekusi yang
+      // tertaut ke bug ini (satu sumber, bukan disalin ke kolom bug), dan hanya
+      // saat hasilnya MEMANG berstatus SKIPPED — sama seperti laporan cetak Test
+      // Run, supaya alasan lama tidak nyangkut setelah statusnya berubah.
+      skipReason:
+        bug.testRunResult?.status === "SKIPPED" ? bug.testRunResult.skipReason : null,
+      skipReasonNote:
+        bug.testRunResult?.status === "SKIPPED" ? bug.testRunResult.skipReasonNote : null,
       evidence: attachments.map((a) => ({
         fileName: a.fileName,
         url: a.url,

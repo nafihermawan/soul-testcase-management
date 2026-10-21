@@ -640,6 +640,27 @@ button,
   }
 }
 
+/* Scrollbar tipis & muted (thumb slate-200) untuk area scroll di dalam
+   modal/kartu — supaya scrollbar tidak menempel kaku di tepi konten. */
+.thin-scrollbar {
+  scrollbar-width: thin; /* Firefox */
+  scrollbar-color: #e2e8f0 transparent;
+}
+.thin-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.thin-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.thin-scrollbar::-webkit-scrollbar-thumb {
+  background: #e2e8f0;
+  border-radius: 999px;
+}
+.thin-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #cbd5e1;
+}
+
 /* Baris bawah dashboard (Recent Runs / Recent Bugs): tetap 1 kolom sampai
    1280px (xl), baru 7:5 di atasnya — supaya tabel tidak tertekan di laptop
    resolusi kecil/menengah. */

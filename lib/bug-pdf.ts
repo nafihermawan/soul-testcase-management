@@ -58,6 +58,9 @@ export type BugPdfData = {
   moduleName?: string | null;
   reporter?: string | null;
   createdAt?: string | null;
+  /** Alasan + keterangan saat hasil eksekusi TC ini di-Skip (kalau ada). */
+  skipReason?: string | null;
+  skipReasonNote?: string | null;
   evidence: BugPdfEvidence[];
 };
 
@@ -484,6 +487,20 @@ export async function renderBugPdf(data: BugPdfData): Promise<ArrayBuffer> {
     // Link Eksternal menempati kolom kiri (di bawah Status).
     [["Link Eksternal", externalUrl || "—", externalUrl || null]],
   ];
+
+  /**
+   * Alasan Skip (bila hasil eksekusi TC ini memang di-Skip) ditambahkan sebagai
+   * BARIS metadata baru — bukan section sendiri — mengikuti pola Link Eksternal.
+   * Keterangan "Lainnya" digabung dengan em dash, mis.
+   * "Lainnya — Akan di test di production".
+   */
+  const skipReasonText = (data.skipReason ?? "").trim();
+  const skipNoteText = (data.skipReasonNote ?? "").trim();
+  if (skipReasonText) {
+    metaRows.push([
+      ["Alasan Skipped", skipNoteText ? `${skipReasonText} — ${skipNoteText}` : skipReasonText],
+    ]);
+  }
   const colW = (CONTENT_W - GUTTER) / 2;
   const rowH = 10;
   metaRows.forEach((row, r) => {

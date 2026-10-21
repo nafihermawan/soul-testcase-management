@@ -16,6 +16,7 @@ import {
   type AttachmentsPanelHandle,
 } from "@/components/attachments/attachments-panel";
 import { ListTextarea } from "@/components/ui/list-textarea";
+import { BulletText } from "@/components/ui/bullet-text";
 import { Select } from "@/components/ui/select";
 import { BugDetailModal } from "@/components/bugs/bug-detail-modal";
 import { EditRunModal } from "@/components/test-runs/edit-run-modal";
@@ -96,6 +97,9 @@ const statusPillStyle = (
   background: badge.bg,
   color: badge.color,
   fontSize: 11,
+  // line-height eksplisit supaya tinggi pill seimbang di semua konteks
+  // (badge menempel pojok kanan kartu, bukan melebar mengikuti baris).
+  lineHeight: 1.35,
   fontWeight: badge.weight,
   whiteSpace: "nowrap",
 });
@@ -1892,11 +1896,13 @@ function CompleteRunModal({
           <div>
             <div style={labelStyle}>Case Notes</div>
             <div
+              className="thin-scrollbar"
               style={{
                 maxHeight: 220,
                 overflowY: "auto",
                 padding: "0.75rem",
-                paddingRight: 4,
+                // Ruang untuk scrollbar supaya tidak menempel ke tepi kartu.
+                paddingRight: 12,
                 border: "1px solid #E2E8F0",
                 borderRadius: 12,
                 background: "rgba(248, 250, 252, 0.5)",
@@ -1917,7 +1923,9 @@ function CompleteRunModal({
                       key={it.id}
                       style={{ background: "#fff", border: "1px solid #E2E8F0", borderRadius: 8, padding: "0.6rem 0.75rem" }}
                     >
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.5rem" }}>
+                      {/* ID di kiri, badge status menempel di pojok kanan ATAS
+                          walau judulnya panjang/berbaris. */}
+                      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "0.5rem" }}>
                         <span
                           style={{
                             fontFamily: "var(--font-mono, monospace)",
@@ -1933,16 +1941,45 @@ function CompleteRunModal({
                       <div style={{ marginTop: "0.2rem", fontSize: "0.78rem", fontWeight: 600, color: "#1F2937" }}>
                         {it.titleSnapshot}
                       </div>
+                      {/* Actual Result & Notes: label di barisnya sendiri, isinya
+                          dirender sebagai paragraf/daftar berpoin (satu baris per
+                          poin) supaya tidak menumpuk jadi paragraf panjang. */}
                       {(it.actualResult ?? "").trim() !== "" && (
-                        <div style={{ marginTop: "0.25rem", fontSize: "0.74rem", color: "#475569", lineHeight: 1.5 }}>
-                          <span style={{ fontWeight: 600, color: "#64748B" }}>Actual: </span>
-                          {it.actualResult}
+                        <div style={{ marginTop: "0.35rem" }}>
+                          <span
+                            style={{
+                              display: "block",
+                              marginBottom: 2,
+                              fontSize: "0.7rem",
+                              fontWeight: 700,
+                              color: "#64748B",
+                            }}
+                          >
+                            Actual Result
+                          </span>
+                          <BulletText
+                            text={it.actualResult as string}
+                            itemStyle={{ fontSize: "0.74rem", lineHeight: 1.55, color: "#475569" }}
+                          />
                         </div>
                       )}
                       {(it.notes ?? "").trim() !== "" && (
-                        <div style={{ marginTop: "0.2rem", fontSize: "0.74rem", color: "#475569", lineHeight: 1.5 }}>
-                          <span style={{ fontWeight: 600, color: "#64748B" }}>Notes: </span>
-                          {it.notes}
+                        <div style={{ marginTop: "0.3rem" }}>
+                          <span
+                            style={{
+                              display: "block",
+                              marginBottom: 2,
+                              fontSize: "0.7rem",
+                              fontWeight: 700,
+                              color: "#64748B",
+                            }}
+                          >
+                            Notes
+                          </span>
+                          <BulletText
+                            text={it.notes as string}
+                            itemStyle={{ fontSize: "0.74rem", lineHeight: 1.55, color: "#475569" }}
+                          />
                         </div>
                       )}
                     </div>
@@ -3210,43 +3247,6 @@ function ExecutionModal({
   const sevColor = (sev: string): string =>
     sev === "CRITICAL" ? "#B91C1C" : sev === "HIGH" ? "#EA580C" : sev === "MEDIUM" ? "#CA8A04" : "#94A3B8";
 
-  /** Render teks hasil: baris bullet jadi <ul>, sisanya <p>. */
-  const renderActualBlocks = (text: string) => {
-    const blocks: React.ReactNode[] = [];
-    let bullets: string[] = [];
-    const flush = (key: string) => {
-      if (bullets.length === 0) return;
-      const items = bullets;
-      bullets = [];
-      blocks.push(
-        <ul key={key} style={{ margin: 0, paddingLeft: 18, display: "flex", flexDirection: "column", gap: 2 }}>
-          {items.map((b, i) => (
-            <li key={i} style={{ fontSize: 14, lineHeight: 1.6, color: "#1E293B" }}>
-              {b}
-            </li>
-          ))}
-        </ul>
-      );
-    };
-    text.split("\n").forEach((raw, i) => {
-      const line = raw.trim();
-      if (!line) return;
-      const m = line.match(/^[•\-*]\s*(.+)$/);
-      if (m) {
-        bullets.push(m[1]);
-      } else {
-        flush(`u${i}`);
-        blocks.push(
-          <p key={`p${i}`} style={{ margin: 0, fontSize: 14, lineHeight: 1.6, color: "#1E293B" }}>
-            {line}
-          </p>
-        );
-      }
-    });
-    flush("ulast");
-    return <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>{blocks}</div>;
-  };
-
   /** Blok Bug History (accordion) — satu kotak bordered, dipakai kedua state. */
   const renderBugHistory = () => (
     <div style={{ border: "1px solid #E3E7EE", borderRadius: 12, overflow: "hidden" }}>
@@ -4172,7 +4172,7 @@ function ExecutionModal({
                     <span style={{ fontSize: 13, fontWeight: 600, color: "#991B1B" }}>
                       Actual Result
                     </span>
-                    {renderActualBlocks(actualResult)}
+                    <BulletText text={actualResult} />
                   </div>
                 )}
 

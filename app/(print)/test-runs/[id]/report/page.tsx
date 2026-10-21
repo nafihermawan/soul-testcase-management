@@ -54,6 +54,9 @@ export default async function RunReportPage({
           titleSnapshot: true,
           actualResult: true,
           notes: true,
+          /** Alasan + keterangan saat hasil ini di-Skip (lihat panel Eksekusi). */
+          skipReason: true,
+          skipReasonNote: true,
           /** Bug yang ditautkan ke hasil eksekusi ini (dipakai seksi Bugs Found). */
           bugs: {
             select: {
@@ -126,7 +129,7 @@ export default async function RunReportPage({
     PASS: "#059669",
     FAIL: "#E11D48",
     BLOCKED: "#D97706",
-    SKIPPED: "#6B7280",
+    SKIPPED: "#64748B",
     NOT_RUN: "#94A3B8",
   };
 
@@ -500,6 +503,11 @@ export default async function RunReportPage({
               </div>
               {rows.map((r) => {
                 const color = statusColor[r.status] ?? "#0F172A";
+                const skipNote = r.status === "SKIPPED" ? (r.skipReasonNote ?? "").trim() : "";
+                const notesText = (r.notes ?? "").trim();
+                // Notes kosong tidak diulang kalau keterangan skip sudah tampil
+                // di baris "Keterangan / Notes" (hindari dua label Notes).
+                const showNotesLine = notesText !== "" || skipNote === "";
                 return (
                   <div
                     key={r.id}
@@ -520,14 +528,31 @@ export default async function RunReportPage({
                       <span style={{ color, fontWeight: 700 }}>[{r.status}]</span>{" "}
                       {r.testCase?.tcId ?? "—"} - {r.titleSnapshot}
                     </div>
-                    <div style={{ marginTop: "0.25rem", color: "#334155" }}>
+                    <div style={{ marginTop: "0.25rem", color: "#334155", whiteSpace: "pre-wrap", overflowWrap: "break-word" }}>
                       <span style={{ color: "#64748B" }}>• Actual Result : </span>
                       {r.actualResult ?? "—"}
                     </div>
-                    <div style={{ color: "#334155" }}>
-                      <span style={{ color: "#64748B" }}>• Notes : </span>
-                      {r.notes?.trim() || "—"}
-                    </div>
+                    {showNotesLine && (
+                      <div style={{ color: "#334155", whiteSpace: "pre-wrap", overflowWrap: "break-word" }}>
+                        <span style={{ color: "#64748B" }}>• Notes : </span>
+                        {notesText || "—"}
+                      </div>
+                    )}
+                    {/* Detail Skip dirender LENGKAP dan terpisah: alasan dan
+                        keterangan masing-masing satu baris, mengikuti urutan di
+                        panel Eksekusi. */}
+                    {r.status === "SKIPPED" && r.skipReason?.trim() && (
+                      <div style={{ color: "#334155" }}>
+                        <span style={{ color: "#64748B" }}>• Alasan Skipped : </span>
+                        {r.skipReason.trim()}
+                      </div>
+                    )}
+                    {r.status === "SKIPPED" && r.skipReasonNote?.trim() && (
+                      <div style={{ color: "#334155", whiteSpace: "pre-wrap", overflowWrap: "break-word" }}>
+                        <span style={{ color: "#64748B" }}>• Keterangan / Notes : </span>
+                        {r.skipReasonNote.trim()}
+                      </div>
+                    )}
                   </div>
                 );
               })}

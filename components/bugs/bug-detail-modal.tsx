@@ -375,7 +375,9 @@ export function BugDetailModal({
                         fontWeight: 600,
                         color: "#2563EB",
                         textDecoration: "none",
-                        wordBreak: "break-all",
+                        // `break-word` (bukan `break-all`): URL panjang tetap
+                        // dipatahkan bila perlu, tanpa memotong kata di tengah.
+                        overflowWrap: "break-word",
                       }}
                       onMouseEnter={(e) => (e.currentTarget.style.textDecoration = "underline")}
                       onMouseLeave={(e) => (e.currentTarget.style.textDecoration = "none")}

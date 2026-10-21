@@ -116,9 +116,6 @@ export function CreateRunView({ searchParams }: { searchParams?: CreateRunSearch
           >
             Create Express Run
           </h1>
-          <p style={{ fontSize: 14, lineHeight: 1.5, color: "#475569", margin: "6px 0 0" }}>
-            Isi detail run dan pilih suite/test case yang ingin dieksekusi.
-          </p>
         </div>
 
         {/* Inset divider */}

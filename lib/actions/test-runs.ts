@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/permissions";
 import { ACTIVE_RUN_STATUSES, type RunStatusValue } from "@/lib/run-status";
+import { SKIP_REASON_OTHER } from "@/lib/qa-metrics";
 
 export type TestRunActionState = {
   error?: string;
@@ -255,6 +256,8 @@ export async function updateRunResult(
     notes?: string;
     /** Hanya relevan saat status SKIPPED; status lain selalu dikosongkan. */
     skipReason?: string;
+    /** Keterangan bebas, hanya dipakai saat alasannya "Lainnya". */
+    skipReasonNote?: string;
   }
 ): Promise<TestRunActionState> {
   const user = await requireRole("QA");
@@ -273,6 +276,12 @@ export async function updateRunResult(
         notes: data.notes?.trim() || null,
         skipReason:
           data.status === "SKIPPED" ? data.skipReason?.trim() || null : null,
+        // Keterangan hanya bermakna untuk alasan "Lainnya"; selain itu dikosongkan
+        // supaya tidak ada teks nyangkut di alasan yang tidak dipilih.
+        skipReasonNote:
+          data.status === "SKIPPED" && data.skipReason?.trim() === SKIP_REASON_OTHER
+            ? data.skipReasonNote?.trim() || null
+            : null,
         updatedById: user.id,
       },
     });

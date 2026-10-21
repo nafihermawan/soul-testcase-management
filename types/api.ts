@@ -615,6 +615,8 @@ export type RunResultItem = {
   notes: string | null;
   /** Alasan yang dipilih saat status SKIPPED (null untuk status lain). */
   skipReason: string | null;
+  /** Keterangan bebas saat alasannya "Lainnya" (null untuk alasan lain). */
+  skipReasonNote: string | null;
   testCaseId: string;
   bugs: RunResultBug[];
   testCase: RunResultTestCase | null;

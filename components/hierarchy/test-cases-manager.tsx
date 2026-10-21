@@ -13,12 +13,15 @@ import {
   CirclePlus,
   Copy,
   Download,
+  FileText,
   FolderInput,
   History,
   Layers,
   Loader2,
   Pencil,
   Plus,
+  Search,
+  Table,
   Trash2,
   Upload,
   X,
@@ -125,20 +128,38 @@ const btnYellow: React.CSSProperties = {
   cursor: "pointer",
 };
 
-/** Item dalam grup aksi file (Template · Import · CSV). */
-const fileGroupItem: React.CSSProperties = {
+/** Tombol aksi sekunder di toolbar (Export / Import) — bordered putih. */
+const secondaryBtn: React.CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
-  gap: 7,
-  height: "100%",
+  gap: 8,
+  height: 40,
+  boxSizing: "border-box",
   padding: "0 14px",
-  border: "none",
-  borderRight: "1px solid #DDE2E9",
+  border: "1px solid #DDE2E9",
   background: "#FFFFFF",
-  color: "#334155",
+  color: "#0F172A",
   fontSize: 13,
-  fontWeight: 500,
+  fontWeight: 600,
   cursor: "pointer",
+  whiteSpace: "nowrap",
+};
+
+/** Item di dalam menu dropdown Export. */
+const exportMenuItem: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "0.5rem",
+  width: "100%",
+  padding: "0.5rem 0.75rem",
+  fontSize: "0.84rem",
+  fontWeight: 500,
+  color: "#334155",
+  background: "transparent",
+  border: "none",
+  borderRadius: 6,
+  cursor: "pointer",
+  textAlign: "left",
   whiteSpace: "nowrap",
 };
 
@@ -1330,13 +1351,55 @@ export function TestCasesManager({
     const el = document.getElementById("suite-header-actions");
     setHeaderAnchor(el);
   }, []);
+
+  /** Pencarian TC di toolbar (tcId + judul) — filter di klien, tanpa refetch. */
+  const [query, setQuery] = useState("");
+  /** Dropdown Export: posisi menu dihitung `fixed` agar tidak terpotong header. */
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exportPos, setExportPos] = useState<{ top: number; right: number } | null>(null);
+  const exportBtnRef = useRef<HTMLButtonElement>(null);
+
+  // Tutup menu Export saat klik di luar, Escape, scroll, atau resize.
+  // Menu dirender via portal ke document.body, jadi pengecekan pakai data-attr.
+  useEffect(() => {
+    if (!exportOpen) return;
+    const onClickOutside = (e: MouseEvent) => {
+      if (exportBtnRef.current?.contains(e.target as Node)) return;
+      if ((e.target as HTMLElement).closest?.("[data-export-menu]")) return;
+      setExportOpen(false);
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setExportOpen(false);
+    };
+    const onScrollOrResize = () => setExportOpen(false);
+    document.addEventListener("mousedown", onClickOutside);
+    document.addEventListener("keydown", onKeyDown);
+    window.addEventListener("scroll", onScrollOrResize, true);
+    window.addEventListener("resize", onScrollOrResize);
+    return () => {
+      document.removeEventListener("mousedown", onClickOutside);
+      document.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("scroll", onScrollOrResize, true);
+      window.removeEventListener("resize", onScrollOrResize);
+    };
+  }, [exportOpen]);
+
+  const openExportMenu = () => {
+    const rect = exportBtnRef.current?.getBoundingClientRect();
+    if (rect) setExportPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+    setExportOpen(true);
+  };
+
   const [addingTc, setAddingTc] = useState(false);
   const [editingTcId, setEditingTcId] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  // Deep-link ?edit=<tcId>: buka modal edit Test Case langsung saat mount
+  // Deep-link ?edit=<tcId>: buka modal edit Test Case langsung saat mount.
+  // Dicek dari PROP `testCases` (sumber otoritatif) — bukan cermin lokal — supaya
+  // dependensinya lengkap: menambah `localTestCases` ke deps akan membuka ulang
+  // modal ini setiap kali daftar lokal berubah (mis. setelah TC lain diedit).
   useEffect(() => {
-    if (initialEditTcId && localTestCases.some((t) => t.id === initialEditTcId)) {
+    if (initialEditTcId && testCases.some((t) => t.id === initialEditTcId)) {
       setEditingTcId(initialEditTcId);
     }
   }, [initialEditTcId, testCases]);
@@ -1571,15 +1634,25 @@ export function TestCasesManager({
     showToast(`${count} Test Case dihapus!`, "success");
   };
 
-  // Grouping TC per section (dari DB sectionId) + unassigned
+  // Grouping TC per section (dari DB sectionId) + unassigned.
+  // Saat pencarian aktif, yang dirender hanya TC yang cocok (tcId atau judul)
+  // dan section yang tidak punya hasil tidak ikut ditampilkan.
+  const q = query.trim().toLowerCase();
+  const visibleTestCases = q
+    ? localTestCases.filter((t) => `${t.tcId} ${t.title}`.toLowerCase().includes(q))
+    : localTestCases;
   const grouped: {
     section: { id: string; name: string; description: string | null };
     tcs: TestCase[];
-  }[] = localSections.map((s) => ({
-    section: s,
-    tcs: localTestCases.filter((t) => t.sectionId === s.id),
-  }));
-  const unassigned = localTestCases.filter((t) => !t.sectionId);
+  }[] = localSections
+    .map((s) => ({
+      section: s,
+      tcs: visibleTestCases.filter((t) => t.sectionId === s.id),
+    }))
+    .filter((g) => !q || g.tcs.length > 0);
+  const unassigned = visibleTestCases.filter((t) => !t.sectionId);
+  /** Pencarian tidak menemukan apa pun (padahal TC-nya ada). */
+  const searchMissed = q !== "" && visibleTestCases.length === 0 && localTestCases.length > 0;
 
   const handleDeleteTC = async (t: TestCase) => {
     const fd = new FormData();
@@ -1764,43 +1837,64 @@ export function TestCasesManager({
               style={{ display: "none" }}
               onChange={handleImportFile}
             />
-            {/* Grup aksi file: satu container bordered (Template | Import | CSV). */}
-            <div
-              style={{
-                display: "flex",
-                height: 40,
-                boxSizing: "border-box",
-                border: "1px solid #DDE2E9",
-                borderRadius: 10,
-                overflow: "hidden",
-                background: "#FFFFFF",
-              }}
-            >
-              <button
-                type="button"
-                className="btn-radius-0"
-                onClick={handleDownloadTemplate}
-                style={fileGroupItem}
-              >
-                <Download size={15} /> Template
-              </button>
-              <button
-                type="button"
-                className="btn-radius-0"
-                onClick={() => fileRef.current?.click()}
-                style={fileGroupItem}
-              >
-                <Upload size={15} /> Import
-              </button>
-              <button
-                type="button"
-                className="btn-radius-0"
-                onClick={() => handleExport("csv")}
-                style={{ ...fileGroupItem, borderRight: "none" }}
-              >
-                <Download size={15} /> CSV
-              </button>
+            {/* Pencarian TC di suite ini (tcId + judul). */}
+            <div style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
+              <Search
+                size={15}
+                aria-hidden="true"
+                style={{
+                  position: "absolute",
+                  left: 11,
+                  color: "#94A3B8",
+                  pointerEvents: "none",
+                }}
+              />
+              <input
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Cari test case..."
+                aria-label="Cari test case"
+                style={{
+                  width: 256,
+                  height: 40,
+                  boxSizing: "border-box",
+                  padding: "0 12px 0 33px",
+                  border: "1px solid #DDE2E9",
+                  borderRadius: 10,
+                  background: "#FFFFFF",
+                  color: "#0F172A",
+                  fontSize: 13,
+                  outline: "none",
+                }}
+              />
             </div>
+
+            {/* Export: Template + CSV digabung jadi satu dropdown. */}
+            <button
+              ref={exportBtnRef}
+              type="button"
+              aria-haspopup="menu"
+              aria-expanded={exportOpen}
+              onClick={() => (exportOpen ? setExportOpen(false) : openExportMenu())}
+              className="btn-radius-10"
+              style={secondaryBtn}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "#F8FAFC")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "#FFFFFF")}
+            >
+              <Download size={15} /> Export <ChevronDown size={14} />
+            </button>
+
+            <button
+              type="button"
+              className="btn-radius-10"
+              onClick={() => fileRef.current?.click()}
+              style={secondaryBtn}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "#F8FAFC")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "#FFFFFF")}
+            >
+              <Upload size={15} /> Import
+            </button>
 
             {!showAddSection && (
               <button
@@ -1814,6 +1908,57 @@ export function TestCasesManager({
                 <Plus size={16} strokeWidth={2.4} /> Tambah Section
               </button>
             )}
+
+            {/* Menu Export — portal + `fixed` supaya tidak terpotong header. */}
+            {exportOpen &&
+              exportPos &&
+              createPortal(
+                <div
+                  role="menu"
+                  data-export-menu
+                  style={{
+                    position: "fixed",
+                    top: exportPos.top,
+                    right: exportPos.right,
+                    minWidth: 200,
+                    background: "#FFFFFF",
+                    border: "1px solid #DDE2E9",
+                    borderRadius: 10,
+                    boxShadow: "0 12px 24px -6px rgba(15, 23, 42, 0.18)",
+                    padding: 4,
+                    zIndex: 300,
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 2,
+                  }}
+                >
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="row-action-item"
+                    style={exportMenuItem}
+                    onClick={() => {
+                      setExportOpen(false);
+                      handleDownloadTemplate();
+                    }}
+                  >
+                    <FileText size={15} /> Download Template
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="row-action-item"
+                    style={exportMenuItem}
+                    onClick={() => {
+                      setExportOpen(false);
+                      void handleExport("csv");
+                    }}
+                  >
+                    <Table size={15} /> Export CSV
+                  </button>
+                </div>,
+                document.body
+              )}
           </div>,
           headerAnchor
         )}
@@ -1998,6 +2143,20 @@ export function TestCasesManager({
                   onQuickUpdate={handleQuickUpdate}
                 />
               </div>
+            </div>
+          )}
+
+          {/* Pencarian tidak menemukan apa pun (TC-nya ada, tapi tidak cocok) */}
+          {searchMissed && (
+            <div
+              style={{
+                padding: "24px 12px",
+                textAlign: "center",
+                color: "#94A3B8",
+                fontSize: 13,
+              }}
+            >
+              Tidak ada test case yang cocok dengan “{query.trim()}”.
             </div>
           )}
 

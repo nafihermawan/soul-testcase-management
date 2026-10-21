@@ -26,6 +26,7 @@ export async function GET(
           actualResult: true,
           notes: true,
           skipReason: true,
+          skipReasonNote: true,
           testCaseId: true,
           bugs: {
             select: {
@@ -89,6 +90,7 @@ export async function GET(
       actualResult: r.actualResult,
       notes: r.notes,
       skipReason: r.skipReason,
+      skipReasonNote: r.skipReasonNote,
       testCaseId: r.testCaseId,
       bugs: r.bugs.map((b) => ({
         id: b.id,

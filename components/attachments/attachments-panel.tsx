@@ -83,6 +83,7 @@ export function AttachmentsPanel({
   deferred = false,
   hideTrigger = false,
   handleRef,
+  onPendingChange,
 }: {
   owner: AttachmentOwner;
   attachments: AttachmentItem[];
@@ -109,6 +110,9 @@ export function AttachmentsPanel({
   hideTrigger?: boolean;
   /** Handle untuk memicu commit/reset/pick saat `deferred`. */
   handleRef?: React.Ref<AttachmentsPanelHandle>;
+  /** Jumlah file yang masih tertahan di klien (mode `deferred`) — dipakai parent
+   *  untuk menilai "evidence sudah diunggah" (mis. mengaktifkan tombol Simpan). */
+  onPendingChange?: (count: number) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   // Identitas panel di stack `mountedPanels` (untuk scoping paste).
@@ -132,6 +136,14 @@ export function AttachmentsPanel({
   const pendingRef = useRef<PendingEvidence[]>([]);
   useEffect(() => {
     pendingRef.current = pending;
+  }, [pending]);
+  // Laporkan jumlah file tertunda ke parent.
+  const onPendingChangeRef = useRef(onPendingChange);
+  useEffect(() => {
+    onPendingChangeRef.current = onPendingChange;
+  });
+  useEffect(() => {
+    onPendingChangeRef.current?.(pending.length);
   }, [pending]);
   // Objek URL harus dilepas saat unmount supaya tidak bocor.
   useEffect(

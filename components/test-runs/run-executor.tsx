@@ -5,11 +5,16 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRefresh } from "@/lib/client/refresh-context";
-import { AlertTriangle, Bug, Check, CheckCircle2, ChevronDown, CircleSlash, Copy, Cpu, ExternalLink, FolderOpen, Lock, MinusCircle, Monitor, Paperclip, Pencil, Server, Smartphone, X, XCircle } from "lucide-react";
+import { AlertTriangle, Bug, Check, CheckCircle2, ChevronDown, CircleSlash, Copy, Cpu, ExternalLink, FolderOpen, Lock, MinusCircle, Monitor, Paperclip, Pencil, Plus, Server, Smartphone, X, XCircle } from "lucide-react";
 import { completeRun, completeRunWithSkip, deleteRun, updateRunResult } from "@/lib/actions/test-runs";
 import { createBug, updateBug, updateBugStatus } from "@/lib/actions/automation-bugs";
 import { ConfirmDialog, Spinner, Toast, useToast } from "@/components/ui/feedback";
 import { entityCode, formatCase, runCodeOf } from "@/lib/format";
+import { SKIP_REASON_OPTIONS, SKIP_REASON_OTHER } from "@/lib/qa-metrics";
+import {
+  AttachmentsPanel,
+  type AttachmentsPanelHandle,
+} from "@/components/attachments/attachments-panel";
 import { ListTextarea } from "@/components/ui/list-textarea";
 import { Select } from "@/components/ui/select";
 import { BugDetailModal } from "@/components/bugs/bug-detail-modal";
@@ -25,6 +30,8 @@ export type RunResultItem = {
   notes: string | null;
   /** Alasan yang dipilih saat status SKIPPED (null untuk status lain). */
   skipReason?: string | null;
+  /** Keterangan bebas saat alasannya "Lainnya" (null untuk alasan lain). */
+  skipReasonNote?: string | null;
   testCaseId: string;
   /** Evidence yang di-upload pada hasil eksekusi ini. */
   attachments?: AttachmentItem[];
@@ -115,9 +122,6 @@ const RESULT_OPTIONS: {
   { value: "BLOCKED", label: "Blocked", icon: CircleSlash, color: "#D97706", tint: "#FDE3B8" },
   { value: "SKIPPED", label: "Skipped", icon: MinusCircle, color: "#64748B", tint: "#DDE3EA" },
 ];
-
-/** Alasan wajib saat TC di-Skip (dropdown kondisional di panel Eksekusi). */
-const SKIP_REASON_OPTIONS = ["Deprecated", "Di luar scope"];
 
 const FONT_MONO = '"Geist Mono", ui-monospace, monospace';
 const FONT_SANS = '"Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif';
@@ -1153,6 +1157,7 @@ export function RunExecutor({
            * di-patch di tempat — tanpa refetch halaman.
            */
           onAutoPass={() => patchResult(modalItem.id, { status: "PASS" })}
+          onAttachmentsChange={(list) => patchResult(modalItem.id, { attachments: list })}
           bugPatch={bugPatch}
           onSave={async (data) => {
             const res = await updateRunResult(modalItem.id, {
@@ -1160,6 +1165,7 @@ export function RunExecutor({
               actualResult: data.actualResult,
               notes: data.notes,
               skipReason: data.skipReason,
+              skipReasonNote: data.skipReasonNote,
             });
             if (res.error) return res;
 
@@ -1168,9 +1174,13 @@ export function RunExecutor({
               status: data.status,
               actualResult: data.actualResult ?? null,
               notes: data.notes ?? null,
-              // Server mengosongkan alasan untuk status non-SKIPPED — samakan.
+              // Server mengosongkan alasan/keterangan untuk status non-SKIPPED — samakan.
               skipReason:
                 data.status === "SKIPPED" ? data.skipReason?.trim() || null : null,
+              skipReasonNote:
+                data.status === "SKIPPED" && data.skipReason?.trim() === SKIP_REASON_OTHER
+                  ? data.skipReasonNote?.trim() || null
+                  : null,
             });
 
             if (data.bug) {
@@ -2795,6 +2805,7 @@ function ExecutionModal({
   onClose,
   onOpenBugDetail,
   onAutoPass,
+  onAttachmentsChange,
   bugPatch,
   onSave,
 }: {
@@ -2810,6 +2821,8 @@ function ExecutionModal({
    * memakai ini untuk ikut memperbarui kartu/daftar lokalnya tanpa refetch.
    */
   onAutoPass?: () => void;
+  /** Teruskan daftar attachment terbaru ke parent (update in-place, tanpa refetch). */
+  onAttachmentsChange?: (list: AttachmentItem[]) => void;
   /** Patch bug hasil Edit Bug dari parent — dipakai untuk update `linkedBugs` in-place. */
   bugPatch?: { id: string; patch: BugEditableFields } | null;
   onSave: (data: {
@@ -2818,6 +2831,8 @@ function ExecutionModal({
     notes?: string;
     /** Diisi hanya saat status SKIPPED. */
     skipReason?: string;
+    /** Keterangan bebas, diisi hanya saat alasannya "Lainnya". */
+    skipReasonNote?: string;
     /**
      * Mode Fail saja:
      * - `new`  → buat Bug BARU (ID baru) ter-link ke TC + hasil run ini;
@@ -2837,6 +2852,8 @@ function ExecutionModal({
   const [status, setStatus] = useState<RunResultItem["status"]>(item.status);
   /** Alasan wajib saat status SKIPPED (lihat SKIP_REASON_OPTIONS). */
   const [skippedReason, setSkippedReason] = useState(item.skipReason ?? "");
+  /** Keterangan bebas — hanya dipakai saat alasannya "Lainnya". */
+  const [skippedReasonNote, setSkippedReasonNote] = useState(item.skipReasonNote ?? "");
   const [actualResult, setActualResult] = useState(item.actualResult ?? "");
   const [notes, setNotes] = useState(item.notes ?? "");
   // Judul bug default KOSONG — diisi QA, atau ter-prefill dari bug aktif saat
@@ -2845,6 +2862,12 @@ function ExecutionModal({
   const [bugSeverity, setBugSeverity] = useState("MEDIUM");
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  /**
+   * Jumlah file evidence yang masih tertahan di klien (mode deferred, belum
+   * di-commit). Dipakai bersama attachment tersimpan untuk menilai "evidence
+   * sudah diunggah" pada validasi tombol Simpan.
+   */
+  const [pendingEvidence, setPendingEvidence] = useState(0);
 
   /**
    * Animasi buka/tutup. `entered` dipasang setelah frame pertama benar-benar
@@ -2996,6 +3019,8 @@ function ExecutionModal({
   // Divider "aktif" = sedang di-hover atau di-fokus (keyboard).
   const [dividerActive, setDividerActive] = useState(false);
   const gridRef = useRef<HTMLDivElement>(null);
+  // Handle panel Evidence (mode deferred): commit saat Simpan, reset saat Batal.
+  const evidenceRef = useRef<AttachmentsPanelHandle>(null);
 
   // Pantau pergeseran mouse real-time selama drag; berhenti saat mouseup.
   useEffect(() => {
@@ -3109,18 +3134,49 @@ function ExecutionModal({
   const usesActualResult = status === "FAIL" || status === "BLOCKED";
 
   /**
+   * Section "Evidence" tampil saat penguji memilih Pass/Fail/Blocked, dan
+   * disembunyikan saat Skipped. Saat modal baru dibuka (belum ada status yang
+   * dipilih) section ini juga belum tampil — muncul begitu tombol Pass/Fail/
+   * Blocked diklik.
+   */
+  const showsEvidence = status === "PASS" || usesActualResult;
+
+  /**
+   * Evidence hanya WAJIB untuk Fail/Blocked. Di Pass, evidence opsional — tidak
+   * pernah menghambat aktifnya tombol Simpan.
+   */
+  const requiresEvidence = usesActualResult;
+
+  /**
    * Section "Actual Result" hanya relevan untuk hasil Fail/Blocked — artefak
    * hasil lama tidak boleh muncul lagi setelah eksekusi berpindah ke Pass
    * (mis. karena bug-nya sudah ditutup).
    */
   const showActualResultBlock = usesActualResult && (actualResult ?? "").trim() !== "";
 
+  /** Evidence "sudah diunggah" = ada file tersimpan atau file tertunda di klien. */
+  const hasEvidence = (item.attachments?.length ?? 0) + pendingEvidence > 0;
+
+  // Section Evidence yang disembunyikan melepas panel-nya (file tertunda ikut
+  // dibuang), jadi penghitungnya ikut di-nol-kan supaya tidak ada angka basi.
+  useEffect(() => {
+    if (!showsEvidence) setPendingEvidence(0);
+  }, [showsEvidence]);
+
   /**
    * Tombol "Simpan Eksekusi" DISABLED sampai penguji memilih status
-   * (selain NOT_RUN) — dan, khusus SKIPPED, juga sampai alasan diisi.
+   * (selain NOT_RUN). Aturan tambahan per status:
+   * - PASS         : aktif langsung (evidence opsional);
+   * - SKIPPED      : wajib memilih alasan — dan, kalau alasannya "Lainnya",
+   *                  wajib mengisi keterangannya;
+   * - FAIL/BLOCKED : wajib ada evidence, atau sudah ada catatan.
    */
   const saveBlocked =
-    status === "NOT_RUN" || (status === "SKIPPED" && skippedReason === "");
+    status === "NOT_RUN" ||
+    (status === "SKIPPED" &&
+      (skippedReason === "" ||
+        (skippedReason === SKIP_REASON_OTHER && skippedReasonNote.trim() === ""))) ||
+    (requiresEvidence && !hasEvidence && (notes ?? "").trim() === "");
 
   /** Salin Test Data ke clipboard (tombol ringkas di samping nilainya). */
   const copyTestData = async () => {
@@ -3135,10 +3191,13 @@ function ExecutionModal({
     }
   };
 
-  /** Tombol "Batal": buang draft form, kembali ke mode view. */
+  /** Tombol "Batal": buang draft form + evidence tertunda, kembali ke mode view. */
   const cancelEdit = () => {
+    // Evidence yang belum di-commit dibuang; tidak ada API yang pernah dipanggil.
+    evidenceRef.current?.reset();
     setStatus(item.status);
     setSkippedReason(item.skipReason ?? "");
+    setSkippedReasonNote(item.skipReasonNote ?? "");
     setActualResult(item.actualResult ?? "");
     setNotes(item.notes ?? "");
     setBugTitle("");
@@ -3387,6 +3446,17 @@ function ExecutionModal({
 
     setSaving(true);
 
+    // Evidence (mode edit) baru diunggah/dihapus ke server saat Simpan diklik.
+    // Kalau gagal, modal tetap terbuka supaya QA bisa mengulang.
+    if (editable) {
+      const ev = await evidenceRef.current?.commit();
+      if (ev && !ev.ok) {
+        setSaving(false);
+        setMsg(ev.error ?? "Gagal menyimpan evidence.");
+        return;
+      }
+    }
+
     const res = await onSave({
       status,
       /**
@@ -3403,6 +3473,7 @@ function ExecutionModal({
        */
       notes: status === "PASS" ? notes : item.notes ?? "",
       skipReason: skippedReason,
+      skipReasonNote: skippedReasonNote,
       // Mode Fail: "edit" memperbarui bug yang sudah ter-link, "new" membuat bug
       // BARU (dipakai saat retest gagal karena issue berbeda).
       bug: isFail
@@ -3827,6 +3898,37 @@ function ExecutionModal({
                     </option>
                   ))}
                 </Select>
+
+                {/* Keterangan wajib hanya saat alasannya "Lainnya". */}
+                {skippedReason === SKIP_REASON_OTHER && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 4 }}>
+                    <label
+                      htmlFor="skip-reason-note"
+                      style={{ fontSize: 13, fontWeight: 500, color: "#334155" }}
+                    >
+                      Keterangan Alasan <span style={{ color: "#B91C1C" }}>*</span>
+                    </label>
+                    <ListTextarea
+                      value={skippedReasonNote}
+                      onChange={setSkippedReasonNote}
+                      disabled={!editable}
+                      rows={2}
+                      ariaLabel="Keterangan Alasan"
+                      placeholder="Masukkan alasan test case di-skip..."
+                      style={{
+                        padding: "10px 12px",
+                        lineHeight: 1.5,
+                        resize: "vertical",
+                        border: "1px solid #DDE2E9",
+                        borderRadius: 10,
+                        fontSize: 14,
+                        color: "#0F172A",
+                        background: "#fff",
+                        outline: "none",
+                      }}
+                    />
+                  </div>
+                )}
               </div>
             )}
 
@@ -4050,8 +4152,6 @@ function ExecutionModal({
                     }}
                   />
                 </div>
-
-                {renderBugHistory()}
               </>
             ) : (
               /* ===== State A — hasil sudah tercatat ===== */
@@ -4113,10 +4213,60 @@ function ExecutionModal({
                     )}
                   </div>
                 )}
-
-                {renderBugHistory()}
               </>
             )}
+
+            {/* Evidence — tampil untuk Pass/Fail/Blocked, tersembunyi saat
+                Skipped (dan saat belum ada status yang dipilih). Semua file baru
+                ditahan di klien dulu (`deferred`) dan baru diunggah ke R2 saat
+                Simpan; Batal membuangnya. Di Pass, evidence opsional. */}
+            {showsEvidence && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: "#475569" }}>
+                    Evidence{" "}
+                    <span style={{ fontWeight: 400, color: "#64748B" }}>
+                      · {(item.attachments ?? []).length + pendingEvidence}
+                    </span>
+                  </span>
+                  {editable && (
+                    <button
+                      type="button"
+                      onClick={() => evidenceRef.current?.pick()}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 6,
+                        padding: 0,
+                        border: "none",
+                        background: "transparent",
+                        fontSize: 13,
+                        fontWeight: 600,
+                        color: "#0F172A",
+                        cursor: "pointer",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      <Plus size={14} aria-hidden="true" /> Tambah File
+                    </button>
+                  )}
+                </div>
+                <AttachmentsPanel
+                  owner={{ testRunResultId: item.id }}
+                  attachments={item.attachments ?? []}
+                  canEdit={editable}
+                  onChange={onAttachmentsChange}
+                  onPendingChange={setPendingEvidence}
+                  handleRef={evidenceRef}
+                  deferred
+                  compact
+                  plain
+                  hideTrigger
+                />
+              </div>
+            )}
+
+            {renderBugHistory()}
           </div>
 
           {/* Footer — selalu di dasar panel (bukan ikut scroll). */}

@@ -154,7 +154,8 @@ export function SuiteDetailView({
             {suite.name}
           </h1>
 
-          {/* Toolbar aksi: Template / Import / CSV / + Tambah Section (dari TestCasesManager) */}
+          {/* Toolbar aksi: Cari / Export (Template + CSV) / Import / + Tambah Section
+              — dirender dari TestCasesManager. */}
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
             <div id="suite-header-actions" />
           </div>

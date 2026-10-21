@@ -45,6 +45,14 @@ export type PlatformValue = (typeof PLATFORM_OPTIONS)[number];
 
 export const ENVIRONMENT_OPTIONS = ["DEV", "STG", "PRE-PROD", "PROD"] as const;
 
+/**
+ * Alasan skip pada hasil eksekusi. `SKIP_REASON_OTHER` butuh keterangan bebas
+ * (kolom `skipReasonNote`), jadi konstantanya dipakai bersama oleh UI, aksi
+ * server, dan laporan — jangan tulis ulang string-nya di tempat lain.
+ */
+export const SKIP_REASON_OTHER = "Lainnya";
+export const SKIP_REASON_OPTIONS = ["Deprecated", "Di luar scope", SKIP_REASON_OTHER] as const;
+
 export type PeriodKey = "ALL" | "7D" | "30D" | "MONTH";
 
 export const PERIOD_OPTIONS: { value: PeriodKey; label: string }[] = [

@@ -31,14 +31,14 @@ import {
   updateTestCase
 } from "@/lib/actions/test-cases";
 import {
-  assignTestCaseToSection,
-  assignTestCasesToSection,
   createSection,
   deleteSection as deleteSectionAction,
-  renameSection as renameSectionAction
+  moveSectionToSuite,
+  moveTestCasesToTarget,
+  renameSection as renameSectionAction,
+  reorderSections,
 } from "@/lib/actions/sections";
-import { ConfirmDialog, Spinner } from "@/components/ui/feedback";
-import { Select } from "@/components/ui/select";
+import { ConfirmDialog } from "@/components/ui/feedback";
 
 import {
   PrimaryButton,
@@ -48,6 +48,7 @@ import {
 } from "@/components/ui/button";
 import { AddSectionModal } from "./add-section-modal";
 import { ImportWizardModal } from "./import-wizard-modal";
+import { MoveTargetModal, type MoveTarget } from "./move-target-modal";
 import { SectionCard } from "./section-card";
 import { TestCaseForm } from "./test-case-form";
 import { TestCaseTable } from "./test-case-table";
@@ -61,17 +62,23 @@ import {
 export function TestCasesManager({
   suiteId,
   suiteName,
+  projectId,
   testCases,
   sections = [],
   canEdit = true,
   initialEditTcId = null,
+  onCountChange,
 }: {
   suiteId: string;
   suiteName: string;
+  /** Project pemilik suite ini — membatasi pilihan Suite tujuan saat memindahkan. */
+  projectId: string;
   testCases: TestCase[];
   sections?: { id: string; name: string; description: string | null }[];
   canEdit?: boolean;
   initialEditTcId?: string | null;
+  /** Penyesuaian angka "Total Test" di header halaman saat TC keluar dari suite ini. */
+  onCountChange?: (deltaTc: number) => void;
 }) {
   const refresh = useRefresh();
   // Cermin lokal daftar test case: mutasi add/delete di-update in-place di
@@ -161,8 +168,15 @@ export function TestCasesManager({
   const [bulkDropTarget, setBulkDropTarget] = useState<string | null>(null);
   // Bulk move sedang diproses
   const [bulkMoving, setBulkMoving] = useState(false);
-  // Modal "Pindah Section" via menu
-  const [moveModalTc, setMoveModalTc] = useState<TestCase | null>(null);
+  // Permintaan pindah (SATU modal untuk TC tunggal, bulk TC, dan Section).
+  const [moveRequest, setMoveRequest] = useState<
+    | { kind: "testcase"; ids: string[]; label: string }
+    | { kind: "section"; sectionId: string; label: string }
+    | null
+  >(null);
+  // Drag & drop urutan SECTION (state berbeda dari drag TC → tidak saling ganggu).
+  const [draggingSectionId, setDraggingSectionId] = useState<string | null>(null);
+  const [sectionDropId, setSectionDropId] = useState<string | null>(null);
   // Modal detail test case (klik TC ID / title)
   const [detailTc, setDetailTc] = useState<TestCase | null>(null);
   // Modal konfirmasi hapus test case
@@ -174,8 +188,6 @@ export function TestCasesManager({
   } | null>(null);
   // Bulk selection test case
   const [selectedTcIds, setSelectedTcIds] = useState<Set<string>>(new Set());
-  // Modal bulk move (pilih section tujuan)
-  const [bulkMoveOpen, setBulkMoveOpen] = useState(false);
   // Modal konfirmasi hapus bulk
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   // Jumlah TC yang dihapus via bulk (disimpan agar label konsisten saat success)
@@ -228,21 +240,76 @@ export function TestCasesManager({
       prev.map((t) => (ids.includes(t.id) ? { ...t, sectionId } : t))
     );
 
-  /** Pindah satu TC ke section lain. Return `true` bila sukses. */
-  const moveTc = async (tcId: string, sectionId: string | null): Promise<boolean> => {
+  /**
+   * Jalankan permintaan pindah yang sedang aktif (TC tunggal / bulk TC / Section).
+   *
+   * Kalau tujuannya SUITE LAIN, barisnya keluar dari halaman ini sehingga harus
+   * DIBUANG dari state lokal (bukan cuma di-patch). Kalau masih di suite yang
+   * sama, cukup `sectionId`-nya yang di-patch.
+   */
+  const applyMove = async (target: MoveTarget) => {
+    const req = moveRequest;
+    if (!req) return;
+    setBulkMoving(true);
     try {
-      const res = await assignTestCaseToSection(tcId, sectionId);
+      if (req.kind === "section") {
+        const res = await moveSectionToSuite(req.sectionId, target.suiteId);
+        if (res.error) {
+          showToast(res.error, "error");
+          return;
+        }
+        const movedTcCount = localTestCases.filter((t) => t.sectionId === req.sectionId).length;
+        setLocalSections((prev) => prev.filter((s) => s.id !== req.sectionId));
+        setLocalTestCases((prev) => prev.filter((t) => t.sectionId !== req.sectionId));
+        clearSelection();
+        setMoveRequest(null);
+        showToast(`Section "${req.label}" berhasil dipindahkan.`, "success");
+        if (movedTcCount > 0) onCountChange?.(-movedTcCount);
+        return;
+      }
+
+      const ids = req.ids;
+      const res = await moveTestCasesToTarget(ids, target.suiteId, target.sectionId);
       if (res.error) {
         showToast(res.error, "error");
-        return false;
+        return;
       }
-      patchTcSection([tcId], sectionId);
-      showToast("Test Case dipindahkan.", "success");
-      return true;
+      const destName = res.targetSectionName ?? "Tanpa Section";
+      if (target.suiteId === suiteId) {
+        patchTcSection(ids, target.sectionId);
+      } else {
+        // Keluar dari suite ini → hilangkan dari daftar (dan angka header ikut turun).
+        setLocalTestCases((prev) => prev.filter((t) => !ids.includes(t.id)));
+        onCountChange?.(-ids.length);
+      }
+      clearSelection();
+      setMoveRequest(null);
+      showToast(`${ids.length} Test Case berhasil dipindahkan ke ${destName}`, "success");
     } catch {
-      showToast("Gagal memindahkan test case. Coba lagi", "error");
-      return false;
+      showToast("Gagal memindahkan. Coba lagi", "error");
+    } finally {
+      setBulkMoving(false);
     }
+  };
+
+  /**
+   * Drop header Section di atas header Section lain → susun ulang urutan.
+   * Mengubah state lokal lebih dulu (instan) lalu menyimpan urutannya.
+   */
+  const handleDropSection = (targetSectionId: string) => {
+    const draggedId = draggingSectionId;
+    setSectionDropId(null);
+    setDraggingSectionId(null);
+    if (!draggedId) return;
+    const from = localSections.findIndex((s) => s.id === draggedId);
+    const to = localSections.findIndex((s) => s.id === targetSectionId);
+    if (from === -1 || to === -1 || from === to) return;
+
+    const next = [...localSections];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    setLocalSections(next);
+    void reorderSections(suiteId, next.map((s) => s.id));
   };
 
   /** Drop handler: pindahkan 1 TC (drag biasa) atau semua TC terpilih (bulk drag). */
@@ -251,9 +318,8 @@ export function TestCasesManager({
     const targetIds = isBulk ? Array.from(selectedTcIds) : [tcId];
     setBulkMoving(true);
     try {
-      const res = isBulk
-        ? await assignTestCasesToSection(targetIds, sectionId)
-        : await assignTestCaseToSection(tcId, sectionId);
+      // Drag selalu di dalam suite yang sama; pindah antar-suite lewat modal.
+      const res = await moveTestCasesToTarget(targetIds, suiteId, sectionId);
       if (res.error) {
         showToast(res.error, "error");
         return;
@@ -261,9 +327,7 @@ export function TestCasesManager({
       if (isBulk) clearSelection();
       patchTcSection(targetIds, sectionId);
       showToast(
-        isBulk
-          ? `${targetIds.length} Test Cases berhasil dipindahkan ke ${sectionName}`
-          : "Test Case dipindahkan.",
+        `${targetIds.length} Test Case berhasil dipindahkan ke ${res.targetSectionName ?? sectionName}`,
         "success"
       );
     } catch {
@@ -343,27 +407,6 @@ export function TestCasesManager({
   };
 
   const clearSelection = () => setSelectedTcIds(new Set());
-
-  const bulkMove = async (sectionId: string | null): Promise<boolean> => {
-    const ids = Array.from(selectedTcIds);
-    try {
-      for (const tcId of ids) {
-        const res = await assignTestCaseToSection(tcId, sectionId);
-        if (res.error) {
-          showToast(res.error, "error");
-          return false;
-        }
-      }
-      patchTcSection(ids, sectionId);
-      clearSelection();
-      setBulkMoveOpen(false);
-      showToast(`${ids.length} Test Case dipindahkan!`, "success");
-      return true;
-    } catch {
-      showToast("Gagal memindahkan test case. Coba lagi", "error");
-      return false;
-    }
-  };
 
   const bulkDelete = async () => {
     for (const tcId of Array.from(selectedTcIds)) {
@@ -782,7 +825,21 @@ export function TestCasesManager({
               onEdit={(t) => setEditingTcId(t.id)}
               onDeleteTc={(t) => setDeleteTcTarget(t)}
               onDropTc={(tcId) => void handleDropTc(tcId, section.id, section.name)}
-              onMoveTc={(t) => setMoveModalTc(t)}
+              onMoveTc={(t) =>
+                setMoveRequest({ kind: "testcase", ids: [t.id], label: t.tcId })
+              }
+              onMoveSection={() =>
+                setMoveRequest({ kind: "section", sectionId: section.id, label: section.name })
+              }
+              sectionDragOver={sectionDropId === section.id && draggingSectionId !== section.id}
+              draggingSectionId={draggingSectionId}
+              onSectionDragStart={() => setDraggingSectionId(section.id)}
+              onSectionDragEnd={() => {
+                setDraggingSectionId(null);
+                setSectionDropId(null);
+              }}
+              onSectionDragOver={() => setSectionDropId(section.id)}
+              onSectionDrop={() => handleDropSection(section.id)}
               onDragTcStart={setDraggingTcId}
               onDragTcEnd={() => setDraggingTcId(null)}
               onOpenDetail={(t) => setDetailTc(t)}
@@ -873,7 +930,7 @@ export function TestCasesManager({
                   canEdit={canEdit}
                   onDragTcStart={setDraggingTcId}
                   onDragTcEnd={() => setDraggingTcId(null)}
-                  onMoveTc={(t) => setMoveModalTc(t)}
+                  onMoveTc={(t) => setMoveRequest({ kind: "testcase", ids: [t.id], label: t.tcId })}
                   onOpenDetail={(t) => setDetailTc(t)}
                   selectedTcIds={selectedTcIds}
                   onToggleTc={toggleTcSelection}
@@ -922,18 +979,16 @@ export function TestCasesManager({
         />
       )}
 
-      {/* Modal: Pindah Section */}
-      {moveModalTc && (
-        <MoveSectionModal
-          tc={moveModalTc}
-          sections={sections}
-          onClose={() => setMoveModalTc(null)}
-          onMove={async (sectionId: string | null) => {
-            // Tutup modal hanya bila pemindahan sukses — kalau gagal, biarkan
-            // terbuka supaya user bisa coba lagi.
-            const ok = await moveTc(moveModalTc.id, sectionId);
-            if (ok) setMoveModalTc(null);
-          }}
+      {/* Modal: Pindah tujuan — satu modal untuk TC tunggal, bulk TC, dan Section */}
+      {moveRequest && (
+        <MoveTargetModal
+          mode={moveRequest.kind}
+          count={moveRequest.kind === "testcase" ? moveRequest.ids.length : 1}
+          itemLabel={moveRequest.label}
+          currentSuiteId={suiteId}
+          projectId={projectId}
+          onClose={() => setMoveRequest(null)}
+          onConfirm={applyMove}
         />
       )}
 
@@ -1051,17 +1106,6 @@ export function TestCasesManager({
         />
       )}
 
-      {/* Modal: Bulk Move (pilih section) */}
-      {bulkMoveOpen && (
-        <BulkMoveModal
-          sections={sections}
-          onClose={() => setBulkMoveOpen(false)}
-          onMove={async (sectionId: string | null) => {
-            await bulkMove(sectionId);
-          }}
-        />
-      )}
-
       {/* Modal: Bulk Delete confirm */}
       {bulkDeleteOpen && (
         <DeleteTestCaseModal
@@ -1130,7 +1174,13 @@ export function TestCasesManager({
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
             <button
               type="button"
-              onClick={() => setBulkMoveOpen(true)}
+              onClick={() =>
+                setMoveRequest({
+                  kind: "testcase",
+                  ids: Array.from(selectedTcIds),
+                  label: `${selectedTcIds.size} test case terpilih`,
+                })
+              }
               style={{
                 display: "inline-flex",
                 alignItems: "center",
@@ -1149,7 +1199,7 @@ export function TestCasesManager({
               onMouseLeave={(e) => (e.currentTarget.style.background = "#fff")}
             >
               <FolderInput size={14} style={{ color: "var(--text-muted)" }} />
-              Pindah Section
+              Pindah Section / Suite
             </button>
             <button
               type="button"
@@ -1261,156 +1311,6 @@ export function TestCasesManager({
     </div>
   );
 }
-
-function MoveSectionModal({
-  tc,
-  sections,
-  onClose,
-  onMove,
-}: {
-  tc: TestCase;
-  sections: { id: string; name: string }[];
-  onClose: () => void;
-  onMove: (sectionId: string | null) => Promise<void>;
-}) {
-  const [selected, setSelected] = useState<string>("");
-  /** Proses pemindahan sedang berjalan (tombol dikunci + spinner). */
-  const [moving, setMoving] = useState(false);
-
-  const submit = async () => {
-    if (moving || !selected) return;
-    setMoving(true);
-    try {
-      await onMove(selected === "__none__" ? null : selected);
-    } finally {
-      setMoving(false);
-    }
-  };
-
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [onClose]);
-
-  useEffect(() => {
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, []);
-
-  return createPortal(
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label="Pindah Test Case"
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 200,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: "1rem",
-        background: "rgba(0, 0, 0, 0.4)",
-        backdropFilter: "blur(4px)",
-      }}
-      onClick={onClose}
-    >
-      <div
-        style={{
-          width: "100%",
-          maxWidth: 360,
-          background: "#fff",
-          borderRadius: 12,
-          padding: "1.25rem",
-          boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)",
-          border: "1px solid var(--border)",
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h3
-          style={{ fontSize: "0.95rem", fontWeight: 600, margin: "0 0 0.25rem", color: "#111827" }}
-        >
-          Pindah Test Case
-        </h3>
-        <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", margin: "0 0 1rem" }}>
-          Pilih section tujuan untuk <b>{tc.tcId}</b>
-        </p>
-
-        <Select
-          value={selected}
-          ariaLabel="Pilih section"
-          style={{ width: "100%", marginBottom: "1rem" }}
-          onChange={(e) => setSelected(e.target.value)}
-        >
-          <option value="" disabled>
-            -- Pilih Section --
-          </option>
-          <option value="__none__">Unassigned Test Cases</option>
-          {sections.map((sec) => (
-            <option key={sec.id} value={sec.id}>
-              {sec.name}
-            </option>
-          ))}
-        </Select>
-
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.5rem" }}>
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={moving}
-            style={{
-              padding: "0.4rem 0.9rem",
-              border: "1px solid #D1D5DB",
-              borderRadius: 6,
-              background: "#fff",
-              color: "#374151",
-              fontSize: "0.78rem",
-              cursor: moving ? "not-allowed" : "pointer",
-              opacity: moving ? 0.6 : 1,
-            }}
-          >
-            Batal
-          </button>
-          <button
-            type="button"
-            disabled={!selected || moving}
-            onClick={() => void submit()}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "0.35rem",
-              padding: "0.4rem 1rem",
-              border: "none",
-              borderRadius: 6,
-              background: "#F59E0B",
-              color: "#000000",
-              fontSize: "0.78rem",
-              fontWeight: 500,
-              cursor: !selected || moving ? "not-allowed" : "pointer",
-              opacity: !selected || moving ? 0.5 : 1,
-            }}
-          >
-            {moving ? (
-              <>
-                <Spinner size={13} /> Memindahkan...
-              </>
-            ) : (
-              "Pindahkan"
-            )}
-          </button>
-        </div>
-      </div>
-    </div>,
-    document.body
-  );
-}
-
 
 function TestCaseDetailModal({
   tc,
@@ -2494,153 +2394,6 @@ function BulkUploadProgressModal({
             </button>
           </>
         )}
-      </div>
-    </div>,
-    document.body
-  );
-}
-
-function BulkMoveModal({
-  sections,
-  onClose,
-  onMove,
-}: {
-  sections: { id: string; name: string }[];
-  onClose: () => void;
-  onMove: (sectionId: string | null) => Promise<void>;
-}) {
-  const [selected, setSelected] = useState<string>("");
-  /** Proses pemindahan sedang berjalan (tombol dikunci + spinner). */
-  const [moving, setMoving] = useState(false);
-
-  const submit = async () => {
-    if (moving || !selected) return;
-    setMoving(true);
-    try {
-      await onMove(selected === "__none__" ? null : selected);
-    } finally {
-      setMoving(false);
-    }
-  };
-
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [onClose]);
-
-  useEffect(() => {
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, []);
-
-  return createPortal(
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label="Pindah Section"
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 270,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: "1rem",
-        background: "rgba(0, 0, 0, 0.4)",
-        backdropFilter: "blur(4px)",
-      }}
-      onClick={onClose}
-    >
-      <div
-        style={{
-          width: "100%",
-          maxWidth: 360,
-          background: "#fff",
-          borderRadius: 12,
-          padding: "1.25rem",
-          boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)",
-          border: "1px solid var(--border)",
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h3
-          style={{ fontSize: "0.95rem", fontWeight: 600, margin: "0 0 0.25rem", color: "#111827" }}
-        >
-          Pindah Test Case
-        </h3>
-        <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", margin: "0 0 1rem" }}>
-          Pilih section tujuan untuk semua test case terpilih
-        </p>
-
-        <Select
-          value={selected}
-          ariaLabel="Pilih section"
-          style={{ width: "100%", marginBottom: "1rem" }}
-          onChange={(e) => setSelected(e.target.value)}
-        >
-          <option value="" disabled>
-            -- Pilih Section --
-          </option>
-          <option value="__none__">Unassigned Test Cases</option>
-          {sections.map((sec) => (
-            <option key={sec.id} value={sec.id}>
-              {sec.name}
-            </option>
-          ))}
-        </Select>
-
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.5rem" }}>
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={moving}
-            style={{
-              padding: "0.4rem 0.9rem",
-              border: "1px solid #D1D5DB",
-              borderRadius: 6,
-              background: "#fff",
-              color: "#374151",
-              fontSize: "0.78rem",
-              cursor: moving ? "not-allowed" : "pointer",
-              opacity: moving ? 0.6 : 1,
-            }}
-          >
-            Batal
-          </button>
-          <button
-            type="button"
-            disabled={!selected || moving}
-            onClick={() => void submit()}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "0.35rem",
-              padding: "0.4rem 1rem",
-              border: "none",
-              borderRadius: 6,
-              background: "#F59E0B",
-              color: "#000000",
-              fontSize: "0.78rem",
-              fontWeight: 500,
-              cursor: !selected || moving ? "not-allowed" : "pointer",
-              opacity: !selected || moving ? 0.5 : 1,
-            }}
-          >
-            {moving ? (
-              <>
-                <Spinner size={13} /> Memindahkan...
-              </>
-            ) : (
-              "Pindahkan"
-            )}
-          </button>
-        </div>
       </div>
     </div>,
     document.body

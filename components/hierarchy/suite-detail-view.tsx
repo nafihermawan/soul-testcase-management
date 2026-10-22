@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ChevronDown } from "lucide-react";
 import { TestCasesManager } from "@/components/hierarchy/test-cases-manager";
@@ -19,6 +19,15 @@ export function SuiteDetailView({
 }) {
   const { data, error, loading, reload } = useApi<SuiteDetailPayload>(`/api/suites/${suiteId}`);
   const [isExpanded, setIsExpanded] = useState(false);
+  /**
+   * Penyesuaian angka "Total Test" saat test case/section KELUAR dari suite ini
+   * (dipindah ke suite lain). Direset setiap payload server berubah, karena
+   * nilai server tetap otoritatif.
+   */
+  const [countDelta, setCountDelta] = useState(0);
+  useEffect(() => {
+    setCountDelta(0);
+  }, [data]);
 
   if (error?.status === 404) {
     return (
@@ -237,7 +246,8 @@ export function SuiteDetailView({
                   <span style={infoLabel}>Total Test</span>
                   <span style={{ color: "#94A3B8" }}>:</span>
                   <span style={{ fontWeight: 600, color: "#1E293B" }}>
-                    {suite.testCaseCount} Test Case{suite.testCaseCount === 1 ? "" : "s"}
+                    {Math.max(0, suite.testCaseCount + countDelta)} Test Case
+                    {Math.max(0, suite.testCaseCount + countDelta) === 1 ? "" : "s"}
                   </span>
                 </div>
               </div>
@@ -340,10 +350,12 @@ export function SuiteDetailView({
           <TestCasesManager
             suiteId={suite.id}
             suiteName={suite.name}
+            projectId={suite.project.id}
             testCases={data.testCases}
             sections={data.sections}
             canEdit={data.canEdit}
             initialEditTcId={initialEditTcId}
+            onCountChange={(delta) => setCountDelta((v) => v + delta)}
           />
         </RefreshContext.Provider>
       </div>

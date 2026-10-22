@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, CirclePlus, Pencil, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, CirclePlus, FolderInput, GripVertical, Pencil, Plus, Trash2 } from "lucide-react";
 import { PrimaryButton, smallPrimaryButtonStyle } from "@/components/ui/button";
 import { RowActionsMenu } from "@/components/settings/row-actions-menu";
 import { TestCaseTable } from "./test-case-table";
@@ -22,6 +22,13 @@ export function SectionCard({
   onDeleteTc,
   onDropTc,
   onMoveTc,
+  onMoveSection,
+  draggingSectionId,
+  sectionDragOver,
+  onSectionDragStart,
+  onSectionDragEnd,
+  onSectionDragOver,
+  onSectionDrop,
   onDragTcStart,
   onDragTcEnd,
   onOpenDetail,
@@ -44,6 +51,16 @@ export function SectionCard({
   onDeleteTc: (t: TestCase) => void;
   onDropTc: (tcId: string) => void;
   onMoveTc: (t: TestCase) => void;
+  /** Buka modal "Pindahkan Section ini" (pindah section ke suite lain). */
+  onMoveSection: () => void;
+  /** Section yang sedang di-drag — null berarti tidak ada drag section aktif. */
+  draggingSectionId?: string | null;
+  /** Section ini jadi sasaran drop (sorot). */
+  sectionDragOver?: boolean;
+  onSectionDragStart?: () => void;
+  onSectionDragEnd?: () => void;
+  onSectionDragOver?: () => void;
+  onSectionDrop?: () => void;
   onDragTcStart?: (tcId: string) => void;
   onDragTcEnd?: () => void;
   onOpenDetail: (t: TestCase) => void;
@@ -95,6 +112,20 @@ export function SectionCard({
       {/* Section header — klik di area mana pun = expand/collapse */}
       <div
         onClick={onToggle}
+        onDragOver={(e) => {
+          // Hanya berlaku saat ada SECTION yang sedang di-drag; kalau yang
+          // di-drag TC, event dibiarkan naik ke handler drop TC di kartu.
+          if (!draggingSectionId) return;
+          e.preventDefault();
+          e.stopPropagation();
+          onSectionDragOver?.();
+        }}
+        onDrop={(e) => {
+          if (!draggingSectionId) return;
+          e.preventDefault();
+          e.stopPropagation();
+          onSectionDrop?.();
+        }}
         style={{
           display: "flex",
           alignItems: "center",
@@ -102,13 +133,43 @@ export function SectionCard({
           // Padding vertikal 10px: tombol "Tambah Case" varian kecil (32px),
           // jadi header sedikit lebih lega.
           padding: "10px 0.9rem",
-          background: "var(--surface-muted)",
+          background: sectionDragOver ? "rgba(251, 191, 36, 0.12)" : "var(--surface-muted)",
           borderBottom: section.open ? "1px solid var(--border)" : "none",
           cursor: "pointer",
           userSelect: "none",
+          transition: "background 0.15s ease",
         }}
       >
         {/* Select All dipindah ke sub-header tabel (kolom kiri `TC ID`) */}
+
+        {/* Handle drag: menariknya menyusun ulang urutan section. */}
+        {canEdit && (
+          <span
+            role="button"
+            aria-label={`Ubah urutan section ${section.name}`}
+            title="Tarik untuk mengubah urutan section"
+            draggable
+            onClick={(e) => e.stopPropagation()}
+            onDragStart={(e) => {
+              e.stopPropagation();
+              e.dataTransfer.effectAllowed = "move";
+              onSectionDragStart?.();
+            }}
+            onDragEnd={(e) => {
+              e.stopPropagation();
+              onSectionDragEnd?.();
+            }}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              color: "#94A3B8",
+              cursor: "grab",
+              flexShrink: 0,
+            }}
+          >
+            <GripVertical size={15} aria-hidden="true" />
+          </span>
+        )}
 
         {/* Chevron di sebelah kiri nama section: rotasi halus saat open/close */}
         <button
@@ -232,6 +293,11 @@ export function SectionCard({
                     setTitleDraft(section.name);
                     setEditingTitle(true);
                   },
+                },
+                {
+                  label: "Pindahkan Section ini",
+                  icon: <FolderInput size={15} />,
+                  onClick: onMoveSection,
                 },
                 {
                   label: "Hapus Section",

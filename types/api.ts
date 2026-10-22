@@ -184,6 +184,23 @@ export type SuiteOption = {
 
 export type SuitesPayload = { suites: SuiteOption[] };
 
+/* ---------- /api/suites/options (pemilih tujuan pindah) ---------- */
+export type SuiteMoveSection = { id: string; name: string };
+
+export type SuiteMoveTarget = {
+  id: string;
+  name: string;
+  code: string;
+  /** Section milik suite ini, urut `order`. */
+  sections: SuiteMoveSection[];
+};
+
+/** Suite + section DALAM SATU PROJECT untuk modal "Pindahkan TC / Section". */
+export type SuiteMoveTargetsPayload = {
+  project: { id: string; name: string };
+  suites: SuiteMoveTarget[];
+};
+
 /* ---------- /api/bugs/[id] ---------- */
 export type BugDetailPayload = {
   bug: BugRow;

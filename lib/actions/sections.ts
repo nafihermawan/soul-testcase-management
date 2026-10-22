@@ -9,6 +9,10 @@ export type SectionActionState = {
   success?: boolean;
   /** Section yang baru dibuat — dipakai klien untuk update in-place tanpa reload. */
   section?: { id: string; name: string; description: string | null };
+  /** Jumlah test case yang benar-benar dipindahkan. */
+  moved?: number;
+  /** Nama section tujuan (null = Tanpa Section) — dipakai teks toast. */
+  targetSectionName?: string | null;
 };
 
 function handleError(error: unknown): SectionActionState {
@@ -87,50 +91,135 @@ export async function deleteSection(sectionId: string): Promise<SectionActionSta
   }
 }
 
-/** Assign/pindahkan test case ke section (null = Tanpa Section). */
-export async function assignTestCaseToSection(
-  testCaseId: string,
-  sectionId: string | null
+/**
+ * Pindahkan test case ke Suite (+ Section) tujuan.
+ *
+ * `suiteId` dan `sectionId` SELALU ditulis bersamaan: `suiteId` pada TestCase
+ * berdiri sendiri (tidak diturunkan dari section-nya), jadi menulis `sectionId`
+ * saja membuat test case pindah section tapi tetap tercatat di suite lama —
+ * dan kalau section-nya milik suite lain, TC-nya hilang dari kedua daftar.
+ */
+export async function moveTestCasesToTarget(
+  testCaseIds: string[],
+  targetSuiteId: string,
+  targetSectionId: string | null
+): Promise<SectionActionState> {
+  await requireRole("QA");
+  if (testCaseIds.length === 0) return { error: "Tidak ada test case yang dipilih." };
+
+  try {
+    const suite = await prisma.suite.findUnique({
+      where: { id: targetSuiteId },
+      select: { id: true },
+    });
+    if (!suite) return { error: "Suite tujuan tidak ditemukan." };
+
+    // Section tujuan WAJIB milik suite tujuan (guard integritas).
+    let targetSectionName: string | null = null;
+    if (targetSectionId) {
+      const section = await prisma.section.findUnique({
+        where: { id: targetSectionId },
+        select: { name: true, suiteId: true },
+      });
+      if (!section) return { error: "Section tujuan tidak ditemukan." };
+      if (section.suiteId !== targetSuiteId) {
+        return { error: "Section tujuan bukan milik suite yang dipilih." };
+      }
+      targetSectionName = section.name;
+    }
+
+    const rows = await prisma.testCase.findMany({
+      where: { id: { in: testCaseIds } },
+      select: { id: true, suiteId: true },
+    });
+    if (rows.length === 0) return { error: "Test case tidak ditemukan." };
+
+    // Suite asal (distinct) — keduanya perlu di-revalidate.
+    const sourceSuiteIds = Array.from(
+      new Set(rows.map((r) => r.suiteId).filter((x): x is string => !!x))
+    );
+
+    await prisma.testCase.updateMany({
+      where: { id: { in: rows.map((r) => r.id) } },
+      data: { suiteId: targetSuiteId, sectionId: targetSectionId },
+    });
+
+    for (const suiteId of Array.from(new Set([...sourceSuiteIds, targetSuiteId]))) {
+      revalidatePath(`/suites/${suiteId}`);
+    }
+    return { success: true, moved: rows.length, targetSectionName };
+  } catch (error) {
+    return handleError(error);
+  }
+}
+
+/**
+ * Pindahkan SECTION (beserta seluruh test case di dalamnya) ke suite lain.
+ *
+ * Section tidak bisa bersarang — skema `Section` hanya punya `suiteId` + `order`
+ * (tanpa `parentId`) — jadi tujuan satu-satunya adalah sebuah Suite.
+ */
+export async function moveSectionToSuite(
+  sectionId: string,
+  targetSuiteId: string
 ): Promise<SectionActionState> {
   await requireRole("QA");
   try {
-    const tc = await prisma.testCase.findUnique({ where: { id: testCaseId } });
-    if (!tc) return { error: "Test case tidak ditemukan." };
-
-    await prisma.testCase.update({
-      where: { id: testCaseId },
-      data: { sectionId },
+    const section = await prisma.section.findUnique({
+      where: { id: sectionId },
+      select: { suiteId: true },
     });
-    if (tc.suiteId) revalidatePath(`/suites/${tc.suiteId}`);
+    if (!section) return { error: "Section tidak ditemukan." };
+    if (section.suiteId === targetSuiteId) {
+      return { error: "Section sudah berada di suite tersebut." };
+    }
+
+    const target = await prisma.suite.findUnique({
+      where: { id: targetSuiteId },
+      select: { id: true },
+    });
+    if (!target) return { error: "Suite tujuan tidak ditemukan." };
+
+    const count = await prisma.section.count({ where: { suiteId: targetSuiteId } });
+
+    await prisma.$transaction([
+      prisma.section.update({
+        where: { id: sectionId },
+        data: { suiteId: targetSuiteId, order: count },
+      }),
+      // Test case menyimpan `suiteId`-nya sendiri, jadi harus ikut dipindah.
+      prisma.testCase.updateMany({
+        where: { sectionId },
+        data: { suiteId: targetSuiteId },
+      }),
+    ]);
+
+    revalidatePath(`/suites/${section.suiteId}`);
+    revalidatePath(`/suites/${targetSuiteId}`);
     return { success: true };
   } catch (error) {
     return handleError(error);
   }
 }
 
-/** Pindahkan banyak test case sekaligus ke satu section (bulk move). */
-export async function assignTestCasesToSection(
-  testCaseIds: string[],
-  sectionId: string | null
+/**
+ * Simpan urutan section sesuai daftar id (index = `order`).
+ * `suiteId` disertakan di WHERE supaya id milik suite lain tidak bisa ikut diubah.
+ */
+export async function reorderSections(
+  suiteId: string,
+  orderedIds: string[]
 ): Promise<SectionActionState> {
   await requireRole("QA");
-  if (testCaseIds.length === 0) return { error: "Tidak ada test case yang dipilih." };
+  if (orderedIds.length === 0) return { success: true };
 
   try {
-    // Kumpulkan suiteId dari TC pertama yang ditemukan (semua TC diasumsikan satu suite).
-    const tcs = await prisma.testCase.findMany({
-      where: { id: { in: testCaseIds } },
-      select: { id: true, suiteId: true },
-    });
-    if (tcs.length === 0) return { error: "Test case tidak ditemukan." };
-
-    await prisma.testCase.updateMany({
-      where: { id: { in: tcs.map((t) => t.id) } },
-      data: { sectionId },
-    });
-
-    const suiteId = tcs[0].suiteId;
-    if (suiteId) revalidatePath(`/suites/${suiteId}`);
+    await prisma.$transaction(
+      orderedIds.map((id, index) =>
+        prisma.section.updateMany({ where: { id, suiteId }, data: { order: index } })
+      )
+    );
+    revalidatePath(`/suites/${suiteId}`);
     return { success: true };
   } catch (error) {
     return handleError(error);

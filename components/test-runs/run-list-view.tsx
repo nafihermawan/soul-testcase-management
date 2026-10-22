@@ -288,6 +288,9 @@ export function RunListView({ searchParams }: { searchParams: ActiveRunsSearchPa
             baseUrl="/test-runs"
             dialogTitle="Filter Active Runs"
             showFilterButton={false}
+            // Header halaman ini memakai kontrol ringkas (32px) — sama dengan
+            // tombol "+ Express Run" di sebelahnya.
+            compact
             // Pencarian difilter di klien: tidak mengubah URL, jadi tidak ada
             // request ulang maupun skeleton saat mengetik.
             onSearch={setQuery}

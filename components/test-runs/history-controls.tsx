@@ -51,6 +51,7 @@ export function HistoryControls({
   dialogTitle = "Filter Run History",
   showFilterButton = true,
   onSearch,
+  compact = false,
 }: {
   projects: ProjectFilterOption[];
   initial: HistoryFilterState;
@@ -64,6 +65,12 @@ export function HistoryControls({
    * dikirim ke pemanggil untuk difilter di sisi klien.
    */
   onSearch?: (q: string) => void;
+  /**
+   * Versi ringkas (tinggi 32px, font 13px) untuk header halaman yang tombolnya
+   * juga ringkas (Active Runs). Default 40px agar sejajar dengan tombol Filter
+   * di Run History.
+   */
+  compact?: boolean;
 }) {
   const router = useRouter();
   const [q, setQ] = useState(initial.q);
@@ -168,13 +175,13 @@ export function HistoryControls({
 
   return (
     <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
-      {/* Search input — tinggi & radius disamakan dengan tombol Filter sebelahnya. */}
+      {/* Search input — tinggi/radius disamakan dengan tombol Filter sebelahnya. */}
       <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
         <Search
-          size={15}
+          size={compact ? 14 : 15}
           style={{
             position: "absolute",
-            left: 11,
+            left: compact ? 10 : 11,
             color: "#94A3B8",
             pointerEvents: "none",
           }}
@@ -186,10 +193,12 @@ export function HistoryControls({
           placeholder="Cari Run ID, Nama Run..."
           className="filter-field"
           style={{
-            width: 220,
-            height: 40,
+            width: compact ? 208 : 220,
+            height: compact ? 32 : 40,
             boxSizing: "border-box",
-            padding: "0 12px 0 32px",
+            // Ringkas: py-1 px-2.5, dengan inset kiri ekstra agar teks tidak
+            // menabrak ikon pencarian.
+            padding: compact ? "4px 10px 4px 30px" : "0 12px 0 32px",
             borderRadius: 10,
             border: "1px solid #DDE2E9",
             background: "#fff",

@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { LoginForm } from "./LoginForm";
 import { Toast, useToast } from "@/components/ui/feedback";
+import { subscribeSessionChange } from "@/lib/client/session-sync";
 
 /** Pesan saat diarahkan ke sini oleh auto-logout 6 jam. */
 const TIMEOUT_MESSAGE = "Sesi Anda telah berakhir. Silakan login kembali.";
@@ -27,6 +28,21 @@ export default function LoginPage() {
     return () => {
       cancelled = true;
     };
+  }, [router]);
+
+  // Sinkronisasi lintas-tab: bila tab lain baru login sementara halaman ini
+  // masih terbuka (mis. tab A logout lalu tab B login akun lain), halaman login
+  // ikut masuk otomatis mengikuti sesi terbaru.
+  useEffect(() => {
+    return subscribeSessionChange(() => {
+      fetch("/api/me", { cache: "no-store", headers: { accept: "application/json" } })
+        .then((res) => {
+          if (res.ok) router.replace("/");
+        })
+        .catch(() => {
+          // abaikan — biarkan form login tampil
+        });
+    });
   }, [router]);
 
   // Notifikasi sesi berakhir — diarahkan dari auto-logout 6 jam.

@@ -15,6 +15,7 @@ import {
   Settings,
 } from "lucide-react";
 import { SidebarItem } from "@/components/layout/sidebar-item";
+import { notifySessionChange } from "@/lib/client/session-sync";
 
 type ProjectItem = {
   id: string;
@@ -188,10 +189,12 @@ export function Sidebar({
   projects,
   collapsed,
   userRole,
+  isQaLead,
 }: {
   projects: ProjectItem[];
   collapsed: boolean;
   userRole?: string | null;
+  isQaLead?: boolean;
 }) {
   const pathname = usePathname();
   const isProjectsActive =
@@ -251,8 +254,11 @@ export function Sidebar({
     if (activePlatformKey) setExpandedCategory(activePlatformKey);
   }, [activePlatformKey]);
 
-  // Settings hanya untuk QA; Automation tersembunyi untuk PRODUCT.
+  // Settings hanya untuk QA; Automation tersembunyi untuk PRODUCT; Reports &
+  // Analytics hanya untuk Lead QA (role QA + flag isQaLead) — selaras dengan
+  // guard halaman /reports dan 403 di /api/reports.
   const visibleNavItems = navItems.filter((i) => {
+    if (i.href === "/reports") return isQaLead === true;
     if (userRole === "PRODUCT") return i.href !== "/settings" && i.href !== "/automation";
     if (userRole === "QA") return true;
     return i.href !== "/settings";
@@ -606,7 +612,13 @@ export function Sidebar({
       >
         <button
           type="button"
-          onClick={() => signOut({ callbackUrl: "/login" })}
+          onClick={async () => {
+            // redirect:false dulu agar cookie sesi benar-benar terhapus
+            // sebelum sinyal dikirim — tab lain lalu menerima 401 yang sah.
+            await signOut({ redirect: false });
+            notifySessionChange("logout");
+            window.location.href = "/login";
+          }}
           title={collapsed ? "Keluar" : undefined}
           aria-label="Keluar"
           onMouseEnter={() => setLogoutHovered(true)}

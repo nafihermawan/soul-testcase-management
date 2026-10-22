@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Sidebar, SidebarSkeleton } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
+import { SessionSync } from "@/components/auth/session-sync";
 import { useApi } from "@/lib/client/use-api";
 import { MeContext } from "@/lib/client/me-context";
 import type { Me } from "@/types/api";
@@ -41,7 +42,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     >
       <div className="app-sidebar">
         {shellReady ? (
-          <Sidebar projects={projects} collapsed={collapsed} userRole={user?.role} />
+          <Sidebar
+            projects={projects}
+            collapsed={collapsed}
+            userRole={user?.role}
+            isQaLead={me.data?.isQaLead ?? false}
+          />
         ) : (
           <SidebarSkeleton collapsed={collapsed} />
         )}
@@ -62,6 +68,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {/* Identitas/role user dibagikan ke halaman lewat context supaya tiap
               halaman tidak perlu fetch /api/me sendiri lagi. */}
           <MeContext.Provider value={{ me: me.data, loading: me.loading }}>
+            {/* Sinkronisasi sesi antar-tab: logout/ganti akun di tab lain akan
+                terdeteksi di sini dan memaksa reload/redirect. */}
+            <SessionSync />
             {children}
           </MeContext.Provider>
         </main>

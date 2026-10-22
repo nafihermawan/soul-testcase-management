@@ -4,6 +4,7 @@ import { useState, type CSSProperties, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { checkLoginCredentials } from "@/lib/actions/auth-check";
+import { notifySessionChange } from "@/lib/client/session-sync";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 
 const inputBase: CSSProperties = {
@@ -74,6 +75,9 @@ export function LoginForm() {
       setError("Email atau password salah.");
       return;
     }
+    // Cookie sesi sudah diperbarui di sini. Beri tahu tab lain agar mereka
+    // menyesuaikan (reload/redirect) alih-alih tetap memakai state akun lama.
+    notifySessionChange("login");
     router.replace("/");
     router.refresh();
   };

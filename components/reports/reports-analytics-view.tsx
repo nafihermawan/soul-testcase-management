@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ShieldAlert } from "lucide-react";
 import { Card } from "@/components/ui";
 import { FilterModal } from "@/components/ui/filter-modal";
 import { CustomSelect, filterLabelStyle } from "@/components/ui/custom-select";
@@ -19,7 +18,6 @@ import {
   exportQaPerformanceXlsx,
 } from "@/components/analytics/qa-performance-export";
 import { useApi } from "@/lib/client/use-api";
-import { useMe } from "@/lib/client/me-context";
 import { pct } from "@/lib/qa-metrics";
 import type { QaPerformancePayload, ReportsPayload } from "@/types/api";
 
@@ -36,14 +34,14 @@ const REPORTS_TABS: { key: ReportsTabKey; label: string }[] = [
  * Halaman terpadu "Reports & Analytics" — gabungan Reports (coverage &
  * repository) dan QA Performance Analytics.
  *
- * Akses: HANYA Lead QA (role QA + flag isQaLead). Non-lead langsung dikunci
- * dengan guard screen; API performa juga menolak 403 di sisi server.
+ * Akses: HANYA Lead QA (role QA + flag isQaLead) — ditegakkan oleh guard di
+ * `app/(app)/reports/page.tsx` (redirect ke dashboard) dan oleh 403 di
+ * /api/reports. Komponen ini sendiri tidak lagi mengurus RBAC.
  *
  * Tab navigation duduk di luar card konten (persis di bawah header), dan
  * toolbar tiap tab (Filter / Export Report) ada di header kanan atas.
  */
 export function ReportsAnalyticsView() {
-  const { me, loading: meLoading } = useMe();
   const [tab, setTab] = useState<ReportsTabKey>("coverage");
 
   // Data + filter tab Coverage (tombol Filter-nya hidup di header halaman).
@@ -119,51 +117,6 @@ export function ReportsAnalyticsView() {
       },
     };
   }, [data, platform, project, isFiltered]);
-
-  // --- RBAC: khusus Lead QA -------------------------------------------------
-  if (meLoading) return <TableCardSkeleton />;
-  if (me && !me.isQaLead) {
-    return (
-      <main style={{ fontFamily: "var(--font-sans, system-ui, sans-serif)", width: "100%" }}>
-        <Card style={{ padding: "2.5rem 1.5rem", textAlign: "center" }}>
-          <div
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              justifyContent: "center",
-              width: 52,
-              height: 52,
-              borderRadius: "50%",
-              background: "#FFF1F2",
-              color: "#E11D48",
-              marginBottom: 12,
-            }}
-          >
-            <ShieldAlert size={24} />
-          </div>
-          <h1 style={{ fontSize: 18, fontWeight: 700, color: "#1E293B", margin: 0 }}>
-            Access Denied
-          </h1>
-          <p
-            style={{
-              fontSize: 13,
-              color: "#64748B",
-              margin: "0.5rem auto 0",
-              maxWidth: 430,
-              lineHeight: 1.6,
-            }}
-          >
-            Hanya QA Lead yang dapat mengakses halaman Laporan &amp; Performa QA ini.
-          </p>
-          <p style={{ fontSize: 11, color: "#94A3B8", marginTop: 10 }}>
-            Role akunmu saat ini: {me.role}
-            {me.role === "QA" ? " (belum ditandai Lead QA)" : ""} — minta Lead QA mengaktifkannya di
-            Settings → User &amp; Roles.
-          </p>
-        </Card>
-      </main>
-    );
-  }
 
   return (
     <main

@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/lib/generated/prisma/client";
-import { apiSession, json401 } from "@/lib/api-auth";
+import { apiSession, json401, json403 } from "@/lib/api-auth";
+import { isQaLead } from "@/lib/qa-lead";
 import {
   pct,
   TC_PRIORITY_LABEL,
@@ -23,10 +24,17 @@ import type {
  * Semua angka inventaris dihitung dari tabel TestCase (bukan baris hasil run),
  * dan "sudah di-test" memakai definisi yang sama dengan Dashboard: TC unik yang
  * punya hasil dengan status != NOT_RUN pada run yang sudah COMPLETED.
+ *
+ * Hanya Lead QA (role QA + flag isQaLead) yang boleh membaca — sama dengan
+ * /api/qa-performance, sehingga role Developer/Product tidak bisa menembus lewat
+ * URL API meski menunya disembunyikan.
  */
 export async function GET() {
   const user = await apiSession();
   if (!user) return json401();
+  if (!(await isQaLead(user.id))) {
+    return json403("Laporan ini hanya untuk Lead QA.");
+  }
 
   const [
     projects,

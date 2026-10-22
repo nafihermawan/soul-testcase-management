@@ -10,6 +10,22 @@ export class HttpError extends Error {
   }
 }
 
+/**
+ * Tangani respons 401 dari mana pun: sesi sudah tidak berlaku (kedaluwarsa,
+ * logout dari tab lain, atau cookie tergantikan). Buang cache lalu paksa ke
+ * halaman login supaya tab yang masih memegang state akun lama tidak terus
+ * melakukan request dengan sesi yang sudah mati.
+ */
+function handleUnauthorized(): void {
+  if (typeof window === "undefined") return;
+  invalidateApiCache();
+  // Di halaman login, 401 memang berarti "belum login" — jangan redirect
+  // (mencegah loop) karena form login justru yang harus tampil.
+  if (window.location.pathname !== "/login") {
+    window.location.replace("/login");
+  }
+}
+
 /** Fetch JSON dengan error handling; lempar HttpError berisi pesan dari server bila non-2xx. */
 export async function getJSON<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
@@ -24,6 +40,7 @@ export async function getJSON<T>(path: string, init?: RequestInit): Promise<T> {
     } catch {
       // body bukan JSON; abaikan
     }
+    if (res.status === 401) handleUnauthorized();
     throw new HttpError(res.status, message);
   }
   return (await res.json()) as T;

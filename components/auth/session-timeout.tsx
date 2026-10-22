@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef } from "react";
 import { signOut } from "next-auth/react";
+import { notifySessionChange } from "@/lib/client/session-sync";
 
 /** Batas tidak aktif sebelum sesi dianggap berakhir — 6 jam. */
 export const IDLE_TIMEOUT_MS = 6 * 60 * 60 * 1000;
@@ -53,9 +54,13 @@ export function SessionTimeout() {
     } catch {
       // abaikan
     }
-    // signOut menghapus cookie sesi NextAuth; callbackUrl mengarahkan ke login
-    // dengan penanda `reason=timeout` agar halaman login menampilkan toast.
-    await signOut({ callbackUrl: "/login?reason=timeout" });
+    // signOut menghapus cookie sesi NextAuth (redirect:false supaya sinyal
+    // dikirim setelah cookie benar-benar hilang), lalu tab lain diberi tahu dan
+    // tab ini diarahkan ke login dengan penanda `reason=timeout` agar halaman
+    // login menampilkan toast.
+    await signOut({ redirect: false });
+    notifySessionChange("logout");
+    window.location.replace("/login?reason=timeout");
   }, []);
 
   useEffect(() => {

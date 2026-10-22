@@ -224,24 +224,52 @@ button,
   outline: none !important;
 }
 
-/* Sidebar menu item: unified base + hover state */
+/* Sidebar: state hanya diwarnai lewat teks — TIDAK ada latar abu di state
+   mana pun (hover maupun parent yang sedang terbuka). */
 .sidebar-item {
-  color: var(--text-secondary);
+  color: #334155;
+  /* WAJIB: item parent Test Runs/Projects adalah <button>, dan <button> punya
+     latar bawaan browser (ButtonFace = abu). Nilai ini ditaruh di CSS — kalau
+     inline, hover/aktif berbasis stylesheet tidak akan pernah terlihat. */
+  background: transparent;
   transition: color 0.2s ease, background-color 0.2s ease;
 }
 
 .sidebar-item:hover {
-  color: #ffc348;
+  color: #0f172a;
 }
 
-/* Sub-menu (child) item: hover = soft gray background + dark text */
+/* Hover: tint kuning sangat muda, HANYA saat pointer di atas item dan item itu
+   bukan halaman aktif (parent aktif tetap transparan, child aktif tetap kuning
+   penuh). */
+.sidebar-item:hover:not([aria-current="page"]) {
+  background: #fff8e8;
+}
+
+/* Sub-menu (child) item: baris 34px, teks 13px/400. */
 .sidebar-item-child {
-  border-radius: 6px;
+  color: #475569;
+  font-weight: 400;
+  border-radius: 0;
 }
 
-.sidebar-item-child:hover {
-  color: #111827;
-  background: #f9fafb;
+/* Top-level AKTIF (section yang memuat halaman sekarang): teks/ikon/chevron
+   kuning-orange. Bar 3px di tepi kiri dirender oleh komponen. */
+.sidebar-item[aria-current="page"] {
+  color: #e8a317;
+}
+
+/* Child AKTIF: latar kuning penuh selebar sidebar, sudut persegi. */
+.sidebar-item-child[aria-current="page"] {
+  background: #ffc348;
+  color: #0f172a;
+  font-weight: 500;
+}
+
+/* Fokus keyboard saja (:focus-visible) — klik mouse tidak meninggalkan apa pun. */
+.sidebar-item:focus-visible {
+  outline: 2px solid #ffc348;
+  outline-offset: -2px;
 }
 
 /* Brand logo block: ultra-tight gap + heavy italic title */
@@ -259,9 +287,10 @@ button,
   color: #0f172a;
 }
 
-/* Samakan kelas kontainer untuk semua grup sub-menu */
+/* Submenu kini selebar sidebar: indentasi diatur padding tiap item (child 44px),
+   bukan oleh container — supaya latar child aktif mencapai tepi sidebar. */
 .sidebar-submenu-list {
-  padding-left: 36px !important;
+  padding-left: 0 !important;
   margin-left: 0 !important;
 }
 
@@ -274,13 +303,10 @@ button,
   min-height: 0;
 }
 
-/* Samakan styling item sub-menu */
+/* Item sub-menu: hanya menyamakan font. Ukuran/berat/padding diatur komponen
+   (sebelumnya di sini ada !important yang menahan padding 44px & berat 500). */
 .sidebar-submenu-item {
   font-family: inherit !important;
-  font-size: 14px !important;
-  font-weight: 400 !important;
-  line-height: 1.5;
-  padding-left: 0 !important;
   margin-left: 0 !important;
 }
 

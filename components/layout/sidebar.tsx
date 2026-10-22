@@ -6,7 +6,6 @@ import { signOut } from "next-auth/react";
 import {
   BarChart3,
   Bug,
-  ChevronDown,
   FlaskConical,
   Layers,
   LayoutDashboard,
@@ -97,7 +96,7 @@ export function SidebarSkeleton({ collapsed = false }: { collapsed?: boolean }) 
       <nav
         style={{
           flex: 1,
-          padding: "0.75rem 0.5rem",
+          padding: "0.75rem 0",
           display: "flex",
           flexDirection: "column",
           gap: "2px",
@@ -209,16 +208,6 @@ export function Sidebar({
   const projectsOpen = openMenu === "projects";
   const toggleMenu = (key: string) => setOpenMenu((cur) => (cur === key ? null : key));
   const [logoutHovered, setLogoutHovered] = useState(false);
-  // Kategori platform yang memuat project aktif (null bila bukan di halaman
-  // project/suite). Halaman /suites/<id> dipetakan lewat suiteIds project.
-  const activePlatformKey = (() => {
-    const projectMatch = /^\/projects\/([^/]+)/.exec(pathname);
-    const suiteMatch = /^\/suites\/([^/]+)/.exec(pathname);
-    let proj: ProjectItem | undefined;
-    if (projectMatch) proj = projects.find((x) => x.id === projectMatch[1]);
-    else if (suiteMatch) proj = projects.find((x) => x.suiteIds?.includes(suiteMatch[1]));
-    return proj ? (proj.platform || "Lainnya").toUpperCase() : null;
-  })();
 
   /**
    * Item project dianggap AKTIF jika rute sekarang:
@@ -232,27 +221,12 @@ export function Sidebar({
     const suiteMatch = /^\/suites\/([^/]+)/.exec(pathname);
     return !!suiteMatch && !!p.suiteIds?.includes(suiteMatch[1]);
   };
-  // Single accordion: HANYA satu kategori platform yang terbuka pada satu waktu
-  // (state = string | null, bukan peta boolean).
-  const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
-  const isPlatformOpen = (key: string) => expandedCategory === key;
-  // Klik header: tutup sendiri bila sedang terbuka, atau buka kategori ini
-  // sekaligus menutup kategori lain.
-  const togglePlatform = (key: string) =>
-    setExpandedCategory((cur) => (cur === key ? null : key));
-
   // Buka menu parent yang sesuai saat rute berubah (mis. masuk ke halaman
   // detail project) — jangan biarkan menu tertutup saat halamannya diakses.
   useEffect(() => {
     if (isProjectsActive) setOpenMenu("projects");
     else if (isRunsActive) setOpenMenu("runs");
   }, [isProjectsActive, isRunsActive]);
-
-  // Auto-pindah kategori yang terbuka mengikuti rute project aktif (mis. WEB),
-  // sekaligus menutup kategori lain — single accordion.
-  useEffect(() => {
-    if (activePlatformKey) setExpandedCategory(activePlatformKey);
-  }, [activePlatformKey]);
 
   // Settings hanya untuk QA; Automation tersembunyi untuk PRODUCT; Reports &
   // Analytics hanya untuk Lead QA (role QA + flag isQaLead) — selaras dengan
@@ -361,7 +335,9 @@ export function Sidebar({
       <nav
         style={{
           flex: 1,
-          padding: "0.75rem 0.5rem",
+          // Tanpa padding horizontal: baris item (dan latar child aktif)
+          // mencapai tepi sidebar.
+          padding: "0.75rem 0",
           display: "flex",
           flexDirection: "column",
           gap: "2px",
@@ -379,11 +355,7 @@ export function Sidebar({
               collapsed={collapsed}
               title={collapsed ? item.label : undefined}
             >
-              <Icon
-                size={17}
-                strokeWidth={2}
-                color={active ? "#FFC348" : undefined}
-              />
+              <Icon size={18} strokeWidth={2} />
               {!collapsed && <span>{item.label}</span>}
             </SidebarItem>
           );
@@ -399,11 +371,7 @@ export function Sidebar({
             open={runsOpen}
             title={collapsed ? "Test Runs" : undefined}
           >
-            <Play
-              size={17}
-              strokeWidth={2}
-              color={isRunsActive ? "#FFC348" : undefined}
-            />
+            <Play size={18} strokeWidth={2} />
             {!collapsed && <span>Test Runs</span>}
           </SidebarItem>
 
@@ -460,11 +428,7 @@ export function Sidebar({
             open={projectsOpen}
             title={collapsed ? "Projects" : undefined}
           >
-            <Layers
-              size={17}
-              strokeWidth={2}
-              color={isProjectsActive ? "#FFC348" : undefined}
-            />
+            <Layers size={18} strokeWidth={2} />
             {!collapsed && <span>Projects</span>}
           </SidebarItem>
 
@@ -486,7 +450,9 @@ export function Sidebar({
                     margin: "2px 0 4px 0",
                     display: "flex",
                     flexDirection: "column",
-                    gap: "0.75rem",
+                    // Jarak antar grup diatur padding label grup (14px atas),
+                    // jadi tidak perlu gap tambahan.
+                    gap: 0,
                   }}
                 >
                   {projects.length === 0 ? (
@@ -494,103 +460,35 @@ export function Sidebar({
                       Belum ada project
                     </span>
                   ) : (
-                    Object.entries(groupProjectsByEnv(projects)).map(([groupTitle, items]) => {
-                      const open = isPlatformOpen(groupTitle);
-                      return (
-                        <div key={groupTitle} style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
-                          {/* Header kategori platform — klik untuk expand/collapse */}
-                          <button
-                            type="button"
-                            onClick={() => togglePlatform(groupTitle)}
-                            aria-expanded={open}
-                            aria-label={`${open ? "Tutup" : "Buka"} kategori ${groupTitle}`}
-                            style={{
-                              display: "flex",
-                              alignItems: "center",
-                              gap: "0.4rem",
-                              // Digeser ke kiri menembus indentasi 36px milik
-                              // `.sidebar-submenu-list`; lebar ditambah agar tepi
-                              // kanan (chevron) tetap rata.
-                              width: "calc(100% + 1rem)",
-                              marginLeft: "-1rem",
-                              border: "none",
-                              background: "transparent",
-                              fontSize: 11,
-                              fontWeight: 700,
-                              // Lebih gelap dari slate-400 agar jelas terbaca.
-                              color: "#475569",
-                              textTransform: "uppercase",
-                              letterSpacing: "0.06em",
-                              // Rapat ke kiri (px-0) — digeser ke tepi submenu.
-                              padding: "0.25rem 0",
-                              borderRadius: 6,
-                              cursor: "pointer",
-                              transition: "background-color 0.15s ease, color 0.15s ease",
-                            }}
-                            onMouseEnter={(e) => {
-                              e.currentTarget.style.background = "#F3F4F6";
-                              e.currentTarget.style.color = "#1E293B";
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.background = "transparent";
-                              e.currentTarget.style.color = "#475569";
-                            }}
-                          >
-                            {groupTitle}
-                            <ChevronDown
-                              size={12}
-                              aria-hidden="true"
-                              style={{
-                                marginLeft: "auto",
-                                flexShrink: 0,
-                                transform: open ? "rotate(0deg)" : "rotate(-90deg)",
-                                transition: "transform 250ms ease",
-                              }}
-                            />
-                          </button>
-
-                          {/* Daftar project — accordion halus via grid-rows 0fr <-> 1fr */}
-                          <div
-                            style={{
-                              display: "grid",
-                              gridTemplateRows: open ? "1fr" : "0fr",
-                              opacity: open ? 1 : 0,
-                              transition:
-                                "grid-template-rows 280ms ease-in-out, opacity 280ms ease-in-out",
-                            }}
-                          >
-                            <div
-                              style={{
-                                overflow: "hidden",
-                                minHeight: 0,
-                                display: "flex",
-                                flexDirection: "column",
-                                gap: "2px",
-                                // Indentasi ekstra agar item project jelas di bawah kategorinya.
-                                paddingLeft: "0.75rem",
-                              }}
-                            >
-                              {items.map((p) => {
-                                // Aktif juga untuk nested route (/projects/<id>/*)
-                                // dan halaman suite milik project ini.
-                                const active = isProjectActive(p);
-                                return (
-                                  <SidebarItem
-                                    key={p.id}
-                                    href={`/projects/${p.id}`}
-                                    variant="child"
-                                    active={active}
-                                    className="sidebar-submenu-item"
-                                  >
-                                    {p.name}
-                                  </SidebarItem>
-                                );
-                              })}
-                            </div>
-                          </div>
+                    Object.entries(groupProjectsByEnv(projects)).map(([groupTitle, items]) => (
+                      <div key={groupTitle} style={{ display: "flex", flexDirection: "column" }}>
+                        {/* Label grup statis — BUKAN accordion; children selalu tampil. */}
+                        <div
+                          style={{
+                            padding: "14px 16px 6px 24px",
+                            fontSize: 11,
+                            fontWeight: 700,
+                            letterSpacing: "0.04em",
+                            textTransform: "uppercase",
+                            color: "#334155",
+                            background: "transparent",
+                          }}
+                        >
+                          {groupTitle}
                         </div>
-                      );
-                    })
+                        {items.map((p) => (
+                          <SidebarItem
+                            key={p.id}
+                            href={`/projects/${p.id}`}
+                            variant="child"
+                            active={isProjectActive(p)}
+                            className="sidebar-submenu-item"
+                          >
+                            {p.name}
+                          </SidebarItem>
+                        ))}
+                      </div>
+                    ))
                   )}
                 </div>
               </div>

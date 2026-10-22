@@ -20,15 +20,15 @@ type SidebarItemProps = {
 
 /**
  * Unified sidebar menu item.
- * - Parent (level-1): default = dark neutral text, transparent background,
- *   optional right-aligned chevron; active = yellow text/icon + straight
- *   4px yellow left indicator bar (left corners kept square so the bar is
- *   flush and never curves with the radius).
- * - Child: default = dark neutral text, transparent background, indented;
- *   active = solid yellow background with dark high-contrast text.
- * - Hover (inactive): text/icon turns brand yellow (#FFC348) only — no
- *   background, border, or shadow changes (.sidebar-item:hover).
- *   Active items keep their styling (inline styles win over the class).
+ * - Parent (level-1): baris flex 40px — ikon + label 14px/600 + chevron kanan.
+ *   AKTIF = teks/ikon/chevron kuning-orange (#E8A317) + bar 3px #FFC348 di
+ *   tepi kiri sidebar. TANPA latar di state mana pun.
+ * - Child: baris blok 34px, teks 13px/400. AKTIF = latar kuning penuh selebar
+ *   sidebar + teks gelap 500 (sudut persegi).
+ * - Hover: hanya warna teks (#0F172A) — tidak ada latar abu.
+ * - Warna & latar state diatur CSS (.sidebar-item / .sidebar-item-child /
+ *   [aria-current]) supaya :hover dan :focus-visible bisa bekerja; inline hanya
+ *   untuk ukuran, spacing, dan tipografi.
  */
 export function SidebarItem({
   href,
@@ -46,28 +46,28 @@ export function SidebarItem({
   const isChild = variant === "child";
 
   const baseStyle: React.CSSProperties = {
-    display: "flex",
-    alignItems: "center",
-    gap: isChild ? "0.5rem" : "0.6rem",
+    position: "relative",
+    // Parent: baris flex 40px (ikon + label + chevron). Child: baris blok 34px.
+    display: isChild ? "block" : "flex",
+    alignItems: isChild ? undefined : "center",
+    gap: isChild ? undefined : 12,
     width: "100%",
-    padding: collapsed
-      ? "0.5rem 0"
-      : isChild
-        ? "0.4rem 0.6rem"
-        : "0.45rem 0.75rem",
-    justifyContent: collapsed ? "center" : "flex-start",
-    borderRadius: isChild ? 6 : "0 8px 8px 0",
-    fontSize: isChild ? 14 : 14,
-    fontWeight: active ? 600 : isChild ? 400 : 600,
-    // Child aktif: CUKUP warna amber + semibold (tanpa bg/border).
-    // Child tidak aktif: slate-600 normal.
-    color: active ? "#D97706" : isChild ? "#475569" : "#374151",
-    background: "transparent",
+    minHeight: isChild ? 34 : 40,
+    lineHeight: isChild ? "34px" : undefined,
+    padding: collapsed ? "0" : isChild ? "0 16px 0 44px" : "0 16px 0 20px",
+    justifyContent: collapsed ? "center" : undefined,
+    // Sudut persegi: latar child aktif & bar kiri parent aktif menempel tepi.
+    borderRadius: 0,
+    fontSize: isChild ? 13 : 14,
+    fontWeight: isChild ? undefined : 600,
     border: "none",
-    // Indentasi seragam untuk semua child (border hanya untuk item parent aktif).
-    borderLeft: isChild || collapsed ? undefined : active
-      ? "4px solid #FFC348"
-      : "4px solid transparent",
+    textAlign: "left",
+    cursor: "pointer",
+    whiteSpace: isChild ? "nowrap" : undefined,
+    overflow: isChild ? "hidden" : undefined,
+    textOverflow: isChild ? "ellipsis" : undefined,
+    // Warna & latar state TIDAK di-set inline: nilai inline akan selalu
+    // mengalahkan stylesheet sehingga hover/fokus tidak pernah terlihat.
     transition: "color 0.2s ease, background-color 0.2s ease",
     ...style,
   };
@@ -76,15 +76,33 @@ export function SidebarItem({
     .filter(Boolean)
     .join(" ");
 
+  /** Bar 3px di tepi kiri sidebar untuk item top-level yang aktif. */
+  const activeBar =
+    active && !isChild ? (
+      <span
+        aria-hidden="true"
+        style={{
+          position: "absolute",
+          left: 0,
+          top: 0,
+          bottom: 0,
+          width: 3,
+          borderRadius: "0 3px 3px 0",
+          background: "#FFC348",
+        }}
+      />
+    ) : null;
+
   const content = (
     <>
+      {activeBar}
       {children}
       {chevron && !collapsed && (
         <ChevronDown
           size={14}
+          aria-hidden="true"
           style={{
             marginLeft: "auto",
-            opacity: 0.6,
             transform: open ? "rotate(180deg)" : "rotate(0deg)",
             transition: "transform 300ms ease-in-out",
           }}
@@ -95,14 +113,27 @@ export function SidebarItem({
 
   if (href) {
     return (
-      <Link href={href} title={title} className={classes} style={baseStyle}>
+      <Link
+        href={href}
+        title={title}
+        className={classes}
+        style={baseStyle}
+        aria-current={active ? "page" : undefined}
+      >
         {content}
       </Link>
     );
   }
 
   return (
-    <button type="button" onClick={onClick} title={title} className={classes} style={baseStyle}>
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      className={classes}
+      style={baseStyle}
+      aria-current={active ? "page" : undefined}
+    >
       {content}
     </button>
   );

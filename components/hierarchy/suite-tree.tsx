@@ -17,7 +17,6 @@ import { parseReferenceLines, platformPrefix } from "@/lib/format";
 import { RowActionsMenu } from "@/components/settings/row-actions-menu";
 import { ConfirmDialog, Spinner, Toast, useToast } from "@/components/ui/feedback";
 import {
-  CARD_BORDER,
   HEAD_BG,
   LINE,
   MONO,
@@ -451,11 +450,10 @@ export function SuiteTree({
   return (
     <div
       style={{
-        padding: "18px 22px 24px",
+        flex: 1,
         display: "flex",
         flexDirection: "column",
-        gap: 12,
-        flex: 1,
+        padding: "16px 22px 24px",
         fontFamily: SANS,
       }}
     >
@@ -493,20 +491,8 @@ export function SuiteTree({
           headerAnchor
         )}
 
-      <h2 style={{ fontSize: 15, fontWeight: 600, margin: 0, color: "#0F172A" }}>Suites</h2>
-
-      {/* Container tabel: sudut membulat + scroll mendatar di layar sempit.
-          Vertikal dibiarkan tumbuh (halaman yang men-scroll) agar tidak ada
-          baris yang terpotong. */}
-      <div
-        style={{
-          flex: 1,
-          border: `1px solid ${CARD_BORDER}`,
-          borderRadius: 14,
-          overflowX: "auto",
-          overflowY: "hidden",
-        }}
-      >
+      {/* Wrapper polos: hanya untuk scroll mendatar di layar sempit. */}
+      <div style={{ flex: 1, overflowX: "auto" }}>
         {rows.length === 0 ? (
           <div
             style={{

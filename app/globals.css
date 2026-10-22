@@ -810,3 +810,26 @@ input[type="radio"]:focus-visible {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }
 }
+
+/* Halaman detail Project: hover breadcrumb & link nama suite
+   (tidak bisa disetel lewat inline style). */
+.project-breadcrumb-link {
+  color: #64748b;
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.project-breadcrumb-link:hover {
+  color: #0f172a;
+}
+
+.suite-name-link {
+  color: #0f172a;
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.suite-name-link:hover {
+  color: #1d4ed8;
+  text-decoration: underline;
+}

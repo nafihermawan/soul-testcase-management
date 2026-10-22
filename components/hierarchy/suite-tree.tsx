@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowDown, ArrowUp, CirclePlus, FolderOutput, Pencil, Plus, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowUp, FolderOutput, Pencil, Plus, Trash2, X } from "lucide-react";
 import {
   createSuite,
   deleteSuite,
@@ -14,9 +14,17 @@ import {
 } from "@/lib/actions/hierarchy";
 import { useRefresh } from "@/lib/client/refresh-context";
 import { parseReferenceLines, platformPrefix } from "@/lib/format";
-import { useDragReorder } from "./collapse-provider";
 import { RowActionsMenu } from "@/components/settings/row-actions-menu";
 import { ConfirmDialog, Spinner, Toast, useToast } from "@/components/ui/feedback";
+import {
+  CARD_BORDER,
+  HEAD_BG,
+  LINE,
+  MONO,
+  numMono,
+  ROW_DIVIDER,
+  SANS,
+} from "@/components/reports/report-tokens";
 
 type DocRefInput = { label: string; url: string };
 
@@ -62,12 +70,26 @@ function removeSuiteFromTree(nodes: SuiteNode[], id: string): SuiteNode[] {
     );
 }
 
-/** Urutkan tree suite berdasarkan kode "id Suite" (A-Z / Z-A), rekursif. */
+/** Urutkan tree suite berdasarkan kode "ID Suite" (A-Z / Z-A), rekursif. */
 function sortSuiteTree(nodes: SuiteNode[], dir: "asc" | "desc"): SuiteNode[] {
   const sign = dir === "asc" ? 1 : -1;
   return [...nodes]
     .sort((a, b) => sign * a.code.localeCompare(b.code))
     .map((n) => (n.children?.length ? { ...n, children: sortSuiteTree(n.children, dir) } : n));
+}
+
+/**
+ * Ratakan tree jadi baris tabel (depth-first) sekaligus menyimpan kedalamannya.
+ * Satu tabel (bukan tabel bersarang) supaya kolom berlebar tetap tetap sejajar
+ * antar level; hierarkinya ditunjukkan lewat indentasi nama suite.
+ */
+function flattenSuites(nodes: SuiteNode[], depth = 0): { suite: SuiteNode; depth: number }[] {
+  const out: { suite: SuiteNode; depth: number }[] = [];
+  for (const n of nodes) {
+    out.push({ suite: n, depth });
+    if (n.children?.length) out.push(...flattenSuites(n.children, depth + 1));
+  }
+  return out;
 }
 
 /** Auto-generate kode suite: hilangkan vokal, spasi -> hyphen, buang karakter khusus. */
@@ -94,30 +116,51 @@ const formatUpdatedAt = (iso?: string): string => {
     d.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
 };
 
+/** Gaya dasar <th> tabel suite: 12px/500 #64748B. */
+const TH: React.CSSProperties = {
+  padding: "0 12px",
+  fontSize: 12,
+  fontWeight: 500,
+  color: "#64748B",
+  textAlign: "left",
+  whiteSpace: "nowrap",
+};
+
 function SuiteRow({
   suite,
   depth,
-  projectId,
+  isLast,
+  canDrag,
+  dragActive,
   canEdit = true,
   showToast,
   onSuiteUpdated,
   onSuiteDeleted,
+  onSuiteDragStart,
+  onSuiteDragEnd,
+  onSuiteDropOn,
 }: {
   suite: SuiteNode;
   depth: number;
-  projectId: string;
+  /** Baris terakhir — tanpa garis pemisah bawah. */
+  isLast: boolean;
+  /** Boleh di-drag (canEdit + ada baris lain untuk ditukar). */
+  canDrag: boolean;
+  /** Ada suite lain yang sedang di-drag — baris ini jadi target drop. */
+  dragActive: boolean;
   canEdit?: boolean;
   showToast: (message: string, type?: "success" | "error") => void;
   onSuiteUpdated: (id: string, patch: Partial<SuiteNode>) => void;
   onSuiteDeleted: (id: string) => void;
+  onSuiteDragStart: (id: string) => void;
+  onSuiteDragEnd: () => void;
+  onSuiteDropOn: (targetId: string) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmMove, setConfirmMove] = useState(false);
   const [deletePending, setDeletePending] = useState(false);
   const [movePending, setMovePending] = useState(false);
-  const { dragType, draggedId, onDragStart, onDragEnd } = useDragReorder();
-  const hasChildren = (suite.children?.length ?? 0) > 0;
   const router = useRouter();
   const suiteHref = `/suites/${suite.id}`;
 
@@ -148,107 +191,121 @@ function SuiteRow({
     showToast(`Suite "${suite.name}" dipindah ke root.`, "success");
   }, [suite.id, suite.name, showToast]);
 
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    if (dragType !== "suite" || !draggedId) return;
-    const listEl = e.currentTarget.parentElement?.querySelector(`[data-suite-list="${suite.id}"]`);
-    if (!listEl) return;
-    const ids = Array.from(listEl.children)
-      .map((el) => el.getAttribute("data-id"))
-      .filter((x): x is string => !!x);
-    const to = ids.indexOf(suite.id);
-    const from = ids.indexOf(draggedId);
-    if (from === -1 || to === -1 || from === to) return;
-    void reorderSuites(suite.parentId, reorderList(ids, from, to));
-  };
-
   return (
     <>
       <tr
-        draggable={canEdit}
+        draggable={canDrag}
         // Seluruh baris jadi target klik — tapi kolom Opsi dikecualikan
-        // (lihat stopPropagation di sel Opsi & link nama suite).
+        // (stopPropagation di sel Opsi & link nama suite).
         onClick={() => router.push(suiteHref)}
         onDragStart={(e) => {
           e.dataTransfer.effectAllowed = "move";
-          onDragStart("suite", suite.id);
+          onSuiteDragStart(suite.id);
         }}
-        onDragEnd={onDragEnd}
+        onDragEnd={onSuiteDragEnd}
         onDragOver={(e) => {
+          // Hanya relevan saat ada suite lain yang sedang di-drag.
+          if (!dragActive) return;
           e.preventDefault();
-          if (dragType !== "suite") return;
         }}
-        onDrop={handleDrop}
+        onDrop={(e) => {
+          if (!dragActive) return;
+          e.preventDefault();
+          onSuiteDropOn(suite.id);
+        }}
         data-id={suite.id}
         style={{
-          borderBottom: "1px solid var(--border)",
+          height: 52,
           cursor: "pointer",
+          borderBottom: isLast ? "none" : `1px solid ${ROW_DIVIDER}`,
           transition: "background 0.15s ease",
         }}
-        onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(248, 250, 252, 0.8)")}
+        onMouseEnter={(e) => (e.currentTarget.style.background = "#FAFBFC")}
         onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
       >
-        <td style={{ padding: "0.6rem 1.25rem", textAlign: "left" }}>
+        {/* ID Suite — Geist Mono, satu baris dengan ellipsis + tooltip. */}
+        <td style={{ paddingLeft: 16, paddingRight: 12, verticalAlign: "middle" }}>
           <span
+            title={suite.code}
             style={{
-              fontFamily: "var(--font-mono, monospace)",
-              fontSize: 11,
-              fontWeight: 400,
-              color: "#94A3B8",
+              display: "block",
+              fontFamily: MONO,
+              fontSize: 12,
+              color: "#64748B",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
             }}
           >
             {suite.code}
           </span>
         </td>
-        <td style={{ padding: "0.6rem 0.5rem" }}>
+
+        {/* Nama Suite — link ke halaman suite; hierarki ditandai indentasi. */}
+        <td style={{ padding: "0 12px", verticalAlign: "middle" }}>
           <Link
             href={suiteHref}
             // Link-nya sendiri sudah menavigasi; jangan sampai baris ikut
             // memicu push kedua.
             onClick={(e) => e.stopPropagation()}
+            title={suite.name}
+            className="suite-name-link"
             style={{
-              // Netral & bobot medium (bukan bold); interaksi ditandai hover baris.
+              display: "block",
+              fontSize: 14,
               fontWeight: 500,
-              fontSize: 12,
-              color: "#1E293B",
-              textDecoration: "none",
-              display: "inline-block",
               paddingLeft: depth * 20,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
             }}
           >
             {suite.name}
           </Link>
         </td>
+
+        {/* Jumlah Test Case — angka Geist Mono; nol ditampilkan redup. */}
         <td
           style={{
-            padding: "0.6rem 0.5rem",
-            color: "#64748B",
-            fontSize: 12,
-            fontWeight: 400,
+            padding: "0 24px 0 12px",
+            textAlign: "right",
+            verticalAlign: "middle",
+            whiteSpace: "nowrap",
           }}
         >
-          {suite.totalTestCases ?? 0} Test Case{suite.totalTestCases === 1 ? "" : "s"}
+          <span
+            style={{
+              ...numMono,
+              fontSize: 14,
+              color: (suite.totalTestCases ?? 0) === 0 ? "#94A3B8" : "#0F172A",
+            }}
+          >
+            {suite.totalTestCases ?? 0}
+          </span>
+          <span style={{ marginLeft: 4, fontSize: 13, color: "#94A3B8" }}>test case</span>
         </td>
+
         <td
           style={{
-            padding: "0.6rem 0.5rem",
+            padding: "0 12px",
+            fontSize: 13,
             color: "#64748B",
-            fontSize: 12,
-            fontWeight: 400,
             whiteSpace: "nowrap",
+            verticalAlign: "middle",
           }}
         >
           {formatUpdatedAt(suite.updatedAt)}
         </td>
+
         {canEdit && (
-          <td style={{ padding: "0.6rem 0.5rem", textAlign: "center", width: 64 }}>
-            {/* Kolom Opsi dikecualikan dari navigasi baris. Menu-nya sendiri
-                dirender lewat portal, jadi cukup trigger di sini. */}
-            <div
-              onClick={(e) => e.stopPropagation()}
-              style={{ display: "flex", justifyContent: "center", alignItems: "center" }}
-            >
+          <td style={{ padding: "0 12px", textAlign: "right", verticalAlign: "middle" }}>
+            {/* Kolom Opsi dikecualikan dari navigasi baris. */}
+            <div onClick={(e) => e.stopPropagation()} style={{ display: "inline-flex" }}>
               <RowActionsMenu
+                ariaLabel={`Opsi ${suite.name}`}
+                iconSize={18}
+                iconColor="#475569"
+                triggerStyle={{ width: 32, height: 32, borderRadius: 8, padding: 0 }}
                 actions={[
                   {
                     label: "Edit",
@@ -284,32 +341,6 @@ function SuiteRow({
             showToast("Data suite berhasil diperbarui.", "success");
           }}
         />
-      )}
-
-      {hasChildren && (
-        <tr>
-          <td colSpan={canEdit ? 5 : 4} style={{ padding: 0 }}>
-            <table
-              style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}
-              data-suite-list={suite.id}
-            >
-              <tbody>
-                {suite.children!.map((child) => (
-                  <SuiteRow
-                    key={child.id}
-                    suite={child}
-                    depth={depth + 1}
-                    projectId={projectId}
-                    canEdit={canEdit}
-                    showToast={showToast}
-                    onSuiteUpdated={onSuiteUpdated}
-                    onSuiteDeleted={onSuiteDeleted}
-                  />
-                ))}
-              </tbody>
-            </table>
-          </td>
-        </tr>
       )}
 
       {/* Confirm hapus suite */}
@@ -373,6 +404,12 @@ export function SuiteTree({
   const { toast, showToast, dismissToast } = useToast();
   // Anchor untuk tombol "Tambah Suite" di header halaman (via portal)
   const [headerAnchor, setHeaderAnchor] = useState<HTMLElement | null>(null);
+  /**
+   * Suite yang sedang di-drag. State-nya di sini (bukan per baris) supaya drop
+   * di baris LAIN bisa membacanya — sebelumnya tiap baris punya state sendiri
+   * sehingga drop antar-baris tidak pernah terbaca.
+   */
+  const [draggingSuiteId, setDraggingSuiteId] = useState<string | null>(null);
 
   useEffect(() => {
     const el = document.getElementById("project-header-actions");
@@ -387,14 +424,39 @@ export function SuiteTree({
     setLocalSuites((prev) => removeSuiteFromTree(prev, id));
   }, []);
 
+  /** Baris tabel (flat, depth-first) — satu tabel dengan kolom berlebar tetap. */
+  const rows = useMemo(() => flattenSuites(sortedSuites), [sortedSuites]);
+
+  /**
+   * Drop di atas baris lain → susun ulang urutan SAUDARA (parent yang sama),
+   * lalu simpan. Dibatasi ke baris dengan `parentId` yang sama supaya urutan
+   * antar-level tidak tercampur di tabel yang sudah flat.
+   */
+  const handleDropOn = (targetId: string) => {
+    const draggedId = draggingSuiteId;
+    setDraggingSuiteId(null);
+    if (!draggedId || draggedId === targetId) return;
+
+    const dragged = rows.find((r) => r.suite.id === draggedId)?.suite;
+    const target = rows.find((r) => r.suite.id === targetId)?.suite;
+    if (!dragged || !target || dragged.parentId !== target.parentId) return;
+
+    const ids = rows.filter((r) => r.suite.parentId === target.parentId).map((r) => r.suite.id);
+    const from = ids.indexOf(draggedId);
+    const to = ids.indexOf(targetId);
+    if (from === -1 || to === -1 || from === to) return;
+    void reorderSuites(target.parentId, reorderList(ids, from, to));
+  };
+
   return (
     <div
       style={{
-        width: "100%",
-        background: "#ffffff",
-        border: "1px solid var(--border)",
-        borderRadius: "var(--radius-lg)",
-        boxShadow: "var(--shadow-md)",
+        padding: "18px 22px 24px",
+        display: "flex",
+        flexDirection: "column",
+        gap: 12,
+        flex: 1,
+        fontFamily: SANS,
       }}
     >
       {/* Tombol "Tambah Suite" dirender di header halaman via portal */}
@@ -408,47 +470,44 @@ export function SuiteTree({
             style={{
               display: "inline-flex",
               alignItems: "center",
-              alignSelf: "center",
-              // Diangkat sedikit agar sejajar visual dengan baris judul.
-              marginTop: "-0.25rem",
-              gap: "0.35rem",
-              // Ringkas: padding py-1.5 px-3, teks 11px semibold.
-              padding: "0.375rem 0.75rem",
-              borderRadius: 8,
-              border: "none",
-              background: "#F59E0B",
-              color: "#111827",
+              gap: 6,
+              height: 36,
+              boxSizing: "border-box",
+              padding: "0 14px",
+              border: "1px solid #FFC348",
+              borderRadius: 9,
+              background: "#FFC348",
+              color: "#0F172A",
+              fontSize: 13,
               fontWeight: 600,
-              fontSize: 11,
-              lineHeight: 1.2,
               cursor: "pointer",
+              whiteSpace: "nowrap",
               transition: "background-color 0.15s ease",
             }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = "#D97706")}
-            onMouseLeave={(e) => (e.currentTarget.style.background = "#F59E0B")}
+            onMouseEnter={(e) => (e.currentTarget.style.background = "#F0B53D")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "#FFC348")}
           >
-            {/* Plus dalam lingkaran (w-4 h-4 = 16px). */}
-            <CirclePlus size={16} /> Suite
+            <Plus size={14} strokeWidth={2.4} aria-hidden="true" />
+            Tambah Suite
           </button>,
           headerAnchor
         )}
 
-      {/* Card header — tanpa divider bawah; padding bawah dikecilkan agar
-          jarak judul "Suites" ke tabel rapat (mb-3). */}
+      <h2 style={{ fontSize: 15, fontWeight: 600, margin: 0, color: "#0F172A" }}>Suites</h2>
+
+      {/* Container tabel: sudut membulat + scroll mendatar di layar sempit.
+          Vertikal dibiarkan tumbuh (halaman yang men-scroll) agar tidak ada
+          baris yang terpotong. */}
       <div
         style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          padding: "1rem 1rem 0.25rem",
+          flex: 1,
+          border: `1px solid ${CARD_BORDER}`,
+          borderRadius: 14,
+          overflowX: "auto",
+          overflowY: "hidden",
         }}
       >
-        <h2 style={{ fontSize: 14, fontWeight: 700, margin: 0, color: "#1E293B" }}>Suites</h2>
-      </div>
-
-      {/* Card body */}
-      <div style={{ padding: "0.5rem 1rem 1rem" }}>
-        {localSuites.length === 0 ? (
+        {rows.length === 0 ? (
           <div
             style={{
               display: "flex",
@@ -458,94 +517,116 @@ export function SuiteTree({
               textAlign: "center",
             }}
           >
-            <p
-              style={{
-                color: "var(--text-muted)",
-                fontSize: "0.9rem",
-                maxWidth: 420,
-                lineHeight: 1.5,
-              }}
-            >
+            <p style={{ color: "#64748B", fontSize: 13, maxWidth: 420, lineHeight: 1.5 }}>
               {canEdit
                 ? "Belum ada suite di project ini. Tambahkan suite pertama untuk mulai menyusun hierarki test case."
                 : "Belum ada suite di project ini."}
             </p>
           </div>
         ) : (
-          <div style={{ width: "100%", overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
-              <thead>
-                <tr
+          <table
+            style={{
+              width: "100%",
+              minWidth: 960,
+              tableLayout: "fixed",
+              borderCollapse: "collapse",
+              fontSize: 14,
+            }}
+          >
+            <colgroup>
+              <col style={{ width: 300 }} />
+              {/* Nama Suite fleksibel mengisi sisa lebar. */}
+              <col />
+              <col style={{ width: 170 }} />
+              <col style={{ width: 200 }} />
+              {canEdit && <col style={{ width: 64 }} />}
+            </colgroup>
+            <thead>
+              <tr style={{ height: 42, background: HEAD_BG }}>
+                <th
+                  scope="col"
+                  aria-sort={sortDir === "asc" ? "ascending" : "descending"}
+                  style={{ ...TH, paddingLeft: 16, borderBottom: `1px solid ${LINE}` }}
+                >
+                  {/* Kolom yang sedang aktif diurutkan: label gelap + panah. */}
+                  <button
+                    type="button"
+                    onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
+                    aria-label={`Urutkan ID Suite ${sortDir === "asc" ? "menurun (Z-A)" : "menaik (A-Z)"}`}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 4,
+                      border: "none",
+                      background: "transparent",
+                      padding: 0,
+                      fontSize: 12,
+                      fontWeight: 600,
+                      color: "#0F172A",
+                      cursor: "pointer",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    ID Suite
+                    {sortDir === "asc" ? (
+                      <ArrowUp size={12} aria-hidden="true" />
+                    ) : (
+                      <ArrowDown size={12} aria-hidden="true" />
+                    )}
+                  </button>
+                </th>
+                <th scope="col" style={{ ...TH, borderBottom: `1px solid ${LINE}` }}>
+                  Nama Suite
+                </th>
+                <th
+                  scope="col"
                   style={{
-                    color: "var(--text-muted)",
-                    textAlign: "left",
-                    background: "#F8FAFC",
-                    borderBottom: "1px solid #E5E7EB",
+                    ...TH,
+                    paddingRight: 24,
+                    textAlign: "right",
+                    borderBottom: `1px solid ${LINE}`,
                   }}
                 >
-                  <th style={{ padding: "0.6rem 1.25rem", fontWeight: 600 }}>
-                    {/* Header sortable: klik untuk toggle A-Z / Z-A. */}
-                    <button
-                      type="button"
-                      onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
-                      aria-label={`Urutkan id Suite ${sortDir === "asc" ? "menurun (Z-A)" : "menaik (A-Z)"}`}
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: 4,
-                        border: "none",
-                        background: "transparent",
-                        padding: 0,
-                        fontSize: "inherit",
-                        fontWeight: "inherit",
-                        color: "inherit",
-                        cursor: "pointer",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      id Suite
-                      {sortDir === "asc" ? (
-                        <ArrowUp size={12} aria-hidden="true" />
-                      ) : (
-                        <ArrowDown size={12} aria-hidden="true" />
-                      )}
-                    </button>
+                  Jumlah Test Case
+                </th>
+                <th scope="col" style={{ ...TH, borderBottom: `1px solid ${LINE}` }}>
+                  Last Updated
+                </th>
+                {canEdit && (
+                  <th
+                    scope="col"
+                    style={{
+                      ...TH,
+                      paddingRight: 12,
+                      textAlign: "right",
+                      borderBottom: `1px solid ${LINE}`,
+                    }}
+                  >
+                    Opsi
                   </th>
-                  <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600 }}>Nama Suite</th>
-                  <th style={{ padding: "0.6rem 0.5rem", fontWeight: 600 }}>Jumlah Test Case</th>
-                  <th style={{ padding: "0.6rem 0.5rem", fontWeight: 500, color: "#6B7280" }}>
-                    Last Updated
-                  </th>
-                  {canEdit && (
-                    <th
-                      style={{
-                        padding: "0.6rem 0.5rem",
-                        fontWeight: 600,
-                        textAlign: "center",
-                        width: 64,
-                      }}
-                    >
-                      Opsi
-                    </th>
-                  )}
-                </tr>
-              </thead>
-              <tbody data-suite-list="root">
-                {sortedSuites.map((s) => (
-                  <SuiteRow
-                    key={s.id}
-                    suite={s}
-                    depth={0}
-                    projectId={projectId}
-                    canEdit={canEdit}
-                    showToast={showToast}
-                    onSuiteUpdated={handleSuiteUpdated}
-                    onSuiteDeleted={handleSuiteDeleted}
-                  />
-                ))}
-              </tbody>
-            </table>
-          </div>
+                )}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(({ suite, depth }, i) => (
+                <SuiteRow
+                  key={suite.id}
+                  suite={suite}
+                  depth={depth}
+                  isLast={i === rows.length - 1}
+                  canDrag={canEdit && rows.length > 1}
+                  dragActive={draggingSuiteId !== null && draggingSuiteId !== suite.id}
+                  canEdit={canEdit}
+                  showToast={showToast}
+                  onSuiteUpdated={handleSuiteUpdated}
+                  onSuiteDeleted={handleSuiteDeleted}
+                  onSuiteDragStart={setDraggingSuiteId}
+                  onSuiteDragEnd={() => setDraggingSuiteId(null)}
+                  onSuiteDropOn={handleDropOn}
+                />
+              ))}
+            </tbody>
+          </table>
         )}
       </div>
 

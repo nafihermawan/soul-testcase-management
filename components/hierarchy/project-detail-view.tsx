@@ -3,19 +3,21 @@
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { SuiteTree } from "@/components/hierarchy/suite-tree";
+import { SANS } from "@/components/reports/report-tokens";
 import { ErrorBlock, NotFoundBlock, SuiteSkeleton } from "@/components/ui/data-states";
 import { RefreshContext } from "@/lib/client/refresh-context";
 import { useApi } from "@/lib/client/use-api";
 import type { ProjectTreePayload } from "@/types/api";
 
+/** Divider inset di bawah header (token yang sama dengan halaman lain). */
+const HEADER_DIVIDER = "#E8ECF1";
+
 export function ProjectDetailView({ projectId }: { projectId: string }) {
-  const { data, error, loading, reload } = useApi<ProjectTreePayload>(
-    `/api/projects/${projectId}`
-  );
+  const { data, error, loading, reload } = useApi<ProjectTreePayload>(`/api/projects/${projectId}`);
 
   if (error?.status === 404) {
     return (
-      <main style={{ fontFamily: "var(--font-sans, system-ui, sans-serif)", width: "100%" }}>
+      <main style={{ fontFamily: SANS, width: "100%" }}>
         <NotFoundBlock title="Project tidak ditemukan" />
       </main>
     );
@@ -23,7 +25,7 @@ export function ProjectDetailView({ projectId }: { projectId: string }) {
 
   if (error) {
     return (
-      <main style={{ fontFamily: "var(--font-sans, system-ui, sans-serif)", width: "100%" }}>
+      <main style={{ fontFamily: SANS, width: "100%" }}>
         <ErrorBlock message={error.message} onRetry={reload} />
       </main>
     );
@@ -31,83 +33,95 @@ export function ProjectDetailView({ projectId }: { projectId: string }) {
 
   if (loading || !data) {
     return (
-      <main style={{ fontFamily: "var(--font-sans, system-ui, sans-serif)", width: "100%" }}>
+      <main style={{ fontFamily: SANS, width: "100%" }}>
         <SuiteSkeleton />
       </main>
     );
   }
 
   return (
-    <main style={{ fontFamily: "var(--font-sans, system-ui, sans-serif)", width: "100%" }}>
-      {/* Header block */}
+    // Kolom flex setinggi area konten: `margin: -1rem` + `padding: 24` membatalkan
+    // lalu mengembalikan inset AppShell supaya padding halaman jadi 24px.
+    <main
+      style={{
+        fontFamily: SANS,
+        margin: "-1rem",
+        padding: 24,
+        minHeight: "calc(100% + 2rem)",
+        display: "flex",
+        flexDirection: "column",
+      }}
+    >
+      {/* SATU kartu gabungan: header → divider inset → daftar suite. */}
       <div
         style={{
-          // w-full: melebar penuh mengikuti container (tanpa batas max-width).
-          width: "100%",
-          background: "#fff",
-          border: "1px solid #E5E7EB",
-          borderRadius: 12,
-          boxShadow: "0px 1px 2px rgba(16, 24, 40, 0.04), 0px 4px 12px rgba(16, 24, 40, 0.06)",
-          // Padding dirapatkan (p-6 -> p-4) & jarak ke card Suites dirapatkan
-          // lagi ke mb-3 (0.75rem).
-          padding: "1rem",
-          marginBottom: "0.75rem",
+          background: "#ffffff",
+          border: "1px solid #E3E7EE",
+          borderRadius: 18,
+          overflow: "hidden",
+          flex: 1,
+          display: "flex",
+          flexDirection: "column",
         }}
       >
-        {/* Breadcrumb — ukuran diperkecil (text-[11px]) & margin bawah rapat. */}
-        <nav
-          aria-label="Breadcrumb"
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "0.35rem",
-            fontSize: 11,
-            fontWeight: 400,
-            color: "#6B7280",
-            marginBottom: "0.25rem",
-            flexWrap: "wrap",
-          }}
-        >
-          <Link href="/" style={{ color: "#6B7280" }}>
-            Projects
-          </Link>
-          <ChevronRight size={10} style={{ color: "#6B7280", opacity: 0.6 }} />
-          <span style={{ color: "#111827", fontWeight: 600 }}>{data.project.name}</span>
-        </nav>
+        <div style={{ padding: "20px 22px", display: "flex", flexDirection: "column", gap: 10 }}>
+          <nav
+            aria-label="Breadcrumb"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              fontSize: 13,
+              flexWrap: "wrap",
+            }}
+          >
+            <Link href="/" className="project-breadcrumb-link">
+              Projects
+            </Link>
+            <ChevronRight size={12} style={{ color: "#CBD5E1" }} aria-hidden="true" />
+            <span aria-current="page" style={{ fontWeight: 500, color: "#0F172A" }}>
+              {data.project.name}
+            </span>
+          </nav>
 
-        {/* Title & metadata + toolbar kanan */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 16,
+              flexWrap: "wrap",
+            }}
+          >
             <h1
               style={{
-                fontSize: 20,
-                fontWeight: 700,
+                fontSize: 24,
+                fontWeight: 600,
+                letterSpacing: "-0.02em",
+                color: "#0F172A",
                 margin: 0,
-                color: "#1E293B",
-                letterSpacing: "-0.025em",
               }}
             >
               {data.project.name}
             </h1>
+
+            {/* Anchor tombol "Tambah Suite" — dirender SuiteTree lewat portal. */}
+            <div id="project-header-actions" style={{ display: "flex", alignItems: "center" }} />
           </div>
-
-          {/* Anchor untuk tombol "Tambah Suite" dari SuiteTree — flex + center
-              agar tombol tepat di tengah vertikal terhadap judul. */}
-          <div
-            id="project-header-actions"
-            style={{ display: "flex", alignItems: "center" }}
-          />
         </div>
-      </div>
 
-      <RefreshContext.Provider value={reload}>
-        <SuiteTree
-          projectId={data.project.id}
-          platform={data.project.platform}
-          suites={data.suites}
-          canEdit={data.canEdit}
-        />
-      </RefreshContext.Provider>
+        {/* Divider INSET: berhenti 22px dari tepi kiri/kanan. */}
+        <div style={{ height: 1, margin: "0 22px", background: HEADER_DIVIDER, flexShrink: 0 }} />
+
+        <RefreshContext.Provider value={reload}>
+          <SuiteTree
+            projectId={data.project.id}
+            platform={data.project.platform}
+            suites={data.suites}
+            canEdit={data.canEdit}
+          />
+        </RefreshContext.Provider>
+      </div>
     </main>
   );
 }

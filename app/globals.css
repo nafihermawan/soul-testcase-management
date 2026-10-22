@@ -789,3 +789,24 @@ input[type="radio"]:focus-visible {
   outline: none;
   box-shadow: 0 0 0 3px #FFF1D1;
 }
+
+/* Header halaman suite: warna placeholder kolom "Cari test case…"
+   (tidak bisa disetel lewat inline style). */
+.suite-search-input::placeholder {
+  color: #94a3b8;
+  opacity: 1;
+}
+
+/* Field filter: dua field pendek berdampingan HANYA saat modal Filter ≥480px.
+   Modal berukuran min(480px, 100vw - 32px) → setara viewport ≥512px. */
+.filter-fields-pair {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+
+@media (min-width: 512px) {
+  .filter-fields-pair {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}

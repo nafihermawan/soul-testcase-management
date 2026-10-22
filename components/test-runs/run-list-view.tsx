@@ -288,8 +288,6 @@ export function RunListView({ searchParams }: { searchParams: ActiveRunsSearchPa
             baseUrl="/test-runs"
             dialogTitle="Filter Active Runs"
             showFilterButton={false}
-            // Sejajarkan field pencarian dengan tombol "+ Express Run" (40px, radius 10).
-            fieldSize="md"
             // Pencarian difilter di klien: tidak mengubah URL, jadi tidak ada
             // request ulang maupun skeleton saat mengetik.
             onSearch={setQuery}

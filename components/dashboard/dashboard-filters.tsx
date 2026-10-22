@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { FilterModal } from "@/components/ui/filter-modal";
-import { CustomSelect, filterLabelStyle } from "@/components/ui/custom-select";
+import { FilterField, FilterFieldsPair, FilterSelect } from "@/components/ui/filter-fields";
 import {
   ENVIRONMENT_OPTIONS,
   PERIOD_OPTIONS,
@@ -35,10 +35,11 @@ const DEFAULT_FILTERS: DashboardFilterState = {
 };
 
 /**
- * Filter global dashboard: satu tombol Filter + popover berisi 4 field.
+ * Filter global dashboard: satu tombol Filter + modal bersama berisi 4 field.
  *
- * Nilai dipilih ditahan sebagai `draft`; baru dikirim ke parent saat "Terapkan"
- * diklik. Shell popover-nya komponen bersama (dipakai juga di halaman Reports).
+ * Nilai dipilih ditahan sebagai `draft`; baru dikirim ke parent saat "Terapkan
+ * Filter" diklik. Presentasi (shell + field) ikut komponen bersama; opsi &
+ * logika tidak berubah.
  */
 export function DashboardFilters({
   value,
@@ -72,57 +73,72 @@ export function DashboardFilters({
       onReset={() => setDraft(DEFAULT_FILTERS)}
       onApply={() => onChange(draft)}
     >
-      <div>
-        <span style={filterLabelStyle}>Platform</span>
-        <CustomSelect
-          ariaLabel="Filter platform"
-          value={draft.platform}
-          onChange={(v) => set("platform", v)}
-          options={[
-            { value: ALL, label: PLATFORM_LABELS.ALL },
-            ...PLATFORM_OPTIONS.map((p) => ({
-              value: p as string,
-              label: PLATFORM_LABELS[p] ?? p,
-            })),
-          ]}
-        />
-      </div>
+      <FilterFieldsPair>
+        <FilterField label="Platform" htmlFor="filter-dash-platform">
+          <FilterSelect
+            id="filter-dash-platform"
+            icon="platform"
+            ariaLabel="Filter platform"
+            allValue={ALL}
+            placeholder="All Platforms"
+            value={draft.platform}
+            onChange={(v) => set("platform", v)}
+            options={[
+              { value: ALL, label: PLATFORM_LABELS.ALL },
+              ...PLATFORM_OPTIONS.map((p) => ({
+                value: p as string,
+                label: PLATFORM_LABELS[p] ?? p,
+              })),
+            ]}
+          />
+        </FilterField>
+        <FilterField label="Module" htmlFor="filter-dash-module">
+          <FilterSelect
+            id="filter-dash-module"
+            icon="suite"
+            searchable
+            ariaLabel="Filter module"
+            allValue={ALL}
+            placeholder="All Modules"
+            value={draft.module}
+            onChange={(v) => set("module", v)}
+            options={[
+              { value: ALL, label: "All Modules" },
+              ...modules.map((m) => ({ value: m.id, label: m.name })),
+            ]}
+          />
+        </FilterField>
+      </FilterFieldsPair>
 
-      <div>
-        <span style={filterLabelStyle}>Module</span>
-        <CustomSelect
-          ariaLabel="Filter module"
-          value={draft.module}
-          onChange={(v) => set("module", v)}
-          options={[
-            { value: ALL, label: "All Modules" },
-            ...modules.map((m) => ({ value: m.id, label: m.name })),
-          ]}
-        />
-      </div>
-
-      <div>
-        <span style={filterLabelStyle}>Environment</span>
-        <CustomSelect
-          ariaLabel="Filter environment"
-          value={draft.environment}
-          onChange={(v) => set("environment", v)}
-          options={[
-            { value: ALL, label: "All Environments" },
-            ...ENVIRONMENT_OPTIONS.map((env) => ({ value: env as string, label: env })),
-          ]}
-        />
-      </div>
-
-      <div>
-        <span style={filterLabelStyle}>Period</span>
-        <CustomSelect
-          ariaLabel="Filter period"
-          value={draft.period}
-          onChange={(v) => set("period", v as PeriodKey)}
-          options={PERIOD_OPTIONS.map((p) => ({ value: p.value, label: p.label }))}
-        />
-      </div>
+      <FilterFieldsPair>
+        <FilterField label="Environment" htmlFor="filter-dash-environment">
+          <FilterSelect
+            id="filter-dash-environment"
+            icon="environment"
+            ariaLabel="Filter environment"
+            allValue={ALL}
+            placeholder="All Environments"
+            value={draft.environment}
+            onChange={(v) => set("environment", v)}
+            options={[
+              { value: ALL, label: "All Environments" },
+              ...ENVIRONMENT_OPTIONS.map((env) => ({ value: env as string, label: env })),
+            ]}
+          />
+        </FilterField>
+        <FilterField label="Period" htmlFor="filter-dash-period">
+          <FilterSelect
+            id="filter-dash-period"
+            icon="date"
+            ariaLabel="Filter period"
+            allValue="ALL"
+            placeholder="All Time"
+            value={draft.period}
+            onChange={(v) => set("period", v as PeriodKey)}
+            options={PERIOD_OPTIONS.map((p) => ({ value: p.value, label: p.label }))}
+          />
+        </FilterField>
+      </FilterFieldsPair>
     </FilterModal>
   );
 }

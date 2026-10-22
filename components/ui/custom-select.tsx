@@ -1,22 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Check, ChevronDown } from "lucide-react";
 
 export type CustomSelectOption = { value: string; label: string; /** Tag kecil di samping label (mis. platform). */ badge?: string };
-
-/** Gaya label field di dalam modal/popover filter (dipakai Dashboard & Reports). */
-export const filterLabelStyle: React.CSSProperties = {
-  display: "block",
-  fontSize: 11,
-  fontWeight: 600,
-  color: "#64748B",
-  // Title Case — huruf besar di awal kata, bukan kapital semua.
-  textTransform: "none",
-  letterSpacing: "0.01em",
-  marginBottom: 4,
-};
 
 const badgeStyle: React.CSSProperties = {
   flexShrink: 0,
@@ -71,9 +59,8 @@ export function CustomSelect({
 
   const MENU_MAX_HEIGHT = 240;
   const ITEM_HEIGHT = 32;
-
   /** Letakkan menu di bawah trigger; dibalik ke atas kalau ruang bawah kurang. */
-  const place = () => {
+  const place = useCallback(() => {
     const el = triggerRef.current;
     if (!el) return;
     const r = el.getBoundingClientRect();
@@ -84,11 +71,13 @@ export function CustomSelect({
       left: r.left,
       width: r.width,
     });
-  };
+  }, [options.length, searchable]);
 
+  // `place` disertakan sebagai dependensi (bukan di-disable) supaya posisi menu
+  // ikut dihitung ulang saat jumlah opsi/mode pencarian berubah.
   useEffect(() => {
     if (open) place();
-  }, [open]);
+  }, [open, place]);
 
   useEffect(() => {
     if (!open) {

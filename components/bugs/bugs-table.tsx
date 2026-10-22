@@ -24,8 +24,12 @@ import {
 } from "@/components/settings/row-actions-menu";
 import { ConfirmDialog, Toast, useToast } from "@/components/ui/feedback";
 import { FilterModal } from "@/components/ui/filter-modal";
-import { CustomSelect, filterLabelStyle } from "@/components/ui/custom-select";
-import { MonthPicker } from "@/components/ui/month-picker";
+import {
+  FilterField,
+  FilterFieldsPair,
+  FilterMonth,
+  FilterSelect,
+} from "@/components/ui/filter-fields";
 import { BugDetailModal } from "@/components/bugs/bug-detail-modal";
 import { ReportGeneralBugModal } from "@/components/bugs/report-general-bug-modal";
 import { entityCode } from "@/lib/format";
@@ -638,18 +642,6 @@ export function BugsPageClient({
 
             <FilterModal
               title="Filter Bugs"
-              triggerClassName="btn-radius-10"
-              iconSize={16}
-              triggerStyle={{
-                height: 40,
-                padding: "0 14px",
-                border: "1px solid #FFC348",
-                background: "#FFF8E8",
-                color: "#0F172A",
-                fontSize: 14,
-                fontWeight: 600,
-                gap: 8,
-              }}
               activeCount={
                 (sevFilter ? 1 : 0) +
                 (statusFilter ? 1 : 0) +
@@ -669,41 +661,52 @@ export function BugsPageClient({
                 setMonthFilter(draftMonth);
               }}
             >
-              <div>
-                <span style={filterLabelStyle}>Severity</span>
-                <CustomSelect
-                  ariaLabel="Filter severity"
-                  value={draftSev}
-                  onChange={setDraftSev}
-                  options={[
-                    { value: "", label: "Semua Severity" },
-                    { value: "CRITICAL", label: "Critical" },
-                    { value: "HIGH", label: "High" },
-                    { value: "MEDIUM", label: "Medium" },
-                    { value: "LOW", label: "Low" },
-                  ]}
-                />
-              </div>
+              <FilterFieldsPair>
+                <FilterField label="Severity" htmlFor="filter-bugs-severity">
+                  <FilterSelect
+                    id="filter-bugs-severity"
+                    icon="severity"
+                    ariaLabel="Filter severity"
+                    allValue=""
+                    placeholder="Semua Severity"
+                    value={draftSev}
+                    onChange={setDraftSev}
+                    options={[
+                      { value: "", label: "Semua Severity" },
+                      { value: "CRITICAL", label: "Critical" },
+                      { value: "HIGH", label: "High" },
+                      { value: "MEDIUM", label: "Medium" },
+                      { value: "LOW", label: "Low" },
+                    ]}
+                  />
+                </FilterField>
 
-              <div>
-                <span style={filterLabelStyle}>Status</span>
-                <CustomSelect
-                  ariaLabel="Filter status"
-                  value={draftStatus}
-                  onChange={setDraftStatus}
-                  options={[
-                    { value: "", label: "Semua Status" },
-                    { value: "OPEN", label: "Open" },
-                    { value: "IN_PROGRESS", label: "In Progress" },
-                    { value: "CLOSED", label: "Closed" },
-                  ]}
-                />
-              </div>
+                <FilterField label="Status" htmlFor="filter-bugs-status">
+                  <FilterSelect
+                    id="filter-bugs-status"
+                    icon="status"
+                    ariaLabel="Filter status"
+                    allValue=""
+                    placeholder="Semua Status"
+                    value={draftStatus}
+                    onChange={setDraftStatus}
+                    options={[
+                      { value: "", label: "Semua Status" },
+                      { value: "OPEN", label: "Open" },
+                      { value: "IN_PROGRESS", label: "In Progress" },
+                      { value: "CLOSED", label: "Closed" },
+                    ]}
+                  />
+                </FilterField>
+              </FilterFieldsPair>
 
-              <div>
-                <span style={filterLabelStyle}>Environment</span>
-                <CustomSelect
+              <FilterField label="Environment" htmlFor="filter-bugs-environment">
+                <FilterSelect
+                  id="filter-bugs-environment"
+                  icon="environment"
                   ariaLabel="Filter environment"
+                  allValue=""
+                  placeholder="Semua Environment"
                   value={draftEnv}
                   onChange={setDraftEnv}
                   options={[
@@ -711,16 +714,17 @@ export function BugsPageClient({
                     ...ENVIRONMENT_OPTIONS.map((env) => ({ value: env, label: env })),
                   ]}
                 />
-              </div>
+              </FilterField>
 
-              <div>
-                <span style={filterLabelStyle}>Periode Laporan</span>
-                <MonthPicker
+              <FilterField label="Periode Laporan" htmlFor="filter-bugs-month">
+                <FilterMonth
+                  id="filter-bugs-month"
                   ariaLabel="Filter periode laporan"
+                  placeholder="Semua Periode"
                   value={draftMonth}
                   onChange={setDraftMonth}
                 />
-              </div>
+              </FilterField>
             </FilterModal>
 
             {/* Tombol lapor bug hanya relevan di tab General Findings */}

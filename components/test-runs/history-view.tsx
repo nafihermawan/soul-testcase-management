@@ -209,69 +209,91 @@ export function HistoryView({ searchParams }: { searchParams: HistorySearchParam
   }
 
   return (
-    <main style={{ fontFamily: "var(--font-sans)", width: "100%" }}>
-      {/* Header Card Banner */}
+    // Flex column yang mengisi tinggi area konten; kartu di bawahnya `flex: 1`
+    // sehingga pagination selalu menempel di dasar walau barisnya sedikit.
+    // `margin: -1rem` + `padding: 16` membatalkan lalu mengembalikan inset
+    // AppShell (tetap 16px) — pola yang sama dipakai halaman Active Runs.
+    <main
+      style={{
+        fontFamily: "var(--font-sans)",
+        margin: "-1rem",
+        padding: 16,
+        minHeight: "calc(100% + 2rem)",
+        display: "flex",
+        flexDirection: "column",
+      }}
+    >
+      {/* SATU kartu gabungan: header row → divider inset → tabel → pagination.
+          Chrome kartu (background/border/radius/shadow) tetap milik kartu. */}
       <div
         style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: "1rem",
-          flexWrap: "wrap",
           background: "#FFFFFF",
-          borderRadius: 12,
           border: "1px solid #E5E7EB",
+          borderRadius: 12,
           boxShadow: "0px 1px 2px rgba(16, 24, 40, 0.04), 0px 4px 12px rgba(16, 24, 40, 0.06)",
-          padding: "20px 24px",
-          marginBottom: 20,
+          overflow: "hidden",
+          flex: 1,
+          display: "flex",
+          flexDirection: "column",
         }}
       >
-        <div>
-          <h1
-            style={{
-              fontSize: 20,
-              fontWeight: 700,
-              color: "#1E293B",
-              letterSpacing: "-0.025em",
-              margin: 0,
-              lineHeight: 1.2,
-            }}
-          >
-            Run History
-          </h1>
-          <p
-            style={{
-              fontSize: 12,
-              fontWeight: 400,
-              color: "#64748B",
-              margin: "4px 0 0",
-            }}
-          >
-          </p>
+        {/* Header row — sama persis seperti sebelumnya (title kiri; search +
+            Filter kanan; padding & alignment tidak berubah). */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: "1rem",
+            flexWrap: "wrap",
+            padding: "20px 24px",
+          }}
+        >
+          <div>
+            <h1
+              style={{
+                fontSize: 20,
+                fontWeight: 700,
+                color: "#1E293B",
+                letterSpacing: "-0.025em",
+                margin: 0,
+                lineHeight: 1.2,
+              }}
+            >
+              Run History
+            </h1>
+            <p
+              style={{
+                fontSize: 12,
+                fontWeight: 400,
+                color: "#64748B",
+                margin: "4px 0 0",
+              }}
+            >
+            </p>
+          </div>
+
+          <HistoryControls
+            projects={allProjects}
+            initial={initial}
+            activeCount={activeCount}
+          />
         </div>
 
-        <HistoryControls
-          projects={allProjects}
-          initial={initial}
-          activeCount={activeCount}
-        />
-      </div>
+        {/* Satu divider tipis INSET — sejajar dengan konten header (judul di
+            kiri, tombol Filter di kanan). */}
+        <div style={{ margin: "0 24px", height: 1, background: "#EEF0F3", flexShrink: 0 }} />
 
-      <div
-        style={{
-          background: "#FFFFFF",
-          border: "1px solid #E5E7EB",
-          borderRadius: 12,
-          boxShadow: "0 1px 3px rgba(0, 0, 0, 0.05)",
-          overflow: "hidden",
-        }}
-      >
+        {/* Area tabel: `flex: 1` membuatnya mengambil sisa tinggi kartu supaya
+            pagination menempel di dasar walau barisnya sedikit. Bila tabel lebih
+            lebar dari kartu, area inilah yang bergeser mendatar — header row
+            tetap berada di atasnya. */}
         {runs.length === 0 ? (
-          <div style={{ padding: "3rem 1.5rem", textAlign: "center", color: "var(--text-muted)", fontSize: "0.9rem" }}>
+          <div style={{ flex: 1, padding: "3rem 1.5rem", textAlign: "center", color: "var(--text-muted)", fontSize: "0.9rem" }}>
             Tidak ada run yang cocok dengan filter / pencarian.
           </div>
         ) : (
-          <div style={{ overflowX: "auto" }}>
+          <div style={{ flex: 1, overflowX: "auto" }}>
             <table
               style={{
                 width: "100%",
@@ -397,7 +419,8 @@ export function HistoryView({ searchParams }: { searchParams: HistorySearchParam
           </div>
         )}
 
-        {/* Pagination footer — ukuran halaman dikunci 25, tanpa pemilih rows */}
+        {/* Pagination footer — menempel di dasar kartu; ukuran halaman dikunci
+            25, tanpa pemilih rows */}
         <HistoryPagination
           total={total}
           page={page}

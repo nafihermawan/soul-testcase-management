@@ -29,6 +29,34 @@ export const primaryButtonStyle: CSSProperties = {
   transition: "background-color 0.15s ease",
 };
 
+/**
+ * Varian KECIL tombol primer — dipakai tombol "+ Tambah Case" di header section
+ * agar tidak mendominasi baris header. Sisanya (border/background/color/
+ * inline-flex) tetap ikut `primaryButtonStyle` supaya satu sumber gaya.
+ */
+export const smallPrimaryButtonStyle: CSSProperties = {
+  gap: 5,
+  height: 28,
+  padding: "0 10px",
+  borderRadius: 7,
+  fontSize: 12,
+  fontWeight: 600,
+  width: "auto",
+};
+
+/**
+ * Varian TOOLBAR (tinggi 36) — dipakai kontrol di header halaman suite
+ * (Export / Import / Tambah Section) supaya tinggi, radius, dan ukuran teksnya
+ * seragam. Padding/warna ditimpa per tombol lewat prop `style`.
+ */
+export const toolbarButtonStyle: CSSProperties = {
+  gap: 6,
+  height: 36,
+  borderRadius: 9,
+  fontSize: 13,
+  width: "auto",
+};
+
 export const secondaryButtonStyle: CSSProperties = {
   display: "inline-flex",
   alignItems: "center",

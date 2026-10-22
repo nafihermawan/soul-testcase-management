@@ -3,14 +3,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { Card } from "@/components/ui";
 import { FilterModal } from "@/components/ui/filter-modal";
-import { CustomSelect, filterLabelStyle } from "@/components/ui/custom-select";
+import { FilterField, FilterPeriod, FilterSelect } from "@/components/ui/filter-fields";
 import { ErrorBlock, StatsCardsSkeleton, TableCardSkeleton } from "@/components/ui/data-states";
 import { ReportsView } from "@/components/reports/reports-view";
 import {
   QaPerformanceView,
-  PeriodFilterControl,
   ExportMenu,
   defaultQaPeriod,
+  periodLabelOf,
   type QaPeriodSelection,
 } from "@/components/analytics/qa-performance-view";
 import {
@@ -67,6 +67,19 @@ export function ReportsAnalyticsView() {
   // QaPerformanceView) supaya tombol Filter & Export bisa duduk di header
   // halaman, sejajar dengan tombol Filter tab Coverage & Repository.
   const [period, setPeriod] = useState<QaPeriodSelection>(defaultQaPeriod);
+  // Draft periode untuk modal Filter tab QA Performance (diterapkan saat
+  // "Terapkan Filter" diklik, sama seperti field filter lain).
+  const [draftPeriod, setDraftPeriod] = useState<QaPeriodSelection>(period);
+  useEffect(() => {
+    setDraftPeriod(period);
+  }, [period]);
+
+  /** true bila periode MASIH default (quarter berjalan) → badge filter 0. */
+  const isDefaultPeriod = (p: QaPeriodSelection) => {
+    const d = defaultQaPeriod();
+    return p.mode === d.mode && p.year === d.year && p.quarter === d.quarter && p.month === d.month;
+  };
+
   const {
     data: qaData,
     error: qaError,
@@ -167,18 +180,6 @@ export function ReportsAnalyticsView() {
             {tab === "coverage" && data && (
               <FilterModal
                 title="Filter Reports"
-                triggerClassName="btn-radius-10"
-                iconSize={16}
-                triggerStyle={{
-                  height: 40,
-                  padding: "0 14px",
-                  border: "1px solid #FFC348",
-                  background: "#FFF8E8",
-                  color: "#0F172A",
-                  fontSize: 14,
-                  fontWeight: 600,
-                  gap: 8,
-                }}
                 activeCount={(platform !== ALL ? 1 : 0) + (project !== ALL ? 1 : 0)}
                 onReset={() => {
                   setDraftPlatform(ALL);
@@ -191,10 +192,13 @@ export function ReportsAnalyticsView() {
                   setTcStatus(draftStatus);
                 }}
               >
-                <div>
-                  <span style={filterLabelStyle}>Platform</span>
-                  <CustomSelect
+                <FilterField label="Platform" htmlFor="filter-reports-platform">
+                  <FilterSelect
+                    id="filter-reports-platform"
+                    icon="platform"
                     ariaLabel="Filter platform"
+                    allValue={ALL}
+                    placeholder="Semua Platform"
                     value={draftPlatform}
                     onChange={(v) => {
                       setDraftPlatform(v);
@@ -214,11 +218,14 @@ export function ReportsAnalyticsView() {
                       { value: "API", label: "API" },
                     ]}
                   />
-                </div>
-                <div>
-                  <span style={filterLabelStyle}>Project</span>
-                  <CustomSelect
+                </FilterField>
+                <FilterField label="Project" htmlFor="filter-reports-project">
+                  <FilterSelect
+                    id="filter-reports-project"
+                    icon="project"
                     ariaLabel="Filter project"
+                    allValue={ALL}
+                    placeholder="Semua Project"
                     value={draftProject}
                     onChange={setDraftProject}
                     options={[
@@ -232,12 +239,14 @@ export function ReportsAnalyticsView() {
                         .map((p) => ({ value: p.id, label: p.name })),
                     ]}
                   />
-                </div>
-                {/* Field ke-3 — styling identik dengan dua field di atasnya. */}
-                <div>
-                  <span style={filterLabelStyle}>Status</span>
-                  <CustomSelect
+                </FilterField>
+                <FilterField label="Status" htmlFor="filter-reports-status">
+                  <FilterSelect
+                    id="filter-reports-status"
+                    icon="status"
                     ariaLabel="Filter status test case"
+                    allValue={ALL}
+                    placeholder="Semua Status"
                     value={draftStatus}
                     onChange={setDraftStatus}
                     options={[
@@ -247,16 +256,28 @@ export function ReportsAnalyticsView() {
                       { value: "DEPRECATED", label: "Deprecated" },
                     ]}
                   />
-                </div>
+                </FilterField>
               </FilterModal>
             )}
             {tab === "performance" && (
               <>
-                <PeriodFilterControl
-                  value={period}
-                  availableYears={qaData?.availableYears ?? [new Date().getUTCFullYear()]}
-                  onApply={setPeriod}
-                />
+                <FilterModal
+                  title="Filter QA Performance"
+                  activeCount={isDefaultPeriod(period) ? 0 : 1}
+                  onReset={() => setDraftPeriod(defaultQaPeriod())}
+                  onApply={() => setPeriod(draftPeriod)}
+                >
+                  <FilterField label="Period" htmlFor="filter-reports-period">
+                    <FilterPeriod
+                      id="filter-reports-period"
+                      ariaLabel="Filter periode"
+                      value={draftPeriod}
+                      label={periodLabelOf(draftPeriod)}
+                      availableYears={qaData?.availableYears ?? [new Date().getUTCFullYear()]}
+                      onChange={setDraftPeriod}
+                    />
+                  </FilterField>
+                </FilterModal>
                 <ExportMenu
                   disabled={!qaData || qaData.members.length === 0}
                   onExcel={() => qaData && void exportQaPerformanceXlsx(qaData)}

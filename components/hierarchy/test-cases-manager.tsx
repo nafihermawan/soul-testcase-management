@@ -40,7 +40,12 @@ import {
 import { ConfirmDialog, Spinner } from "@/components/ui/feedback";
 import { Select } from "@/components/ui/select";
 
-import { PrimaryButton, SecondaryButton } from "@/components/ui/button";
+import {
+  PrimaryButton,
+  SecondaryButton,
+  smallPrimaryButtonStyle,
+  toolbarButtonStyle,
+} from "@/components/ui/button";
 import { AddSectionModal } from "./add-section-modal";
 import { ImportWizardModal } from "./import-wizard-modal";
 import { SectionCard } from "./section-card";
@@ -578,7 +583,7 @@ export function TestCasesManager({
             {/* Pencarian TC di suite ini (tcId + judul). */}
             <div style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
               <Search
-                size={15}
+                size={14}
                 aria-hidden="true"
                 style={{
                   position: "absolute",
@@ -589,17 +594,18 @@ export function TestCasesManager({
               />
               <input
                 type="text"
+                className="suite-search-input"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Cari test case..."
                 aria-label="Cari test case"
                 style={{
-                  width: 256,
-                  height: 40,
+                  width: 220,
+                  height: 36,
                   boxSizing: "border-box",
-                  padding: "0 12px 0 33px",
+                  padding: "0 10px 0 32px",
                   border: "1px solid #DDE2E9",
-                  borderRadius: 10,
+                  borderRadius: 9,
                   background: "#FFFFFF",
                   color: "#0F172A",
                   fontSize: 13,
@@ -614,17 +620,34 @@ export function TestCasesManager({
               aria-haspopup="menu"
               aria-expanded={exportOpen}
               onClick={() => (exportOpen ? setExportOpen(false) : openExportMenu())}
+              style={{
+                ...toolbarButtonStyle,
+                padding: "0 10px 0 12px",
+                color: "#334155",
+                fontWeight: 500,
+              }}
             >
-              <Download size={15} /> Export <ChevronDown size={14} />
+              <Download size={14} /> Export <ChevronDown size={13} style={{ color: "#64748B" }} />
             </SecondaryButton>
 
-            <SecondaryButton onClick={() => fileRef.current?.click()}>
-              <Upload size={15} /> Import
+            <SecondaryButton
+              onClick={() => fileRef.current?.click()}
+              style={{
+                ...toolbarButtonStyle,
+                padding: "0 12px",
+                color: "#334155",
+                fontWeight: 500,
+              }}
+            >
+              <Upload size={14} /> Import
             </SecondaryButton>
 
             {!showAddSection && (
-              <PrimaryButton onClick={() => setShowAddSection(true)}>
-                <Plus size={16} strokeWidth={2.4} /> Tambah Section
+              <PrimaryButton
+                onClick={() => setShowAddSection(true)}
+                style={{ ...toolbarButtonStyle, padding: "0 14px", fontWeight: 600 }}
+              >
+                <Plus size={14} strokeWidth={2.4} /> Tambah Section
               </PrimaryButton>
             )}
 
@@ -802,8 +825,8 @@ export function TestCasesManager({
                   display: "flex",
                   alignItems: "center",
                   gap: "0.5rem",
-                  // Padding vertikal 8px agar proporsional dengan tombol 40px.
-                  padding: "8px 0.9rem",
+                  // Padding vertikal 10px: tombol "Tambah Case" varian kecil (32px).
+                  padding: "10px 0.9rem",
                   background: "var(--surface-muted)",
                   borderBottom: "1px solid var(--border)",
                 }}
@@ -831,12 +854,13 @@ export function TestCasesManager({
                 >
                   {canEdit && !addingTc && editingTcId === null && (
                     <PrimaryButton
+                      style={smallPrimaryButtonStyle}
                       onClick={() => {
                         setAddingTcFor(null);
                         setAddingTc(true);
                       }}
                     >
-                      <Plus size={16} strokeWidth={2.4} /> Tambah Case
+                      <Plus size={12} strokeWidth={2.6} /> Tambah Case
                     </PrimaryButton>
                   )}
                 </div>

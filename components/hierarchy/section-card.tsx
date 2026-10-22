@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { ChevronDown, CirclePlus, Pencil, Plus, Trash2 } from "lucide-react";
-import { PrimaryButton } from "@/components/ui/button";
+import { PrimaryButton, smallPrimaryButtonStyle } from "@/components/ui/button";
 import { RowActionsMenu } from "@/components/settings/row-actions-menu";
 import { TestCaseTable } from "./test-case-table";
 import { type Section, type TestCase } from "./test-cases-shared";
@@ -99,9 +99,9 @@ export function SectionCard({
           display: "flex",
           alignItems: "center",
           gap: "0.5rem",
-          // Padding vertikal 8px: tombol "Tambah Case" kini 40px, jadi header
-          // dijaga tetap proporsional.
-          padding: "8px 0.9rem",
+          // Padding vertikal 10px: tombol "Tambah Case" varian kecil (32px),
+          // jadi header sedikit lebih lega.
+          padding: "10px 0.9rem",
           background: "var(--surface-muted)",
           borderBottom: section.open ? "1px solid var(--border)" : "none",
           cursor: "pointer",
@@ -204,12 +204,13 @@ export function SectionCard({
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "0.5rem" }}>
           {canEdit && !addingTc && editingTcId === null && (
             <PrimaryButton
+              style={smallPrimaryButtonStyle}
               onClick={(e) => {
                 e.stopPropagation();
                 onAddCase();
               }}
             >
-              <Plus size={16} strokeWidth={2.4} /> Tambah Case
+              <Plus size={12} strokeWidth={2.6} /> Tambah Case
             </PrimaryButton>
           )}
           <div

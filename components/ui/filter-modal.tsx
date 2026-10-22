@@ -1,15 +1,33 @@
 "use client";
 
-import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { SlidersHorizontal, X } from "lucide-react";
+import { RotateCcw, SlidersHorizontal, X } from "lucide-react";
+
+/** Selector elemen yang bisa menerima fokus (untuk focus trap). */
+const FOCUSABLE =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 /**
- * Filter sebagai SATU tombol + MODAL TERPUSAT (backdrop overlay), dipakai
- * halaman Reports. Isi field diserahkan lewat `children`.
+ * Kumpulkan elemen fokusable di dalam dialog — PLUS menu field yang di-portal
+ * ke body (ditandai `data-filter-menu`), supaya navigasi keyboard di dalam
+ * dropdown yang terbuka tidak dianggap "keluar" dari modal.
+ */
+function focusablesIn(dialog: HTMLElement): HTMLElement[] {
+  const inDialog = Array.from(dialog.querySelectorAll<HTMLElement>(FOCUSABLE));
+  const inMenus = Array.from(
+    document.querySelectorAll<HTMLElement>(`[data-filter-menu] ${FOCUSABLE}`)
+  );
+  return [...inDialog, ...inMenus].filter((el) => el.offsetParent !== null || el === document.activeElement);
+}
+
+/**
+ * Filter = SATU tombol + modal terpusat yang dipakai SEMUA halaman
+ * (Run History, Dashboard, Bugs, Reports). Isi field diserahkan lewat
+ * `children` supaya logika tiap halaman tetap ada di halamannya.
  *
- * Nilai filter ditahan sebagai draft oleh pemanggil; `onApply` dipanggil saat
- * tombol Terapkan diklik, `onReset` hanya mengembalikan draft.
+ * Nilai filter ditahan sebagai draft oleh pemanggil: `onReset` mengembalikan
+ * draft, `onApply` dipanggil saat "Terapkan Filter" diklik (lalu modal menutup).
  */
 export function FilterModal({
   title,
@@ -17,30 +35,21 @@ export function FilterModal({
   onReset,
   onApply,
   children,
-  triggerStyle,
-  triggerClassName,
-  iconSize = 13,
 }: {
   title: string;
   activeCount: number;
   onReset: () => void;
   onApply: () => void;
   children: ReactNode;
-  /** Override sebagian gaya tombol pemicu untuk halaman tertentu, tanpa
-   *  mengubah pemakai lain (Reports/Analytics/Dashboard/Run History).
-   *  Kalau `background`/`borderColor` di-override, nilai itu sekaligus dipakai
-   *  sebagai warna yang dipulihkan setelah hover. */
-  triggerStyle?: CSSProperties;
-  /** Kelas tambahan pada tombol pemicu (mis. override radius). */
-  triggerClassName?: string;
-  /** Ukuran ikon sliders pada tombol pemicu. */
-  iconSize?: number;
 }) {
   const [open, setOpen] = useState(false);
   // `mounted` menahan portal selama animasi keluar; `shown` adalah target
   // transisi (fade + scale-up) supaya buka & tutup sama-sama halus.
   const [mounted, setMounted] = useState(false);
   const [shown, setShown] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const titleId = useId();
 
   useEffect(() => {
     if (open) {
@@ -54,12 +63,9 @@ export function FilterModal({
   }, [open]);
 
   /**
-   * Animasi MASUK dijalankan terpisah dari `mounted`, dengan DUA rAF.
-   *
-   * Satu rAF saja tidak cukup: callback-nya bisa ikut ter-batch dengan commit
-   * React yang baru memasang elemen, sehingga frame "kondisi awal" (opacity 0)
-   * tidak pernah dilukis dan transisinya tidak jalan sama sekali. rAF kedua
-   * memastikan frame awal sudah tergambar sebelum target transisi dipasang.
+   * Animasi MASUK dijalankan terpisah dari `mounted`, dengan DUA rAF: satu rAF
+   * saja bisa ter-batch dengan commit React sehingga frame awal (opacity 0)
+   * tidak pernah dilukis dan transisinya tidak jalan.
    */
   useEffect(() => {
     if (!mounted) return;
@@ -73,10 +79,32 @@ export function FilterModal({
     };
   }, [mounted]);
 
+  // Esc menutup, Tab berputar di dalam modal, body tidak ikut ter-scroll.
   useEffect(() => {
     if (!mounted) return;
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
+      if (e.key === "Escape") {
+        setOpen(false);
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const dialog = dialogRef.current;
+      if (!dialog) return;
+      const nodes = focusablesIn(dialog);
+      if (nodes.length === 0) return;
+      const first = nodes[0];
+      const last = nodes[nodes.length - 1];
+      const active = document.activeElement as HTMLElement | null;
+      const inside = active === dialog || (!!active && nodes.includes(active));
+      if (e.shiftKey) {
+        if (!inside || active === first) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else if (!inside || active === last) {
+        e.preventDefault();
+        first.focus();
+      }
     };
     document.addEventListener("keydown", onKeyDown);
     const prev = document.body.style.overflow;
@@ -87,48 +115,47 @@ export function FilterModal({
     };
   }, [mounted]);
 
-  // Warna pulih setelah hover: ikut nilai override bila ada, supaya border/latar
-  // tidak "melompat" kembali ke default untuk halaman yang memakai `triggerStyle`.
-  const restoreBg = typeof triggerStyle?.background === "string" ? triggerStyle.background : "#fff";
-  const restoreBorder =
-    typeof triggerStyle?.borderColor === "string" ? triggerStyle.borderColor : "#FFC348";
+  // Fokus awal dipindah ke dalam dialog; saat ditutup dikembalikan ke tombol
+  // Filter. `wasOpen` mencegah focus-steal saat komponen pertama kali mount.
+  const wasOpen = useRef(false);
+  useEffect(() => {
+    if (mounted) {
+      wasOpen.current = true;
+      dialogRef.current?.focus();
+    } else if (wasOpen.current) {
+      triggerRef.current?.focus();
+    }
+  }, [mounted]);
 
   return (
     <>
+      {/* Tombol pemicu — satu gaya untuk seluruh aplikasi. */}
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen(true)}
-        className={triggerClassName}
+        className="btn-radius-10"
         style={{
           display: "inline-flex",
           alignItems: "center",
           gap: 8,
-          // Ringkas & sejajar dengan search bar di sebelahnya: h-8 (32px),
-          // padding horizontal 12px, teks text-xs (12px).
-          height: 32,
-          padding: "0 12px",
-          // Outlined/ghost amber: border tipis, latar putih, teks + ikon amber.
+          height: 40,
+          boxSizing: "border-box",
+          padding: "0 14px",
           border: "1px solid #FFC348",
-          background: "#fff",
-          color: "#F59E0B",
-          fontWeight: 500,
-          fontSize: 12,
-          borderRadius: 8,
+          borderRadius: 10,
+          background: "#FFF8E8",
+          color: "#0F172A",
+          fontSize: 14,
+          fontWeight: 600,
+          whiteSpace: "nowrap",
           cursor: "pointer",
-          transition: "background-color 0.15s ease, border-color 0.15s ease",
-          ...triggerStyle,
+          transition: "background-color 0.15s ease",
         }}
-        onMouseEnter={(e) => {
-          // amber-50/50 — tint kuning sangat tipis saat hover.
-          e.currentTarget.style.background = "rgba(255, 251, 235, 0.5)";
-          e.currentTarget.style.borderColor = "#FBBF24";
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.background = restoreBg;
-          e.currentTarget.style.borderColor = restoreBorder;
-        }}
+        onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255, 251, 235, 0.6)")}
+        onMouseLeave={(e) => (e.currentTarget.style.background = "#FFF8E8")}
       >
-        <SlidersHorizontal size={iconSize} />
+        <SlidersHorizontal size={16} aria-hidden="true" />
         Filter
         {activeCount > 0 && (
           <span
@@ -151,9 +178,6 @@ export function FilterModal({
         typeof document !== "undefined" &&
         createPortal(
           <div
-            role="dialog"
-            aria-modal="true"
-            aria-label={title}
             onClick={() => setOpen(false)}
             style={{
               position: "fixed",
@@ -163,61 +187,92 @@ export function FilterModal({
               alignItems: "center",
               justifyContent: "center",
               padding: 16,
-              background: "rgba(15, 23, 42, 0.4)",
+              background: "rgba(15, 23, 42, 0.45)",
               backdropFilter: "blur(4px)",
               opacity: shown ? 1 : 0,
               transition: "opacity 0.2s ease-out",
             }}
           >
             <div
+              ref={dialogRef}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby={titleId}
+              tabIndex={-1}
               onClick={(e) => e.stopPropagation()}
               style={{
-                width: "100%",
-                maxWidth: 448,
-                background: "#fff",
-                borderRadius: 16,
-                border: "1px solid #F1F5F9",
-                boxShadow: "0 25px 50px -12px rgba(15, 23, 42, 0.25)",
-                padding: 24,
+                width: 480,
+                maxWidth: "calc(100vw - 32px)",
+                maxHeight: "calc(100vh - 48px)",
+                background: "#FFFFFF",
+                borderRadius: 18,
+                overflow: "hidden",
                 display: "flex",
                 flexDirection: "column",
-                gap: 20,
+                boxShadow: "0 24px 48px -12px rgba(15, 23, 42, 0.28)",
+                outline: "none",
                 opacity: shown ? 1 : 0,
-                // Naik sedikit sambil membesar — gerakan kecil ini membuat
-                // transisinya terasa jelas, bukan sekadar kedip.
                 transform: shown ? "translateY(0) scale(1)" : "translateY(-8px) scale(0.97)",
-                transition:
-                  "opacity 0.2s ease-out, transform 0.2s cubic-bezier(0.16, 1, 0.3, 1)",
+                transition: "opacity 0.2s ease-out, transform 0.2s cubic-bezier(0.16, 1, 0.3, 1)",
                 willChange: "opacity, transform",
               }}
             >
+              {/* Header — seluruh modal putih (tidak ada latar abu). */}
               <div
                 style={{
                   display: "flex",
-                  alignItems: "center",
                   justifyContent: "space-between",
+                  alignItems: "center",
                   gap: 12,
-                  // Garis pemisah di bawah judul; ter-inset oleh padding dialog.
-                  paddingBottom: 14,
-                  borderBottom: "1px solid #F1F5F9",
+                  padding: "18px 16px 16px 24px",
+                  flexShrink: 0,
                 }}
               >
-                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "#0F172A" }}>
-                  {title}
-                </h3>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+                  <span
+                    style={{
+                      width: 32,
+                      height: 32,
+                      borderRadius: 9,
+                      background: "#FFF8E8",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      flexShrink: 0,
+                    }}
+                  >
+                    <SlidersHorizontal size={16} color="#0F172A" aria-hidden="true" />
+                  </span>
+                  <h3
+                    id={titleId}
+                    style={{
+                      margin: 0,
+                      fontSize: 17,
+                      fontWeight: 600,
+                      color: "#0F172A",
+                      letterSpacing: "-0.01em",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {title}
+                  </h3>
+                </div>
                 <button
                   type="button"
                   onClick={() => setOpen(false)}
                   aria-label="Tutup"
                   style={{
-                    width: 30,
-                    height: 30,
+                    width: 36,
+                    height: 36,
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
                     border: "none",
                     background: "transparent",
-                    color: "#6B7280",
+                    borderRadius: 9,
+                    color: "#64748B",
                     cursor: "pointer",
                     flexShrink: 0,
                   }}
@@ -226,36 +281,65 @@ export function FilterModal({
                 </button>
               </div>
 
-              {children}
+              {/* Divider INSET (elemen tersendiri, berhenti 24px dari tepi). */}
+              <div style={{ height: 1, margin: "0 24px", background: "#EEF1F5", flexShrink: 0 }} />
+
+              {/* Body — men-scroll bila field-nya banyak; header/footer tetap. */}
+              <div
+                style={{
+                  padding: "20px 24px 24px",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 16,
+                  overflowY: "auto",
+                  minHeight: 0,
+                }}
+              >
+                {children}
+              </div>
+
+              {/* Divider INSET di atas footer. */}
+              <div style={{ height: 1, margin: "0 24px", background: "#EEF1F5", flexShrink: 0 }} />
 
               <div
                 style={{
                   display: "flex",
+                  justifyContent: "space-between",
                   alignItems: "center",
-                  justifyContent: "flex-end",
-                  gap: 8,
-                  paddingTop: 12,
-                  borderTop: "1px solid #F1F5F9",
+                  gap: 12,
+                  padding: "14px 24px",
+                  background: "#FFFFFF",
+                  flexShrink: 0,
                 }}
               >
+                {/* Reset: tombol teks tanpa border/background. */}
                 <button
                   type="button"
                   onClick={onReset}
                   style={{
-                    padding: "8px 14px",
-                    fontSize: 12,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 8,
+                    height: 40,
+                    padding: "0 12px",
+                    marginLeft: -12,
+                    border: "none",
+                    borderRadius: 10,
+                    background: "transparent",
                     color: "#475569",
-                    background: "#fff",
-                    border: "1px solid #E2E8F0",
-                    fontWeight: 600,
-                    borderRadius: 6,
+                    fontSize: 14,
+                    fontWeight: 500,
                     cursor: "pointer",
+                    transition: "color 0.15s ease",
                   }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = "#F8FAFC")}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = "#fff")}
+                  onMouseEnter={(e) => (e.currentTarget.style.color = "#0F172A")}
+                  onMouseLeave={(e) => (e.currentTarget.style.color = "#475569")}
                 >
-                  Reset
+                  <RotateCcw size={15} aria-hidden="true" />
+                  Reset Filter
                 </button>
+
+                {/* Terapkan: primer kuning, teks saja. */}
                 <button
                   type="button"
                   onClick={() => {
@@ -263,19 +347,22 @@ export function FilterModal({
                     setOpen(false);
                   }}
                   style={{
-                    padding: "8px 16px",
-                    fontSize: 12,
+                    height: 40,
+                    boxSizing: "border-box",
+                    padding: "0 18px",
+                    border: "1px solid #FFC348",
+                    borderRadius: 10,
                     background: "#FFC348",
                     color: "#0F172A",
-                    fontWeight: 700,
-                    border: "none",
-                    borderRadius: 6,
+                    fontSize: 14,
+                    fontWeight: 600,
                     cursor: "pointer",
+                    transition: "background-color 0.15s ease",
                   }}
                   onMouseEnter={(e) => (e.currentTarget.style.background = "#F0B53D")}
                   onMouseLeave={(e) => (e.currentTarget.style.background = "#FFC348")}
                 >
-                  Terapkan
+                  Terapkan Filter
                 </button>
               </div>
             </div>

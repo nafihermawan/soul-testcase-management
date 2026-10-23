@@ -14,12 +14,15 @@ const MIN_SLICE_CSS = 32;
 /**
  * Tangkap elemen .report-container & simpan sebagai PDF via jsPDF + html2canvas.
  *
+ * Diekspor karena dipakai juga oleh `ReportAutoDownload` (unduhan langsung dari
+ * halaman Test Run lewat `?download=pdf`).
+ *
  * Pemotongan per halaman sengaja dibuat sadar-batas: elemen yang ditandai
  * `data-pdf-avoid-break` (kartu TC, tabel ringkasan, metadata, bug, catatan)
  * tidak boleh terbelah dua halaman. Tanpa ini, irisan canvas tetap memotong
  * kartu di tengah karena html2canvas menghasilkan SATU gambar panjang.
  */
-async function downloadContainerAsPdf(fileName: string): Promise<void> {
+export async function downloadReportPdf(fileName: string): Promise<void> {
   const [{ jsPDF }, { default: html2canvas }] = await Promise.all([
     import("jspdf"),
     import("html2canvas"),
@@ -138,7 +141,7 @@ export function ReportActionBar({
     if (downloading) return;
     setDownloading(true);
     try {
-      await downloadContainerAsPdf(fileName ?? "test-run-report");
+      await downloadReportPdf(fileName ?? "test-run-report");
     } catch (err) {
       console.error("Gagal membuat PDF:", err);
       alert("Gagal membuat PDF. Coba gunakan Print > Save as PDF.");

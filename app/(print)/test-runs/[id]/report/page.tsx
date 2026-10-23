@@ -5,6 +5,7 @@ import { RUN_STATUS_LABEL, type RunStatusValue } from "@/lib/run-status";
 import { countsFromStatuses, formatPct, passRateOf } from "@/lib/qa-metrics";
 import { requireUser } from "@/lib/hierarchy";
 import { ReportActionBar } from "@/components/test-runs/report-action-bar";
+import { ReportAutoDownload } from "@/components/test-runs/report-auto-download";
 
 /** Warna pill status untuk versi cetak (server component — tanpa modul client). */
 const PRINT_RUN_STATUS_TONE: Record<string, { color: string; bg: string; border: string }> = {
@@ -24,8 +25,11 @@ const PRINT_BUG_STATUS: Record<string, { label: string; color: string; bg: strin
 
 export default async function RunReportPage({
   params,
+  searchParams,
 }: {
   params: { id: string };
+  /** `?download=pdf` → langsung unduh PDF tanpa klik apa pun (dipakai tombol Export Report). */
+  searchParams?: { download?: string };
 }) {
   await requireUser();
 
@@ -119,6 +123,8 @@ export default async function RunReportPage({
   }
 
   const runCode = runCodeOf({ id: run.id, sprint: run.sprint, createdAt: run.createdAt });
+  /** Nama file standar: TEST-RUN_<kode run>_<nama rapi>_<YYYYMMDD>.pdf */
+  const reportFileName = `TEST-RUN_${runCode}_${sanitizeFilename(run.name)}_${getFormattedDate()}`;
 
   const fmt = (d: Date) =>
     d.toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" }) +
@@ -147,11 +153,8 @@ export default async function RunReportPage({
         margin: "0 auto",
       }}
     >
-      {/* Nama file standar: TEST-RUN_<kode run>_<nama rapi>_<YYYYMMDD>.pdf */}
-      <ReportActionBar
-        detailUrl={`/test-runs/${run.id}`}
-        fileName={`TEST-RUN_${runCode}_${sanitizeFilename(run.name)}_${getFormattedDate()}`}
-      />
+      <ReportActionBar detailUrl={`/test-runs/${run.id}`} fileName={reportFileName} />
+      {searchParams?.download === "pdf" && <ReportAutoDownload fileName={reportFileName} />}
 
       {/* Document header */}
       <div

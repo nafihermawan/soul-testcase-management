@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Pencil, RotateCcw, Trash2 } from "lucide-react";
+import { FileText, Pencil, RotateCcw, Trash2 } from "lucide-react";
 import { deleteRun, setRunStatus } from "@/lib/actions/test-runs";
 import {
   RowActionsMenu,
@@ -19,6 +19,7 @@ export function RunRowActions({
   runId,
   runName,
   allowReRun = false,
+  allowViewReport = false,
   onReRun,
   onDeleted,
 }: {
@@ -26,6 +27,8 @@ export function RunRowActions({
   runName: string;
   /** Tampilkan "Re-run" — hanya relevan di Run History (run sudah COMPLETED). */
   allowReRun?: boolean;
+  /** Tampilkan "Lihat Detail Report" (preview visual, bukan unduhan). */
+  allowViewReport?: boolean;
   /** Dipanggil setelah Re-run sukses: parent membuang baris ini dari daftar. */
   onReRun?: () => void;
   onDeleted?: () => void;
@@ -63,6 +66,15 @@ export function RunRowActions({
             icon: <RotateCcw size={15} />,
             iconColor: "#D97706",
             onClick: () => void doReRun(),
+          },
+        ]
+      : []),
+    ...(allowViewReport
+      ? [
+          {
+            label: "Lihat Detail Report",
+            icon: <FileText size={15} />,
+            href: `/test-runs/${runId}/report`,
           },
         ]
       : []),

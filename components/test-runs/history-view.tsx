@@ -407,6 +407,9 @@ export function HistoryView({ searchParams }: { searchParams: HistorySearchParam
                           // Run History isinya run COMPLETED — di sini "Re-run"
                           // relevan (mengembalikannya ke Active Runs).
                           allowReRun
+                          // Preview report: tombol "Report" di baris kini
+                          // langsung mengunduh, jadi akses visual ada di sini.
+                          allowViewReport
                           onReRun={() => removeRunLocally(run.id)}
                           onDeleted={() => removeRunLocally(run.id)}
                         />

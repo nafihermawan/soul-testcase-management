@@ -2,8 +2,9 @@
 
 import { useState, type CSSProperties, type ReactNode } from "react";
 import { CheckCircle2, FileText } from "lucide-react";
-import Link from "next/link";
 import { runStatusLabel } from "@/components/test-runs/test-run-status-badge";
+import { Spinner, Toast, useToast } from "@/components/ui/feedback";
+import { useReportPdfDownload } from "@/components/test-runs/use-report-pdf-download";
 
 /** Isi sel tabel: satu baris, kelebihan teks dipotong elipsis. */
 const truncate: CSSProperties = {
@@ -59,6 +60,15 @@ export function HistoryRunRow({
   // kolom beku tetap putih saat barisnya di-hover (background-nya opaque).
   const [hovered, setHovered] = useState(false);
   const frozenBg = hovered ? "#F8FAFC" : "#fff";
+
+  const { toast, showToast, dismissToast } = useToast();
+  /**
+   * Tombol "Report" = unduh PDF LANGSUNG dari baris ini (tanpa pindah halaman).
+   * Untuk melihat preview-nya, tersedia "Lihat Detail Report" di menu kebab.
+   */
+  const { downloading, startPdfDownload } = useReportPdfDownload(() =>
+    showToast("Gagal mengunduh laporan.", "error")
+  );
 
   const projectLabel =
     projects.length > 1 ? (
@@ -186,10 +196,16 @@ export function HistoryRunRow({
 
       <td style={{ padding: "0.6rem 1rem", fontSize: 12, textAlign: "right", whiteSpace: "nowrap" }}>
         <span style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem" }}>
-          <Link
-            href={`/test-runs/${id}/report`}
-            title="Export Report PDF"
-            onClick={(e) => e.stopPropagation()}
+          <button
+            type="button"
+            title="Unduh Report PDF"
+            disabled={downloading}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (downloading) return;
+              showToast("Mengunduh Laporan...", "success");
+              startPdfDownload(id);
+            }}
             style={{
               display: "inline-flex",
               alignItems: "center",
@@ -201,13 +217,14 @@ export function HistoryRunRow({
               color: "#475569",
               fontSize: 12,
               fontWeight: 600,
-              textDecoration: "none",
+              cursor: downloading ? "wait" : "pointer",
             }}
           >
-            <FileText size={12} /> Report
-          </Link>
+            {downloading ? <Spinner size={12} /> : <FileText size={12} />} Report
+          </button>
           {extraAction}
         </span>
+        <Toast toast={toast} onDismiss={dismissToast} />
       </td>
     </tr>
   );

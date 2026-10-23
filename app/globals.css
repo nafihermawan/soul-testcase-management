@@ -216,6 +216,16 @@ button,
   border-radius: 12px !important;
 }
 
+/* Split button "Export Report": dua segmen menyatu (sudut dalam siku).
+   Perlu !important agar menang dari radius global 3px. */
+.split-btn-left {
+  border-radius: 10px 0 0 10px !important;
+}
+
+.split-btn-right {
+  border-radius: 0 10px 10px 0 !important;
+}
+
 /* Field di panel Eksekusi: fokus kuning (border + ring). */
 .exec-field:focus,
 .exec-field:focus-visible {

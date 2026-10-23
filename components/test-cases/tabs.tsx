@@ -45,7 +45,9 @@ export function Tabs({ tabs, initialKey }: { tabs: TabItem[]; initialKey?: strin
                 fontWeight: isActive ? 700 : 500,
                 fontSize: "0.85rem",
                 cursor: "pointer",
-                transition: "all 0.15s ease",
+                // Properti eksplisit (tanpa `all`) memakai token motion global.
+                transition:
+                  "background-color var(--dur-fast, 120ms) var(--ease-out, ease-out), border-color var(--dur-fast, 120ms) var(--ease-out, ease-out), color var(--dur-fast, 120ms) var(--ease-out, ease-out)",
               }}
             >
               {tab.label}
@@ -53,7 +55,10 @@ export function Tabs({ tabs, initialKey }: { tabs: TabItem[]; initialKey?: strin
           );
         })}
       </div>
-      <div>{tabs.find((t) => t.key === active)?.content ?? null}</div>
+      {/* Cross-fade isi tab saat berganti. */}
+      <div key={active} className="content-fade-in">
+        {tabs.find((t) => t.key === active)?.content ?? null}
+      </div>
     </div>
   );
 }

@@ -27,6 +27,7 @@ export function Tooltip({
       {open && (
         <span
           role="tooltip"
+          className="ui-tooltip"
           style={{
             position: "absolute",
             bottom: "calc(100% + 6px)",

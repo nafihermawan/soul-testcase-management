@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 export class HttpError extends Error {
   status: number;
@@ -107,11 +107,29 @@ type UseApiState<T> = {
  * Hook data fetching untuk halaman client-rendered.
  * - path null / enabled=false => tidak fetch.
  * - Cache in-memory ber-TTL: back-navigation dalam window TTL tidak fetch ulang.
- * - reload() memaksa fetch baru (cache dibuang dulu).
+ * - reload() memaksa fetch baru (cache dibuang dulu, skeleton tampil).
+ * - pollMs > 0 => refetch background berkala (tanpa skeleton).
+ * - refetchOnFocus => revalidasi saat tab kembali fokus/visible (tanpa skeleton).
+ * - alwaysFresh => cache tetap dipakai untuk paint pertama, tapi data segar
+ *   selalu diambil di background saat mount (untuk statistik yang harus akurat).
  * - Response race-safe: hasil basi diabaikan; fetch dibatalkan saat unmount.
  */
-export function useApi<T>(path: string | null, opts?: { enabled?: boolean }) {
+export function useApi<T>(
+  path: string | null,
+  opts?: {
+    enabled?: boolean;
+    /** Interval refetch background dalam ms (0/undefined = nonaktif). */
+    pollMs?: number;
+    /** Revalidasi saat window/tab kembali fokus atau visible. */
+    refetchOnFocus?: boolean;
+    /** Selalu ambil data segar di background, walau cache masih fresh. */
+    alwaysFresh?: boolean;
+  }
+) {
   const enabled = opts?.enabled ?? true;
+  const pollMs = opts?.pollMs ?? 0;
+  const refetchOnFocus = opts?.refetchOnFocus ?? false;
+  const alwaysFresh = opts?.alwaysFresh ?? false;
   const usable = enabled && path !== null;
 
   const [state, setState] = useState<UseApiState<T>>(() => {
@@ -124,6 +142,12 @@ export function useApi<T>(path: string | null, opts?: { enabled?: boolean }) {
       : { data: null, error: null, loading: true };
   });
   const [tick, setTick] = useState(0);
+  /**
+   * Penanda bahwa tick berikutnya adalah refresh BACKGROUND: data lama tetap
+   * ditampilkan (tanpa skeleton) sampai data baru tiba, dan kegagalan jaringan
+   * sesaat tidak menimpa data yang sudah ada.
+   */
+  const silentRef = useRef(false);
 
   useEffect(() => {
     if (!usable || !path) {
@@ -132,13 +156,21 @@ export function useApi<T>(path: string | null, opts?: { enabled?: boolean }) {
     }
 
     const cached = isFresh(path);
-    if (cached) {
+    const background = silentRef.current || (alwaysFresh && cached !== null);
+    silentRef.current = false;
+
+    if (cached && !background) {
       setState({ data: cached.data as T, error: null, loading: false });
       return;
     }
 
     let cancelled = false;
-    setState((s) => ({ data: s.data, error: null, loading: true }));
+    if (cached) {
+      // Pakai cache sebagai paint pertama, data segar menyusul di background.
+      setState({ data: cached.data as T, error: null, loading: false });
+    } else if (!background) {
+      setState((s) => ({ data: s.data, error: null, loading: true }));
+    }
 
     fetchCached<T>(path)
       .then((data) => {
@@ -146,6 +178,8 @@ export function useApi<T>(path: string | null, opts?: { enabled?: boolean }) {
       })
       .catch((e: unknown) => {
         if (cancelled) return;
+        // Refresh background gagal: pertahankan data terakhir yang valid.
+        if (background) return;
         const err = e instanceof HttpError ? e : new HttpError(0, "Terjadi kesalahan koneksi.");
         setState((s) => ({
           data: s.data,
@@ -157,18 +191,52 @@ export function useApi<T>(path: string | null, opts?: { enabled?: boolean }) {
     return () => {
       cancelled = true;
     };
-  }, [path, usable, tick]);
+  }, [path, usable, tick, alwaysFresh]);
 
   const reload = useCallback(() => {
     // Mutasi sudah terjadi di server -> jangan pakai data cache mana pun.
     invalidateApiCache();
+    silentRef.current = false;
     setTick((t) => t + 1);
   }, []);
+
+  /**
+   * Refetch background: tanpa skeleton & tanpa menimpa data bila gagal.
+   * Cache global sengaja TIDAK dibuang di sini — fetch-nya memang melewati
+   * cache (lihat `background`), jadi halaman lain tidak ikut kehilangan cache.
+   */
+  const revalidateSilently = useCallback(() => {
+    silentRef.current = true;
+    setTick((t) => t + 1);
+  }, []);
+
+  // Polling berkala + revalidasi saat tab kembali fokus/visible.
+  useEffect(() => {
+    if (!usable) return;
+    const interval = pollMs > 0 ? window.setInterval(revalidateSilently, pollMs) : null;
+    if (!refetchOnFocus) {
+      return () => {
+        if (interval) window.clearInterval(interval);
+      };
+    }
+    const onFocus = () => revalidateSilently();
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") revalidateSilently();
+    };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      if (interval) window.clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [usable, pollMs, refetchOnFocus, revalidateSilently]);
 
   return {
     data: state.data,
     error: state.error,
     loading: state.loading,
     reload,
+    revalidateSilently,
   };
 }

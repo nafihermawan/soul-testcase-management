@@ -2,31 +2,55 @@
 
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { AlertCircle, CheckCircle2, Loader2, Upload, X } from "lucide-react";
-import { Select } from "@/components/ui/select";
+import {
+  AlertCircle,
+  Check,
+  CheckCircle2,
+  ChevronDown,
+  Download,
+  FileText,
+  Upload,
+  X,
+} from "lucide-react";
+import { MONO, SANS } from "@/components/reports/report-tokens";
 
-/* ---------- Import Wizard (Step 2: Preview & Mapping) ---------- */
+/* ---------- Token (selaras bahasa desain Reports/Filters) ---------- */
+const TEXT = "#0F172A";
+const SECONDARY = "#334155";
+const MUTED = "#475569";
+const CAPTION = "#64748B";
+const FAINT = "#94A3B8";
+const LINE = "#EEF1F5";
+const BOX_BORDER = "#E3E7EE";
+const INPUT_BORDER = "#DDE2E9";
+const ROW_DIVIDER = "#F1F4F8";
+const HEAD_BG = "#F8FAFC";
+const YELLOW = "#FFC348";
+const YELLOW_TINT = "#FFF8E8";
+const YELLOW_LIGHT = "#FFFCF4";
+const YELLOW_TILE = "#FFF1D1";
+const SUCCESS = "#15803D";
+const SUCCESS_TILE = "#F0F9F3";
+const DANGER = "#B91C1C";
 
-const IMPORT_FIELDS = [
-  { value: "section", label: "Section" },
-  { value: "tcId", label: "TC ID" },
-  { value: "title", label: "Title (Judul)" },
-  { value: "type", label: "Type" },
-  { value: "priority", label: "Priority" },
-  { value: "scenario", label: "Description / Scenario" },
-  { value: "precondition", label: "Pre-conditions" },
-  { value: "expectedResult", label: "Expected Result" },
-  { value: "steps", label: "Step Action" },
-  { value: "testData", label: "Test Data" },
-  { value: "status", label: "Status" },
-] as const;
+/** Urutan field pada kolom "Field Mapping" (label sengaja lowercase). */
+const FIELD_ROWS: { field: string; label: string; required?: boolean }[] = [
+  { field: "section", label: "section" },
+  { field: "title", label: "title", required: true },
+  { field: "tcId", label: "tcid" },
+  { field: "type", label: "type" },
+  { field: "scenario", label: "scenario" },
+  { field: "precondition", label: "precondition" },
+  { field: "steps", label: "steps" },
+  { field: "testData", label: "testData" },
+  { field: "expectedResult", label: "expectedResult", required: true },
+  { field: "priority", label: "priority" },
+  { field: "status", label: "status" },
+];
 
-/**
- * Urutan kolom + nama header CSV EXPORT — 100% presisi dengan format template
- * upload terbaru (11 kolom, camelCase). Sumber tunggal supaya tidak melenceng.
- */
+const STEPS = ["Upload File", "Mapping & Preview", "Import"];
 
-/** Auto-match: cocokkan nama header file ke field sistem (case-insensitive, toleran spasi/_/-). */
+/** Auto-match: cocokkan nama header file ke field sistem (toleran spasi/_/-). */
 const autoMatchField = (header: string): string => {
   const key = header
     .trim()
@@ -77,22 +101,72 @@ const autoMatchField = (header: string): string => {
   return map[key] ?? "";
 };
 
+/** Tombol sekunder (Batal / Pilih File / Ganti File). */
+const secondaryBtn: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: 6,
+  boxSizing: "border-box",
+  border: `1px solid ${INPUT_BORDER}`,
+  background: "#FFFFFF",
+  color: TEXT,
+  fontWeight: 500,
+  cursor: "pointer",
+  whiteSpace: "nowrap",
+  transition: "background-color 0.15s ease, border-color 0.15s ease",
+};
+
+/** Tombol primer kuning (teks saja) + keadaan disabled abu. */
+const primaryBtn = (enabled: boolean): React.CSSProperties => ({
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  height: 40,
+  boxSizing: "border-box",
+  padding: "0 18px",
+  borderRadius: 10,
+  border: `1px solid ${enabled ? YELLOW : LINE}`,
+  background: enabled ? YELLOW : "#F1F5F9",
+  color: enabled ? TEXT : FAINT,
+  fontSize: 14,
+  fontWeight: 600,
+  cursor: enabled ? "pointer" : "not-allowed",
+  whiteSpace: "nowrap",
+  transition: "background-color 0.15s ease",
+});
+
 export function ImportWizardModal({
   step,
   fileName,
   headers,
   rows,
+  error,
   onClose,
   onProceedToPreview,
   onStartImport,
+  onPickFile,
+  onDropFile,
+  onDownloadTemplate,
+  onRemoveFile,
 }: {
   step: 1 | 2;
   fileName: string;
   headers: string[];
   rows: Record<string, string>[];
+  /** Pesan bila file gagal dibaca / tidak berisi data. */
+  error?: string | null;
   onClose: () => void;
   onProceedToPreview: () => void;
   onStartImport: (mapping: Record<string, string>) => void | Promise<void>;
+  /** Buka OS file picker (dropzone / "Pilih File" / "Ganti File"). */
+  onPickFile: () => void;
+  /** File dari drag & drop pada dropzone. */
+  onDropFile: (file: File) => void;
+  /** Unduh template CSV/Excel sebagai referensi format. */
+  onDownloadTemplate: () => void;
+  /** Lepas file terpilih → kembali ke state 1. */
+  onRemoveFile: () => void;
 }) {
   // mapping: header file -> field sistem ("" = tidak dipetakan)
   const [mapping, setMapping] = useState<Record<string, string>>(() => {
@@ -101,6 +175,8 @@ export function ImportWizardModal({
     return initial;
   });
   const [starting, setStarting] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
+  const [focusedField, setFocusedField] = useState<string | null>(null);
 
   useEffect(() => {
     const prev = document.body.style.overflow;
@@ -110,641 +186,888 @@ export function ImportWizardModal({
     };
   }, []);
 
-  const mappedField = (header: string) => mapping[header] ?? "";
-  const setField = (header: string, field: string) =>
-    setMapping((prev) => ({ ...prev, [header]: field }));
+  /* ---------- Mapping (field sistem ← kolom file) ---------- */
+  const headerForField = (field: string) => headers.find((h) => mapping[h] === field) ?? "";
 
-  // Validasi: hanya Title yang wajib terpetakan (field lain — termasuk Section — opsional).
-  const titleHeader = headers.find((h) => mappedField(h) === "title");
-  const canImport = !!titleHeader;
+  /** Satu kolom hanya boleh mengisi satu field, dan sebaliknya. */
+  const setFieldSource = (field: string, header: string) => {
+    setMapping((prev) => {
+      const next: Record<string, string> = { ...prev };
+      for (const h of headers) if (next[h] === field) next[h] = "";
+      if (header) next[header] = field;
+      return next;
+    });
+  };
 
-  // Tampilkan SELURUH baris; panelnya punya scroll sendiri (max-h).
-  const previewRows = rows;
+  /* ---------- Validasi ---------- */
+  const titleHeader = headers.find((h) => mapping[h] === "title");
+  const expectedHeader = headers.find((h) => mapping[h] === "expectedResult");
   const invalidRows = rows
     .map((r, i) => ({ idx: i + 1, title: titleHeader ? (r[titleHeader] ?? "").trim() : "" }))
     .filter((r) => !r.title);
+  const validCount = rows.length - invalidRows.length;
+  // Wajib: title + expectedResult terpetakan, dan minimal 1 baris valid.
+  const canImport = !!titleHeader && !!expectedHeader && validCount > 0;
 
   const cellValue = (r: Record<string, string>, field: string) => {
-    const header = headers.find((h) => mappedField(h) === field);
+    const header = headers.find((h) => mapping[h] === field);
     return header ? (r[header] ?? "") : "";
   };
 
   const handleStart = async () => {
+    if (!canImport || starting) return;
     setStarting(true);
     await onStartImport(mapping);
     setStarting(false);
   };
 
+  const hasFile = fileName !== "";
+  const canProceed = hasFile && rows.length > 0 && !error;
+
   return createPortal(
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="Preview & Mapping Import"
+      aria-labelledby="import-wizard-title"
       style={{
         position: "fixed",
         inset: 0,
-        zIndex: 260,
+        zIndex: 300,
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
         padding: "1rem",
-        background: "rgba(0, 0, 0, 0.5)",
-        backdropFilter: "blur(4px)",
+        background: "rgba(15, 23, 42, 0.45)",
+        fontFamily: SANS,
       }}
-      onClick={onClose}
+      onClick={starting ? undefined : onClose}
     >
       <div
         style={{
-          width: "100%",
-          // Step 2 butuh layout 2 kolom (mapping + preview) → modal dilebarkan
-          // (setara max-w-6xl); step 1 tetap ringkas.
-          maxWidth: step === 2 ? 1152 : 720,
-          // Step 2 memakai tinggi tetap agar panel mengisi sampai divider
-          // footer (tanpa sisa whitespace); step 1 tetap setinggi kontennya.
-          height: step === 2 ? "90vh" : undefined,
-          maxHeight: "90vh",
+          width: step === 2 ? 1240 : 600,
+          maxWidth: "calc(100vw - 48px)",
+          height: step === 2 ? 860 : undefined,
+          maxHeight: "calc(100vh - 48px)",
           display: "flex",
           flexDirection: "column",
-          background: "#fff",
-          borderRadius: 12,
-          boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)",
+          background: "#FFFFFF",
+          borderRadius: 18,
+          boxShadow: "0 24px 48px -12px rgba(15, 23, 42, 0.28)",
           overflow: "hidden",
-          animation: "modalIn 0.18s ease-out",
         }}
         onClick={(e) => e.stopPropagation()}
+        // Cegah browser membuka file bila drop jatuh di luar dropzone.
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={(e) => e.preventDefault()}
       >
-        {/* Header — garis pemisah di-inset selebar padding modal (tidak
-            menembus tepi kiri/kanan). */}
-        <div style={{ padding: "1rem 1.25rem 0", flexShrink: 0 }}>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              paddingBottom: "1rem",
-              borderBottom: "1px solid var(--border)",
-            }}
-          >
-          <div>
-            <h3 style={{ fontSize: "1.05rem", fontWeight: 700, margin: 0 }}>
-              {step === 1 ? "Upload File" : "Preview & Mapping Import"}
+        {/* Header */}
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "flex-start",
+            padding: "20px 16px 16px 24px",
+            flexShrink: 0,
+          }}
+        >
+          <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
+            <h3
+              id="import-wizard-title"
+              style={{
+                margin: 0,
+                fontSize: 18,
+                fontWeight: 600,
+                letterSpacing: "-0.01em",
+                color: TEXT,
+              }}
+            >
+              {step === 2 ? "Preview & Mapping Import" : "Upload File"}
             </h3>
-            <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", margin: "0.2rem 0 0" }}>
-              {fileName} · {rows.length} baris
-            </p>
+            <div
+              style={{
+                fontSize: 13,
+                color: CAPTION,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+              title={fileName || undefined}
+            >
+              {hasFile ? `${fileName} · ${rows.length} baris` : "Belum ada file dipilih"}
+            </div>
           </div>
           <button
             type="button"
             aria-label="Tutup"
             onClick={onClose}
             style={{
-              width: 30,
-              height: 30,
+              width: 36,
+              height: 36,
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
               border: "none",
               background: "transparent",
-              color: "var(--text-secondary)",
-              borderRadius: 6,
+              borderRadius: 9,
+              color: CAPTION,
               cursor: "pointer",
+              flexShrink: 0,
             }}
           >
             <X size={18} />
           </button>
-          </div>
         </div>
 
-        {/* Body */}
+        {/* Divider inset */}
+        <div style={{ height: 1, margin: "0 24px", background: LINE, flexShrink: 0 }} />
+
+        {/* Stepper */}
         <div
           style={{
-            flex: "1 1 auto",
-            minHeight: 0,
-            padding: "1.25rem",
+            padding: "16px 24px 0",
             display: "flex",
-            flexDirection: "column",
-            gap: "1.25rem",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 16,
+            flexShrink: 0,
           }}
         >
-          {/* Baris atas: stepper (kiri) + banner validasi (kanan) */}
-          <div
+          <ol
             style={{
-              flexShrink: 0,
+              listStyle: "none",
+              margin: 0,
+              padding: 0,
               display: "flex",
               alignItems: "center",
-              justifyContent: "space-between",
-              gap: "1rem",
-              flexWrap: "wrap",
+              minWidth: 0,
             }}
           >
-            {/* Stepper — teks polos tanpa pill/background */}
+            {STEPS.map((label, i) => {
+              const key = i + 1;
+              const state = key < step ? "done" : key === step ? "current" : "upcoming";
+              const connector = key < step ? YELLOW : "#E2E8F0";
+              return (
+                <li
+                  key={label}
+                  aria-current={state === "current" ? "step" : undefined}
+                  style={{ display: "flex", alignItems: "center" }}
+                >
+                  <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span
+                      style={{
+                        width: 22,
+                        height: 22,
+                        borderRadius: "50%",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        flexShrink: 0,
+                        ...(state === "upcoming"
+                          ? { border: "1.5px solid #CBD5E1", background: "transparent" }
+                          : { background: YELLOW }),
+                      }}
+                    >
+                      {state === "done" ? (
+                        <Check size={12} color="#FFFFFF" strokeWidth={3} aria-hidden="true" />
+                      ) : (
+                        <span
+                          style={{
+                            fontFamily: MONO,
+                            fontSize: 11,
+                            fontWeight: 600,
+                            color: state === "current" ? TEXT : FAINT,
+                            lineHeight: 1,
+                          }}
+                        >
+                          {key}
+                        </span>
+                      )}
+                    </span>
+                    <span
+                      style={{
+                        fontSize: 13,
+                        fontWeight: state === "current" ? 600 : 500,
+                        color: state === "current" ? TEXT : state === "done" ? SECONDARY : FAINT,
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {label}
+                    </span>
+                  </span>
+                  {i < STEPS.length - 1 && (
+                    <span
+                      aria-hidden="true"
+                      style={{
+                        width: 32,
+                        height: 2,
+                        borderRadius: 2,
+                        background: connector,
+                        margin: "0 10px",
+                        flexShrink: 0,
+                      }}
+                    />
+                  )}
+                </li>
+              );
+            })}
+          </ol>
+
+          {/* Ringkasan validasi (state 3) — teks polos, tanpa pill */}
+          {step === 2 && (
             <div
               style={{
                 display: "flex",
                 alignItems: "center",
-                gap: "0.5rem",
-                fontSize: "0.75rem",
-                fontWeight: 600,
+                gap: 14,
+                flexWrap: "wrap",
+                justifyContent: "flex-end",
               }}
             >
               <span
                 style={{
-                  color: step > 1 ? "#059669" : step === 1 ? "#111827" : "var(--text-muted)",
-                }}
-              >
-                {step > 1 ? "✓ " : ""}Upload File
-              </span>
-              <span style={{ color: "var(--text-muted)" }}>&gt;</span>
-              <span style={{ color: step === 2 ? "#111827" : "var(--text-muted)" }}>
-                Mapping &amp; Preview
-              </span>
-              <span style={{ color: "var(--text-muted)" }}>&gt;</span>
-              <span style={{ color: "var(--text-muted)" }}>Import</span>
-            </div>
-
-            {/* Banner validasi — sejajar dengan stepper (hanya muncul di step 2) */}
-            {step === 2 && (
-              <div
-                style={{
-                  display: "flex",
+                  display: "inline-flex",
                   alignItems: "center",
-                  gap: "0.4rem",
-                  padding: "0.35rem 0.75rem",
-                  borderRadius: 8,
-                  background: canImport ? "#ECFDF5" : "#FEF2F2",
-                  border: `1px solid ${canImport ? "#A7F3D0" : "#FECACA"}`,
-                  fontSize: "0.78rem",
-                  fontWeight: 600,
-                  color: canImport ? "#047857" : "#DC2626",
+                  gap: 6,
+                  fontSize: 13,
+                  fontWeight: 500,
+                  color: SUCCESS,
+                  whiteSpace: "nowrap",
                 }}
               >
-                {canImport ? (
-                  <>
-                    <CheckCircle2 size={15} />
-                    {rows.length} Baris Valid Siap di-Import
-                  </>
-                ) : (
-                  <>
-                    <AlertCircle size={15} />
-                    Petakan kolom Title untuk melanjutkan
-                  </>
-                )}
-              </div>
-            )}
-          </div>
-
-          {step === 1 && (
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                gap: "0.75rem",
-                padding: "2.5rem 1rem",
-                border: "2px dashed var(--border-strong)",
-                borderRadius: 12,
-                textAlign: "center",
-              }}
-            >
-              <Upload size={28} style={{ color: "var(--text-muted)" }} />
-              <div style={{ fontSize: "0.95rem", fontWeight: 700, color: "#111827" }}>
-                File siap diimpor
-              </div>
-              <div style={{ fontSize: "0.82rem", color: "var(--text-secondary)" }}>
-                <strong>{fileName}</strong> · {rows.length} baris terdeteksi.
-                <br />
-                Lanjutkan untuk memeriksa & memetakan kolom sebelum import.
-              </div>
-            </div>
-          )}
-
-          {step === 2 && (
-            <div
-              style={{
-                display: "grid",
-                // Kolom kiri (mapping) ~1/3, kolom kanan (preview) ~2/3.
-                gridTemplateColumns: "minmax(0, 1fr) minmax(0, 2fr)",
-                gap: "1.25rem",
-                // Isi sisa tinggi body (stretch) supaya panel mencapai footer.
-                flex: "1 1 auto",
-                minHeight: 0,
-              }}
-            >
-              {/* Kolom kiri: Field Mapping — judul tetap; daftar mengisi sisa tinggi */}
-              <div style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
-                <h4
+                <CheckCircle2 size={15} aria-hidden="true" />
+                <span>
+                  <span style={{ fontFamily: MONO, fontWeight: 600 }}>{validCount}</span> baris
+                  valid, siap di-import
+                </span>
+              </span>
+              {invalidRows.length > 0 && (
+                <span
                   style={{
-                    flexShrink: 0,
-                    fontSize: "0.82rem",
-                    fontWeight: 700,
-                    color: "var(--text-secondary)",
-                    margin: "0 0 0.6rem",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    fontSize: 13,
+                    fontWeight: 500,
+                    color: DANGER,
+                    whiteSpace: "nowrap",
                   }}
                 >
-                  Field Mapping
-                </h4>
-                <div
-                  style={{
-                    flex: "1 1 auto",
-                    minHeight: 0,
-                    overflowY: "auto",
-                    paddingRight: "0.25rem",
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "0.45rem",
-                  }}
-                >
-                  {headers.map((h) => {
-                    const required =
-                      mappedField(h) === "title" || mappedField(h) === "expectedResult";
-                    return (
-                      <div
-                        key={h}
-                        style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}
-                      >
-                        {/* Nama kolom file di atas, dropdown tujuan di bawahnya —
-                            pas untuk kolom kiri yang sempit. */}
-                        <span
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "0.35rem",
-                            fontFamily: "var(--font-mono)",
-                            fontSize: "0.75rem",
-                            fontWeight: 600,
-                            color: "#374151",
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                          }}
-                          title={h}
-                        >
-                          {h}
-                          {required && (
-                            <span
-                              aria-hidden="true"
-                              style={{
-                                color: "#F43F5E",
-                                fontWeight: 700,
-                                fontSize: "0.85rem",
-                                lineHeight: 1,
-                              }}
-                            >
-                              *
-                            </span>
-                          )}
-                        </span>
-                        <Select
-                          value={mappedField(h)}
-                          ariaLabel={`Field tujuan untuk ${h}`}
-                          // Teks value dropdown dibuat lebih halus & netral
-                          // (bukan semibold) mengikuti gaya body.
-                          style={{ fontWeight: 400, color: "#475569" }}
-                          onChange={(e) => setField(h, e.target.value)}
-                        >
-                          <option value="">— Jangan diimpor —</option>
-                          {IMPORT_FIELDS.map((f) => (
-                            <option key={f.value} value={f.value}>
-                              {f.label}
-                            </option>
-                          ))}
-                        </Select>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Kolom kanan: Data Preview — tabel mengisi sisa tinggi kolom */}
-              <div
-                style={{
-                  minWidth: 0,
-                  display: "flex",
-                  flexDirection: "column",
-                  minHeight: 0,
-                }}
-              >
-                <h4
-                  style={{
-                    flexShrink: 0,
-                    fontSize: "0.82rem",
-                    fontWeight: 700,
-                    color: "var(--text-secondary)",
-                    margin: "0 0 0.6rem",
-                  }}
-                >
-                  Data Preview
-                </h4>
-                {invalidRows.length > 0 && (
-                  <div
-                    style={{
-                      flexShrink: 0,
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: "0.25rem",
-                      marginBottom: "0.6rem",
-                    }}
-                  >
-                    {invalidRows.slice(0, 5).map((r) => (
-                      <span
-                        key={r.idx}
-                        style={{ fontSize: "0.75rem", color: "#DC2626", fontWeight: 600 }}
-                      >
-                        Baris {r.idx}: Title tidak boleh kosong
-                      </span>
-                    ))}
-                    {invalidRows.length > 5 && (
-                      <span style={{ fontSize: "0.72rem", color: "#B91C1C" }}>
-                        … dan {invalidRows.length - 5} baris lain tanpa Title
-                      </span>
-                    )}
-                  </div>
-                )}
-                <div
-                  style={{
-                    border: "1px solid var(--border)",
-                    borderRadius: 8,
-                    // Mengisi sisa tinggi kolom sampai divider footer.
-                    flex: "1 1 auto",
-                    minHeight: 0,
-                    overflow: "auto",
-                  }}
-                >
-                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.75rem" }}>
-                    <thead>
-                      <tr style={{ background: "#F8FAFC", color: "#6B7280", textAlign: "left" }}>
-                        <th
-                          style={{
-                            position: "sticky",
-                            top: 0,
-                            zIndex: 10,
-                            padding: "0.5rem 0.6rem",
-                            width: 44,
-                            fontWeight: 600,
-                            background: "#F8FAFC",
-                            borderRight: "1px solid var(--border)",
-                          }}
-                        >
-                          #
-                        </th>
-                        <th
-                          style={{
-                            position: "sticky",
-                            top: 0,
-                            zIndex: 10,
-                            padding: "0.5rem 0.6rem",
-                            fontWeight: 600,
-                            background: "#F8FAFC",
-                            borderRight: "1px solid var(--border)",
-                          }}
-                        >
-                          Section
-                        </th>
-                        <th
-                          style={{
-                            position: "sticky",
-                            top: 0,
-                            zIndex: 10,
-                            padding: "0.5rem 0.6rem",
-                            fontWeight: 600,
-                            background: "#F8FAFC",
-                            borderRight: "1px solid var(--border)",
-                          }}
-                        >
-                          Title
-                        </th>
-                        <th
-                          style={{
-                            position: "sticky",
-                            top: 0,
-                            zIndex: 10,
-                            padding: "0.5rem 0.6rem",
-                            fontWeight: 600,
-                            background: "#F8FAFC",
-                            borderRight: "1px solid var(--border)",
-                          }}
-                        >
-                          Pre-conditions
-                        </th>
-                        <th
-                          style={{
-                            position: "sticky",
-                            top: 0,
-                            zIndex: 10,
-                            padding: "0.5rem 0.6rem",
-                            fontWeight: 600,
-                            background: "#F8FAFC",
-                            borderRight: "1px solid var(--border)",
-                          }}
-                        >
-                          Step Action
-                        </th>
-                        <th
-                          style={{
-                            position: "sticky",
-                            top: 0,
-                            zIndex: 10,
-                            padding: "0.5rem 0.6rem",
-                            fontWeight: 600,
-                            background: "#F8FAFC",
-                          }}
-                        >
-                          Expected Result
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {previewRows.map((r, i) => {
-                        const invalid = !(titleHeader ? (r[titleHeader] ?? "").trim() : "");
-                        return (
-                          <tr
-                            key={i}
-                            style={{
-                              borderTop: "1px solid var(--border)",
-                              background: invalid ? "#FEF2F2" : "transparent",
-                            }}
-                          >
-                            <td
-                              style={{
-                                padding: "0.45rem 0.6rem",
-                                textAlign: "center",
-                                color: "#9CA3AF",
-                                borderRight: "1px solid var(--border)",
-                              }}
-                            >
-                              {i + 1}
-                            </td>
-                            <td
-                              style={{
-                                padding: "0.45rem 0.6rem",
-                                color: "#374151",
-                                borderRight: "1px solid var(--border)",
-                                maxWidth: 140,
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                                whiteSpace: "nowrap",
-                              }}
-                              title={cellValue(r, "section") || "Tanpa Section"}
-                            >
-                              {cellValue(r, "section") || (
-                                <span style={{ color: "#9CA3AF", fontStyle: "italic" }}>
-                                  Tanpa Section
-                                </span>
-                              )}
-                            </td>
-                            <td
-                              style={{
-                                padding: "0.45rem 0.6rem",
-                                color: invalid ? "#DC2626" : "#111827",
-                                fontWeight: 500,
-                                borderRight: "1px solid var(--border)",
-                                maxWidth: 160,
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                                whiteSpace: "nowrap",
-                              }}
-                            >
-                              {cellValue(r, "title") || "—"}
-                            </td>
-                            <td
-                              style={{
-                                padding: "0.45rem 0.6rem",
-                                color: "#374151",
-                                borderRight: "1px solid var(--border)",
-                                maxWidth: 140,
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                                whiteSpace: "nowrap",
-                              }}
-                            >
-                              {cellValue(r, "precondition") || "—"}
-                            </td>
-                            <td
-                              style={{
-                                padding: "0.45rem 0.6rem",
-                                color: "#374151",
-                                borderRight: "1px solid var(--border)",
-                                maxWidth: 160,
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                                whiteSpace: "nowrap",
-                              }}
-                            >
-                              {cellValue(r, "steps") || "—"}
-                            </td>
-                            <td
-                              style={{
-                                padding: "0.45rem 0.6rem",
-                                color: "#374151",
-                                maxWidth: 160,
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                                whiteSpace: "nowrap",
-                              }}
-                            >
-                              {cellValue(r, "expectedResult") || "—"}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+                  <AlertCircle size={15} aria-hidden="true" />
+                  <span>
+                    <span style={{ fontFamily: MONO, fontWeight: 600 }}>{invalidRows.length}</span>{" "}
+                    baris tidak valid
+                  </span>
+                </span>
+              )}
             </div>
           )}
         </div>
 
-        {/* Footer — latar disamakan dengan konten (putih) & garis pemisah di-inset. */}
-        <div style={{ padding: "0 1.25rem 1rem", background: "#fff", flexShrink: 0 }}>
+        {/* Body */}
+        {step === 1 ? (
           <div
+            key="upload"
+            // Cross-fade saat pindah step (Upload ↔ Mapping).
+            className="content-fade-in"
             style={{
+              padding: "18px 24px 24px",
               display: "flex",
-              justifyContent: "flex-end",
-              gap: "0.5rem",
-              paddingTop: "1rem",
-              borderTop: "1px solid var(--border)",
+              flexDirection: "column",
+              gap: hasFile ? 14 : 0,
             }}
           >
-          <button
-            type="button"
-            onClick={onClose}
+            {!hasFile ? (
+              <>
+                {/* State 1: dropzone */}
+                <div
+                  role="button"
+                  tabIndex={0}
+                  aria-label="Pilih atau lepas file import"
+                  onClick={onPickFile}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      onPickFile();
+                    }
+                  }}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setDragActive(true);
+                  }}
+                  onDragLeave={() => setDragActive(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setDragActive(false);
+                    const file = e.dataTransfer.files?.[0];
+                    if (file) onDropFile(file);
+                  }}
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    gap: 8,
+                    padding: "32px 24px 28px",
+                    border: `1.5px dashed ${YELLOW}`,
+                    borderRadius: 14,
+                    background: dragActive ? YELLOW_TINT : YELLOW_LIGHT,
+                    textAlign: "center",
+                    cursor: "pointer",
+                    transition: "background-color 0.15s ease",
+                  }}
+                >
+                  <span
+                    style={{
+                      width: 44,
+                      height: 44,
+                      borderRadius: 12,
+                      background: YELLOW_TILE,
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <Upload size={20} color={TEXT} aria-hidden="true" />
+                  </span>
+                  <span style={{ fontSize: 15, fontWeight: 600, color: TEXT }}>
+                    Tarik &amp; lepas file di sini
+                  </span>
+                  <span style={{ fontSize: 13, color: CAPTION }}>
+                    Format yang didukung: CSV atau Excel (.xlsx)
+                  </span>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      // Dropzone juga memicu picker → cegah klik ganda.
+                      e.stopPropagation();
+                      onPickFile();
+                    }}
+                    style={{
+                      ...secondaryBtn,
+                      marginTop: 8,
+                      height: 36,
+                      padding: "0 14px",
+                      borderRadius: 9,
+                      fontSize: 13,
+                      fontWeight: 600,
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = YELLOW_TINT;
+                      e.currentTarget.style.borderColor = YELLOW;
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = "#FFFFFF";
+                      e.currentTarget.style.borderColor = INPUT_BORDER;
+                    }}
+                  >
+                    Pilih File
+                  </button>
+                </div>
+
+                {/* Unduh template */}
+                <div style={{ display: "flex", justifyContent: "center", marginTop: 14 }}>
+                  <button
+                    type="button"
+                    onClick={onDownloadTemplate}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 6,
+                      padding: 0,
+                      border: "none",
+                      background: "transparent",
+                      color: TEXT,
+                      fontSize: 13,
+                      fontWeight: 500,
+                      cursor: "pointer",
+                      textDecoration: "underline",
+                      textDecorationColor: YELLOW,
+                      textDecorationThickness: 2,
+                      textUnderlineOffset: 3,
+                      transition: "text-decoration-color 0.15s ease",
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.textDecorationColor = TEXT)}
+                    onMouseLeave={(e) => (e.currentTarget.style.textDecorationColor = YELLOW)}
+                  >
+                    <Download size={14} aria-hidden="true" />
+                    Unduh Template CSV/Excel
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                {/* State 2: file terpilih (atau error) */}
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 14,
+                    padding: "14px 14px 14px 16px",
+                    border: `1px solid ${BOX_BORDER}`,
+                    borderRadius: 14,
+                  }}
+                >
+                  <span
+                    style={{
+                      width: 44,
+                      height: 44,
+                      borderRadius: 10,
+                      background: error ? "#FEF2F2" : SUCCESS_TILE,
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      flexShrink: 0,
+                    }}
+                  >
+                    {error ? (
+                      <AlertCircle size={20} color={DANGER} aria-hidden="true" />
+                    ) : (
+                      <FileText size={20} color={SUCCESS} aria-hidden="true" />
+                    )}
+                  </span>
+
+                  <div
+                    style={{
+                      flex: 1,
+                      minWidth: 0,
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 3,
+                    }}
+                  >
+                    <span
+                      title={fileName}
+                      style={{
+                        fontSize: 14,
+                        fontWeight: 600,
+                        color: TEXT,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {fileName}
+                    </span>
+                    {error ? (
+                      <span style={{ fontSize: 13, color: DANGER }}>{error}</span>
+                    ) : (
+                      <span
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 5,
+                          fontSize: 13,
+                          color: CAPTION,
+                        }}
+                      >
+                        <CheckCircle2 size={14} color={SUCCESS} aria-hidden="true" />
+                        <span style={{ color: SUCCESS }}>File siap diimpor</span>
+                        <span aria-hidden="true">·</span>
+                        <span>
+                          <strong style={{ fontFamily: MONO, fontWeight: 600, color: SECONDARY }}>
+                            {rows.length}
+                          </strong>{" "}
+                          baris terdeteksi
+                        </span>
+                      </span>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={onPickFile}
+                    style={{
+                      ...secondaryBtn,
+                      height: 32,
+                      padding: "0 12px",
+                      borderRadius: 8,
+                      fontSize: 13,
+                      flexShrink: 0,
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = YELLOW_TINT;
+                      e.currentTarget.style.borderColor = YELLOW;
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = "#FFFFFF";
+                      e.currentTarget.style.borderColor = INPUT_BORDER;
+                    }}
+                  >
+                    Ganti File
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Hapus file"
+                    onClick={onRemoveFile}
+                    style={{
+                      width: 32,
+                      height: 32,
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      border: "none",
+                      background: "transparent",
+                      color: FAINT,
+                      cursor: "pointer",
+                      flexShrink: 0,
+                    }}
+                  >
+                    <X size={15} />
+                  </button>
+                </div>
+
+                <p style={{ margin: 0, fontSize: 13, color: MUTED }}>
+                  Lanjutkan untuk memeriksa &amp; memetakan kolom sebelum import.
+                </p>
+              </>
+            )}
+          </div>
+        ) : (
+          /* State 3: mapping & preview */
+          <div
+            key="mapping"
+            className="content-fade-in"
             style={{
-              padding: "0.45rem 1rem",
-              borderRadius: "3px !important",
-              border: "1px solid #D1D5DB",
-              background: "#fff",
-              color: "#374151",
-              fontWeight: 500,
-              fontSize: "0.85rem",
-              cursor: "pointer",
-              transition: "background-color 0.15s ease",
+              flex: 1,
+              minHeight: 0,
+              display: "grid",
+              gridTemplateColumns: "340px minmax(0, 1fr)",
+              gap: 24,
+              padding: "18px 24px 22px",
             }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-muted)")}
-            onMouseLeave={(e) => (e.currentTarget.style.background = "#fff")}
           >
-            Batal
-          </button>
-          {step === 1 ? (
+            {/* Kiri: field mapping */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 12, minHeight: 0 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                <h4 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: TEXT }}>
+                  Field Mapping
+                </h4>
+                <span style={{ fontSize: 12, color: CAPTION }}>
+                  Field test case ← kolom di file
+                </span>
+              </div>
+              <div
+                style={{
+                  flex: 1,
+                  minHeight: 0,
+                  overflowY: "auto",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 8,
+                  paddingRight: 4,
+                }}
+              >
+                {FIELD_ROWS.map((f) => {
+                  const inputId = `import-map-${f.field}`;
+                  const selectedHeader = headerForField(f.field);
+                  const focused = focusedField === f.field;
+                  return (
+                    <div
+                      key={f.field}
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "128px minmax(0, 1fr)",
+                        alignItems: "center",
+                        gap: 10,
+                      }}
+                    >
+                      <label
+                        htmlFor={inputId}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 3,
+                          fontFamily: MONO,
+                          fontSize: 12,
+                          fontWeight: 500,
+                          color: SECONDARY,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                        title={f.label}
+                      >
+                        {f.label}
+                        {f.required && (
+                          <span aria-hidden="true" style={{ color: DANGER, fontWeight: 700 }}>
+                            *
+                          </span>
+                        )}
+                      </label>
+                      <div style={{ position: "relative", minWidth: 0 }}>
+                        <select
+                          id={inputId}
+                          value={selectedHeader}
+                          aria-label={`Kolom file untuk ${f.label}`}
+                          onChange={(e) => setFieldSource(f.field, e.target.value)}
+                          onFocus={() => setFocusedField(f.field)}
+                          onBlur={() => setFocusedField(null)}
+                          style={{
+                            width: "100%",
+                            height: 36,
+                            boxSizing: "border-box",
+                            padding: "0 30px 0 10px",
+                            border: `1px solid ${focused ? YELLOW : INPUT_BORDER}`,
+                            borderRadius: 9,
+                            background: "#FFFFFF",
+                            fontSize: 13,
+                            color: selectedHeader ? TEXT : FAINT,
+                            appearance: "none",
+                            outline: "none",
+                            boxShadow: focused ? `0 0 0 3px ${YELLOW_TILE}` : "none",
+                            cursor: "pointer",
+                            transition: "border-color 0.15s ease, box-shadow 0.15s ease",
+                          }}
+                        >
+                          <option value="">— Tidak dipetakan —</option>
+                          {headers.map((h) => (
+                            <option key={h} value={h}>
+                              {h}
+                            </option>
+                          ))}
+                        </select>
+                        <ChevronDown
+                          size={13}
+                          color={CAPTION}
+                          aria-hidden="true"
+                          style={{
+                            position: "absolute",
+                            right: 10,
+                            top: "50%",
+                            transform: "translateY(-50%)",
+                            pointerEvents: "none",
+                          }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Kanan: data preview */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 10, minHeight: 0 }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "baseline",
+                  justifyContent: "space-between",
+                  gap: 12,
+                }}
+              >
+                <h4 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: TEXT }}>
+                  Data Preview
+                </h4>
+                <span style={{ fontSize: 12, color: CAPTION }}>
+                  <span style={{ fontFamily: MONO, fontWeight: 600, color: SECONDARY }}>
+                    {rows.length}
+                  </span>{" "}
+                  baris
+                </span>
+              </div>
+
+              <div
+                style={{
+                  flex: 1,
+                  minHeight: 0,
+                  overflow: "auto",
+                  border: `1px solid ${BOX_BORDER}`,
+                  borderRadius: 12,
+                }}
+              >
+                <table
+                  style={{
+                    minWidth: 900,
+                    width: "100%",
+                    tableLayout: "fixed",
+                    borderCollapse: "collapse",
+                    fontSize: 13,
+                  }}
+                >
+                  <colgroup>
+                    <col style={{ width: 44 }} />
+                    <col style={{ width: 140 }} />
+                    <col style={{ width: 220 }} />
+                    <col style={{ width: 180 }} />
+                    <col style={{ width: 200 }} />
+                    <col style={{ width: 200 }} />
+                  </colgroup>
+                  <thead>
+                    <tr
+                      style={{
+                        height: 38,
+                        background: HEAD_BG,
+                        borderBottom: `1px solid ${LINE}`,
+                      }}
+                    >
+                      {[
+                        { label: "#", align: "right" as const },
+                        { label: "Section", align: "left" as const },
+                        { label: "Title", align: "left" as const },
+                        { label: "Pre-conditions", align: "left" as const },
+                        { label: "Step Action", align: "left" as const },
+                        { label: "Expected Result", align: "left" as const },
+                      ].map((c) => (
+                        <th
+                          key={c.label}
+                          scope="col"
+                          style={{
+                            position: "sticky",
+                            top: 0,
+                            zIndex: 10,
+                            background: HEAD_BG,
+                            padding: "0 12px",
+                            fontSize: 12,
+                            fontWeight: 500,
+                            color: CAPTION,
+                            textAlign: c.align,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {c.label}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((r, i) => {
+                      const invalid = !(titleHeader ? (r[titleHeader] ?? "").trim() : "");
+                      const cell = (value: string) => (
+                        <td
+                          style={{
+                            height: 40,
+                            padding: "0 12px",
+                            whiteSpace: "nowrap",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            color: MUTED,
+                            borderTop: i === 0 ? "none" : `1px solid ${ROW_DIVIDER}`,
+                          }}
+                          title={value}
+                        >
+                          {value || "—"}
+                        </td>
+                      );
+                      return (
+                        <tr key={i} style={{ background: invalid ? "#FFFBFB" : "transparent" }}>
+                          <td
+                            style={{
+                              height: 40,
+                              padding: "0 12px",
+                              textAlign: "right",
+                              fontFamily: MONO,
+                              fontSize: 12,
+                              color: FAINT,
+                              borderTop: i === 0 ? "none" : `1px solid ${ROW_DIVIDER}`,
+                            }}
+                          >
+                            {i + 1}
+                          </td>
+                          {cell(cellValue(r, "section"))}
+                          <td
+                            style={{
+                              height: 40,
+                              padding: "0 12px",
+                              whiteSpace: "nowrap",
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              fontWeight: 500,
+                              color: invalid ? DANGER : TEXT,
+                              borderTop: i === 0 ? "none" : `1px solid ${ROW_DIVIDER}`,
+                            }}
+                            title={cellValue(r, "title")}
+                          >
+                            {cellValue(r, "title") || "—"}
+                          </td>
+                          {cell(cellValue(r, "precondition"))}
+                          {cell(cellValue(r, "steps"))}
+                          {cell(cellValue(r, "expectedResult"))}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Divider inset */}
+        <div style={{ height: 1, margin: "0 24px", background: LINE, flexShrink: 0 }} />
+
+        {/* Footer */}
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 16,
+            padding: "14px 24px",
+            flexShrink: 0,
+          }}
+        >
+          <span style={{ fontSize: 13, color: CAPTION }}>
+            {step === 2 ? (
+              <>
+                <span style={{ color: DANGER }}>*</span> wajib dipetakan
+              </>
+            ) : null}
+          </span>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <button
               type="button"
-              onClick={onProceedToPreview}
+              onClick={onClose}
               style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "0.4rem",
-                padding: "0.45rem 1.1rem",
-                borderRadius: "3px !important",
-                border: "none",
-                background: "#F59E0B",
-                color: "#000000",
-                fontWeight: 500,
-                fontSize: "0.85rem",
-                cursor: "pointer",
-                transition: "background-color 0.15s ease",
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = "#D97706")}
-              onMouseLeave={(e) => (e.currentTarget.style.background = "#F59E0B")}
-            >
-              Lanjut ke Preview
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => void handleStart()}
-              disabled={!canImport || starting}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "0.4rem",
-                padding: "0.45rem 1.1rem",
-                borderRadius: "3px !important",
-                border: "none",
-                background: "#F59E0B",
-                color: "#000000",
-                fontWeight: 500,
-                fontSize: "0.85rem",
-                cursor: !canImport || starting ? "not-allowed" : "pointer",
-                opacity: !canImport ? 0.5 : 1,
-                transition: "background-color 0.15s ease",
+                ...secondaryBtn,
+                height: 40,
+                padding: "0 16px",
+                borderRadius: 10,
+                fontSize: 14,
               }}
               onMouseEnter={(e) => {
-                if (canImport && !starting) e.currentTarget.style.background = "#D97706";
+                e.currentTarget.style.background = YELLOW_TINT;
+                e.currentTarget.style.borderColor = YELLOW;
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.background = "#F59E0B";
+                e.currentTarget.style.background = "#FFFFFF";
+                e.currentTarget.style.borderColor = INPUT_BORDER;
               }}
             >
-              {starting ? (
-                <span style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem" }}>
-                  <Loader2 size={13} style={{ animation: "spin 0.8s linear infinite" }} />{" "}
-                  Memproses...
-                </span>
-              ) : (
-                "Impor Test Case"
-              )}
+              Batal
             </button>
-          )}
+
+            {step === 1 ? (
+              <button
+                type="button"
+                onClick={onProceedToPreview}
+                disabled={!canProceed}
+                style={primaryBtn(canProceed)}
+                onMouseEnter={(e) => {
+                  if (canProceed) e.currentTarget.style.background = "#F0B53D";
+                }}
+                onMouseLeave={(e) => {
+                  if (canProceed) e.currentTarget.style.background = YELLOW;
+                }}
+              >
+                Lanjut ke Preview
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => void handleStart()}
+                disabled={!canImport || starting}
+                style={primaryBtn(canImport && !starting)}
+                onMouseEnter={(e) => {
+                  if (canImport && !starting) e.currentTarget.style.background = "#F0B53D";
+                }}
+                onMouseLeave={(e) => {
+                  if (canImport && !starting) e.currentTarget.style.background = YELLOW;
+                }}
+              >
+                Impor {validCount} Test Case
+              </button>
+            )}
           </div>
         </div>
       </div>

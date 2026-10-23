@@ -62,8 +62,10 @@ export async function GET() {
 
   // Dulu 8 query terpisah. Karena round-trip DB ~100ms dan parallelisme pooler
   // tidak menolong (lihat docs/AUDIT-Performa-Navigasi.md §6), agregasi
-  // dipindah ke SQL supaya cukup 4 query dalam satu fase.
-  const [projects, suiteAgg, runAgg, bugs] = await Promise.all([
+  // dipindah ke SQL supaya cukup 4 query dalam satu fase. Dua agregat kecil
+  // (bug per severity & jumlah run) menyusul agar KPI tidak perlu menghitung
+  // ulang dari daftar yang sudah dibatasi limit.
+  const [projects, suiteAgg, runAgg, bugBySeverity, runTotal, bugs] = await Promise.all([
     prisma.project.findMany({
       orderBy: [{ order: "asc" }, { createdAt: "asc" }],
       select: { id: true, code: true, platform: true },
@@ -151,6 +153,18 @@ export async function GET() {
       ) suites ON true
       ORDER BY run."createdAt" DESC
     `,
+
+    // Agregat bug AKTIF (OPEN/IN_PROGRESS) per severity — dasar KPI "Open Bugs".
+    // Dihitung terpisah dari daftar "recent bugs" yang dibatasi RECENT_BUG_LIMIT.
+    prisma.bug.groupBy({
+      by: ["severity"],
+      where: { status: { notIn: ["CLOSED", "RESOLVED"] } },
+      _count: { _all: true },
+    }),
+
+    // Jumlah SELURUH test run — daftar `runs` sendiri dibatasi RECENT_RUN_LIMIT,
+    // jadi angka "Test runs" tidak boleh dihitung dari panjang array itu.
+    prisma.testRun.count(),
 
     prisma.bug.findMany({
       // Card "Recent / Critical Bugs" hanya untuk bug yang masih butuh
@@ -254,14 +268,32 @@ export async function GET() {
     };
   });
 
+  const severityCount = (key: string) =>
+    n(bugBySeverity.find((g) => (g.severity ?? "").toUpperCase() === key)?._count._all);
+  const bugStats = {
+    active: bugBySeverity.reduce((sum, g) => sum + n(g._count._all), 0),
+    critical: severityCount("CRITICAL"),
+    high: severityCount("HIGH"),
+  };
+
   const payload: DashboardPayload = {
     user: { name: user.name, email: user.email, image: user.image },
     runs: runItems,
     bugs: bugItems,
     suiteCoverage,
+    bugStats,
+    runTotal,
   };
 
-  return NextResponse.json(payload);
+  return NextResponse.json(payload, {
+    headers: {
+      // Statistik selalu dihitung ulang dari DB — jangan pernah disajikan dari
+      // cache browser / CDN / edge.
+      "Cache-Control": "no-store, no-cache, must-revalidate",
+      Pragma: "no-cache",
+      Expires: "0",
+    },
+  });
 }
 
 export const dynamic = "force-dynamic";

@@ -376,16 +376,7 @@ export function Sidebar({
           </SidebarItem>
 
           {!collapsed && (
-            <div
-              className="sidebar-submenu-collapse"
-              style={{
-                display: "grid",
-                gridTemplateRows: runsOpen ? "1fr" : "0fr",
-                opacity: runsOpen ? 1 : 0,
-                transition:
-                  "grid-template-rows 300ms ease-in-out, opacity 300ms ease-in-out",
-              }}
-            >
+            <div className="sidebar-submenu-collapse collapse-grid" data-open={runsOpen}>
               <div style={{ overflow: "hidden", minHeight: 0 }}>
                 <div
                   className="sidebar-submenu-list"
@@ -433,16 +424,7 @@ export function Sidebar({
           </SidebarItem>
 
           {!collapsed && (
-            <div
-              className="sidebar-submenu-collapse"
-              style={{
-                display: "grid",
-                gridTemplateRows: projectsOpen ? "1fr" : "0fr",
-                opacity: projectsOpen ? 1 : 0,
-                transition:
-                  "grid-template-rows 300ms ease-in-out, opacity 300ms ease-in-out",
-              }}
-            >
+            <div className="sidebar-submenu-collapse collapse-grid" data-open={projectsOpen}>
               <div style={{ overflow: "hidden", minHeight: 0 }}>
                 <div
                   className="sidebar-submenu-list"

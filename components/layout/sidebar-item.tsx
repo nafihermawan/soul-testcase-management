@@ -104,7 +104,7 @@ export function SidebarItem({
           style={{
             marginLeft: "auto",
             transform: open ? "rotate(180deg)" : "rotate(0deg)",
-            transition: "transform 300ms ease-in-out",
+            transition: "transform var(--dur-base, 200ms) var(--ease-in-out, ease-in-out)",
           }}
         />
       )}

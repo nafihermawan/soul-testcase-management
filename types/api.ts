@@ -101,6 +101,13 @@ export type DashboardPayload = {
   runs: DashboardRunItem[];
   bugs: DashboardBugItem[];
   suiteCoverage: DashboardSuiteCoverageItem[];
+  /**
+   * Agregat bug AKTIF (belum CLOSED/RESOLVED) — dihitung di server tanpa batas
+   * `RECENT_BUG_LIMIT`, dipakai KPI "Open Bugs".
+   */
+  bugStats: { active: number; critical: number; high: number };
+  /** Jumlah SELURUH test run (daftar `runs` dibatasi RECENT_RUN_LIMIT). */
+  runTotal: number;
 };
 
 /* ---------- /api/bugs ---------- */

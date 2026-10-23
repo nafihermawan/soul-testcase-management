@@ -76,7 +76,7 @@ export function Toast({
         padding: "0.7rem 1rem",
         maxWidth: 360,
         color: "#fff",
-        animation: "modalIn 0.18s ease-out",
+        animation: "toastIn var(--dur-base, 200ms) var(--ease-out, ease-out)",
       }}
     >
       {isSuccess ? (

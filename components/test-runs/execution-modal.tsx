@@ -1074,6 +1074,9 @@ export function ExecutionModal({
                       boxShadow: active ? "0 1px 2px rgba(15, 23, 42, 0.06)" : "none",
                       cursor: editable ? "pointer" : "not-allowed",
                       opacity: editable ? 1 : 0.6,
+                      // Pilihan aktif bertransisi halus (tanpa ubah layout/DOM).
+                      transition:
+                        "background-color var(--dur-base, 200ms) var(--ease-in-out, ease-in-out), border-color var(--dur-base, 200ms) var(--ease-in-out, ease-in-out), color var(--dur-base, 200ms) var(--ease-in-out, ease-in-out), box-shadow var(--dur-base, 200ms) var(--ease-in-out, ease-in-out)",
                     }}
                   >
                     <Icon size={15} strokeWidth={2.2} aria-hidden="true" style={{ color: o.color }} />

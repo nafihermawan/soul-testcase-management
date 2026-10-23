@@ -1,14 +1,20 @@
 "use client";
 
 import type { CSSProperties } from "react";
+import { AlertTriangle, BarChart3, Bug, ExternalLink, Play, SlidersHorizontal } from "lucide-react";
+
+import { ErrorBlock, StatsCardsSkeleton, TableCardSkeleton } from "@/components/ui/data-states";
+import { useApi } from "@/lib/client/use-api";
 import {
-  AlertTriangle,
-  BarChart3,
-  Bug,
-  ExternalLink,
-  Play,
-  SlidersHorizontal,
-} from "lucide-react";
+  addCounts,
+  effectiveTotal,
+  emptyCounts,
+  executedValidCount,
+  executionProgress,
+  passRateOf,
+} from "@/lib/qa-metrics";
+import type { DashboardPayload } from "@/types/api";
+import { RELEASE_BLOCKER_PENALTY, RELEASE_READINESS_BANDS } from "./release-readiness";
 
 /* ------------------------------- Tokens ------------------------------- */
 
@@ -75,9 +81,29 @@ const SEG_ROW: CSSProperties = {
   fontSize: 13,
 };
 
-/* -------------------------------- Data -------------------------------- */
+/** Kerangka halaman: full-bleed ke dalam area konten AppShell (padding 1rem
+ *  dibatalkan), lalu diberi padding halaman sesuai spesifikasi. */
+const PAGE: CSSProperties = {
+  fontFamily: SANS,
+  color: "#0F172A",
+  background: "#F1F3F6",
+  margin: "-1rem",
+  padding: "28px 24px 40px",
+  minHeight: "calc(100% + 2rem)",
+};
+
+/** Konten mengisi penuh lebar area konten (rata kiri). */
+const PAGE_COLUMN: CSSProperties = {
+  width: "100%",
+  display: "flex",
+  flexDirection: "column",
+  gap: 20,
+};
+
+/* --------------------------------- Model ------------------------------ */
 
 type SuiteRow = {
+  id: string;
   name: string;
   tc: number;
   tested: number;
@@ -86,73 +112,111 @@ type SuiteRow = {
   passRate: number | null;
   coverage: number;
   lastActivity: string | null;
-  external?: boolean;
+  external: boolean;
 };
 
-const SUITES: SuiteRow[] = [
-  { name: "Edit Detail Location", tc: 129, tested: 16, pass: 16, failed: 0, passRate: 100, coverage: 12, lastActivity: "Oct 14, 2026" },
-  { name: "Side Menu", tc: 29, tested: 29, pass: 28, failed: 0, passRate: 97, coverage: 100, lastActivity: "Oct 13, 2026" },
-  { name: "Kehadiran - Jadwal Shift", tc: 44, tested: 1, pass: 1, failed: 0, passRate: 100, coverage: 2, lastActivity: "Oct 13, 2026" },
-  { name: "Membership - Bulk Upload", tc: 71, tested: 71, pass: 61, failed: 0, passRate: 86, coverage: 100, lastActivity: "Oct 09, 2026" },
-  { name: "LPR Iteration", tc: 10, tested: 10, pass: 10, failed: 0, passRate: 100, coverage: 100, lastActivity: "Oct 05, 2026" },
-  { name: "Pay First QRIS", tc: 30, tested: 30, pass: 22, failed: 0, passRate: 73, coverage: 100, lastActivity: "Sep 24, 2026", external: true },
-  { name: "Attendence", tc: 66, tested: 26, pass: 18, failed: 0, passRate: 69, coverage: 39, lastActivity: "Sep 24, 2026" },
-  { name: "Appeal", tc: 61, tested: 1, pass: 0, failed: 0, passRate: 0, coverage: 2, lastActivity: "Sep 24, 2026" },
-  { name: "Izin", tc: 15, tested: 2, pass: 2, failed: 0, passRate: 100, coverage: 13, lastActivity: "Sep 21, 2026" },
-  { name: "Detail Gaji", tc: 3, tested: 3, pass: 3, failed: 0, passRate: 100, coverage: 100, lastActivity: "Sep 14, 2026" },
-  { name: "Dashboard Login", tc: 11, tested: 0, pass: 0, failed: 0, passRate: null, coverage: 0, lastActivity: null },
-  { name: "HRIS Dashboard Login", tc: 16, tested: 0, pass: 0, failed: 0, passRate: null, coverage: 0, lastActivity: null },
-  { name: "Login SPN Finder", tc: 21, tested: 0, pass: 0, failed: 0, passRate: null, coverage: 0, lastActivity: null },
-  { name: "Login User App - IOS", tc: 35, tested: 0, pass: 0, failed: 0, passRate: null, coverage: 0, lastActivity: null },
-];
-
 type RunRow = {
+  id: string;
   name: string;
   project: string;
   env: string;
   progress: number;
   passRate: number | null;
-  status: "In Progress" | "Completed";
+  status: string;
   updated: string;
 };
 
-const RUNS: RunRow[] = [
-  { name: "Disable Extend with QR", project: "Hardware Dispenser", env: "DEV", progress: 0, passRate: null, status: "In Progress", updated: "Oct 15" },
-  { name: "[HRIS] Iteration Timezone", project: "HRIS SPN Finder", env: "DEV", progress: 25, passRate: 20, status: "In Progress", updated: "Oct 05" },
-  { name: '[Bug Test] Field "Kategori Pe…', project: "Main Dashboard", env: "DEV", progress: 100, passRate: 100, status: "Completed", updated: "Oct 14" },
-];
-
-/** Warna titik status run (tanpa pill). */
-const RUN_STATUS_DOT: Record<RunRow["status"], string> = {
-  "In Progress": "#D97706",
-  Completed: "#15803D",
-};
-
 type BugRow = {
+  id: string;
   title: string;
   module: string;
   env: string;
-  severity: "Critical" | "High" | "Medium";
-  status: "Open" | "In Progress";
+  severity: string;
+  status: string;
 };
 
-const BUGS: BugRow[] = [
-  { title: '"Check Out" Renders In…', module: "Attendence", env: "DEV", severity: "Critical", status: "Open" },
-  { title: 'Tap Button "Check Out…', module: "Attendence", env: "DEV", severity: "High", status: "Open" },
-  { title: "Tidak ada notification…", module: "Side Menu", env: "DEV", severity: "Medium", status: "In Progress" },
-];
-
-/** Warna severity (kotak + teks), Title Case tanpa pill. */
-const SEVERITY: Record<BugRow["severity"], { square: string; text: string }> = {
-  Critical: { square: "#B91C1C", text: "#B91C1C" },
-  High: { square: "#EA580C", text: "#C2410C" },
-  Medium: { square: "#CA8A04", text: "#854D0E" },
+type HealthRow = {
+  color: string;
+  label: string;
+  count: number;
+  countColor: string;
+  pct: string;
+  pctNum: number;
 };
+
+type Readiness = {
+  score: number;
+  label: string;
+  color: string;
+  critical: number;
+  high: number;
+  runTotal: number;
+  executedValid: number;
+  effective: number;
+  progress: number;
+};
+
+/* ------------------------------ Derivations --------------------------- */
+
+const nf = new Intl.NumberFormat("en-US");
+
+/** Tanggal panjang sesuai desain: "Oct 14, 2026". */
+const fmtLongDate = (iso: string | null): string | null =>
+  iso
+    ? new Date(iso).toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" })
+    : null;
+
+/** Tanggal ringkas untuk tabel: "Oct 15". */
+const fmtShortDate = (iso: string): string =>
+  new Date(iso).toLocaleDateString("en-US", { month: "short", day: "2-digit" });
+
+function greetingLabel(now: Date = new Date()): string {
+  const h = now.getHours();
+  if (h < 12) return "Good morning";
+  if (h < 18) return "Good afternoon";
+  return "Good evening";
+}
+
+/** Warna severity bug (kotak + teks), Title Case tanpa pill. */
+const SEVERITY: Record<string, { square: string; text: string }> = {
+  CRITICAL: { square: "#B91C1C", text: "#B91C1C" },
+  HIGH: { square: "#EA580C", text: "#C2410C" },
+  MEDIUM: { square: "#CA8A04", text: "#854D0E" },
+  LOW: { square: "#94A3B8", text: "#64748B" },
+};
+
+const SEVERITY_LABEL: Record<string, string> = {
+  CRITICAL: "Critical",
+  HIGH: "High",
+  MEDIUM: "Medium",
+  LOW: "Low",
+};
+
+/** Severity asing/kosong diperlakukan sebagai Medium (paling netral). */
+const severityKey = (s: string | null): string => (s && SEVERITY[s] ? s : "MEDIUM");
 
 /** Warna titik status bug (tanpa pill). */
-const BUG_STATUS_DOT: Record<BugRow["status"], string> = {
-  Open: "#C2410C",
-  "In Progress": "#1D4ED8",
+const BUG_STATUS_DOT: Record<string, string> = {
+  OPEN: "#C2410C",
+  IN_PROGRESS: "#1D4ED8",
+  RESOLVED: "#7C3AED",
+  CLOSED: "#15803D",
+};
+
+const BUG_STATUS_LABEL: Record<string, string> = {
+  OPEN: "Open",
+  IN_PROGRESS: "In Progress",
+  RESOLVED: "Resolved",
+  CLOSED: "Closed",
+};
+
+const bugStatusDot = (s: string): string => BUG_STATUS_DOT[s] ?? "#94A3B8";
+const bugStatusLabel = (s: string): string => BUG_STATUS_LABEL[s] ?? s;
+
+/** Warna titik status run (tanpa pill). */
+const RUN_STATUS_DOT: Record<string, string> = {
+  "In Progress": "#D97706",
+  Completed: "#15803D",
 };
 
 /** Warna teks Pass Rate per ambang; null (tanpa data) → muted. */
@@ -161,6 +225,135 @@ function passRateColor(v: number | null): string {
   if (v >= 80) return "#15803D";
   if (v >= 50) return "#B45309";
   return "#B91C1C";
+}
+
+/**
+ * Satu-satunya tempat angka dashboard diturunkan dari payload API.
+ *
+ * Semua persentase memakai definisi kanonik di `lib/qa-metrics`
+ * (progress & pass rate mengeluarkan SKIPPED) supaya angka di dashboard tidak
+ * pernah menyimpang dari halaman lain.
+ */
+function derive(data: DashboardPayload) {
+  /* ---- Totals (dasar KPI & Health) ---- */
+  const totals = data.suiteCoverage.reduce((acc, s) => addCounts(acc, s.counts), emptyCounts());
+  const totalTc = totals.total;
+  const progress = executionProgress(totals);
+  const passRate = passRateOf(totals);
+  const executedValid = executedValidCount(totals);
+  const effective = effectiveTotal(totals);
+
+  /* ---- Coverage by Suite (urut aktivitas terakhir, terbaru dulu) ---- */
+  const suites: SuiteRow[] = [...data.suiteCoverage]
+    .sort((a, b) => {
+      const at = a.lastExecutedAt ? Date.parse(a.lastExecutedAt) : Number.NEGATIVE_INFINITY;
+      const bt = b.lastExecutedAt ? Date.parse(b.lastExecutedAt) : Number.NEGATIVE_INFINITY;
+      if (at !== bt) return bt - at;
+      return a.name.localeCompare(b.name);
+    })
+    .map((s) => ({
+      id: s.id,
+      name: s.name,
+      tc: s.total,
+      tested: s.counts.executed,
+      pass: s.counts.passed,
+      failed: s.counts.failed,
+      passRate: passRateOf(s.counts),
+      coverage: executionProgress(s.counts) ?? 0,
+      lastActivity: fmtLongDate(s.lastExecutedAt),
+      external: Boolean(s.docUrl),
+    }));
+
+  /* ---- Recent runs (urut pembaruan terakhir) ---- */
+  const runs: RunRow[] = [...data.runs]
+    .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
+    .slice(0, 5)
+    .map((r) => ({
+      id: r.id,
+      name: r.name,
+      project: r.project,
+      env: r.environment ?? "—",
+      progress: executionProgress(r.counts) ?? 0,
+      passRate: passRateOf(r.counts),
+      status: r.status === "COMPLETED" ? "Completed" : "In Progress",
+      updated: fmtShortDate(r.updatedAt),
+    }));
+
+  /* ---- Recent / Critical bugs (API hanya mengirim bug aktif) ---- */
+  const bugs: BugRow[] = data.bugs.slice(0, 5).map((b) => ({
+    id: b.id,
+    title: b.title,
+    module: b.suiteName ?? "—",
+    env: b.environment ?? "—",
+    severity: severityKey(b.severity),
+    status: b.status,
+  }));
+
+  /* ---- Health & Action ---- */
+  const shareOf = (v: number): number => (totalTc > 0 ? (v / totalTc) * 100 : 0);
+  const health: HealthRow[] = [
+    { color: "#15803D", label: "Passed", count: totals.passed, positive: "#14532D" },
+    { color: "#DC2626", label: "Failed", count: totals.failed, positive: "#B91C1C" },
+    { color: "#D97706", label: "Blocked", count: totals.blocked, positive: "#B45309" },
+    { color: "#64748B", label: "Skipped", count: totals.skipped, positive: "#334155" },
+    { color: "#CBD5E1", label: "Untested", count: totals.notRun, positive: "#334155" },
+  ].map((r) => ({
+    color: r.color,
+    label: r.label,
+    count: r.count,
+    countColor: r.count > 0 ? r.positive : "#94A3B8",
+    pct: `${shareOf(r.count).toFixed(1)}%`,
+    pctNum: shareOf(r.count),
+  }));
+
+  /* ---- Release Readiness: progress − penalti blocker (aturan bersama) ---- */
+  const raw =
+    (progress ?? 0) -
+    data.bugStats.critical * RELEASE_BLOCKER_PENALTY.CRITICAL -
+    data.bugStats.high * RELEASE_BLOCKER_PENALTY.HIGH;
+  const score = Math.max(0, Math.min(100, Math.round(raw)));
+  const readiness: Readiness = {
+    score,
+    label:
+      score >= RELEASE_READINESS_BANDS.ready
+        ? "Ready"
+        : score >= RELEASE_READINESS_BANDS.atRisk
+          ? "At Risk"
+          : "Not Ready",
+    color:
+      score >= RELEASE_READINESS_BANDS.ready
+        ? "#15803D"
+        : score >= RELEASE_READINESS_BANDS.atRisk
+          ? "#B45309"
+          : "#DC2626",
+    critical: data.bugStats.critical,
+    high: data.bugStats.high,
+    runTotal: data.runTotal,
+    executedValid,
+    effective,
+    progress: progress ?? 0,
+  };
+
+  return {
+    userName: data.user.name?.trim().split(/\s+/)[0] || "there",
+    greeting: greetingLabel(),
+    totalTc,
+    progress,
+    executedValid,
+    effective,
+    passRate,
+    passed: totals.passed,
+    openBugs: data.bugStats.active,
+    criticalBugs: data.bugStats.critical,
+    highBugs: data.bugStats.high,
+    suites,
+    runs,
+    bugs,
+    health,
+    readiness,
+    runsWithFailures: data.runs.filter((r) => r.counts.failed > 0).length,
+    notRunTc: totals.notRun,
+  };
 }
 
 /* ------------------------------ Primitives ---------------------------- */
@@ -228,9 +421,20 @@ function LegendItem({ color, label }: { color: string; label: string }) {
   );
 }
 
+/** Baris kosong di dalam tabel — data live bisa benar-benar kosong. */
+function EmptyRow({ colSpan, label }: { colSpan: number; label: string }) {
+  return (
+    <tr>
+      <td colSpan={colSpan} style={{ padding: "26px 22px", textAlign: "center", fontSize: 13, color: "#94A3B8" }}>
+        {label}
+      </td>
+    </tr>
+  );
+}
+
 /* ------------------------------- Header ------------------------------- */
 
-function PageHeader() {
+function PageHeader({ greeting, userName }: { greeting: string; userName: string }) {
   return (
     <header
       style={{
@@ -252,7 +456,7 @@ function PageHeader() {
             lineHeight: 1.2,
           }}
         >
-          Good afternoon, Nafi
+          {greeting}, {userName}
         </h1>
         <p
           style={{
@@ -270,7 +474,7 @@ function PageHeader() {
             ·
           </span>
           <span>
-            <strong style={{ fontWeight: 600, color: "#0F172A" }}>Release 19</strong>{" "}
+            <strong style={{ fontWeight: 600, color: "#0F172A" }}>All releases</strong>{" "}
             <span>(All Platforms, Modules &amp; Envs)</span>
           </span>
         </p>
@@ -345,7 +549,28 @@ function KpiBar({ pct, fill }: { pct: number; fill: string }) {
   );
 }
 
-function KpiRow() {
+function KpiRow({
+  totalTc,
+  progress,
+  executedValid,
+  effective,
+  passRate,
+  passed,
+  openBugs,
+  criticalBugs,
+  highBugs,
+}: {
+  totalTc: number;
+  progress: number | null;
+  executedValid: number;
+  effective: number;
+  passRate: number | null;
+  passed: number;
+  openBugs: number;
+  criticalBugs: number;
+  highBugs: number;
+}) {
+  const rateColor = passRateColor(passRate);
   return (
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 14 }}>
       {/* 1. Total Test Cases */}
@@ -354,7 +579,7 @@ function KpiRow() {
           <span style={KPI_LABEL}>Total Test Cases</span>
         </div>
         <div style={KPI_ROW_VALUE}>
-          <span style={KPI_VALUE}>1,482</span>
+          <span style={KPI_VALUE}>{nf.format(totalTc)}</span>
         </div>
         <div style={KPI_ROW_BOTTOM}>
           <span style={KPI_CAPTION}>Across all active suites</span>
@@ -367,11 +592,13 @@ function KpiRow() {
           <span style={KPI_LABEL}>Execution Progress</span>
         </div>
         <div style={KPI_ROW_VALUE}>
-          <span style={KPI_VALUE}>13%</span>
-          <span style={KPI_CAPTION}>189 / 1,482 executed</span>
+          <span style={KPI_VALUE}>{progress === null ? "—" : `${progress}%`}</span>
+          <span style={KPI_CAPTION}>
+            {nf.format(executedValid)} / {nf.format(effective)} executed
+          </span>
         </div>
         <div style={KPI_ROW_BOTTOM}>
-          <KpiBar pct={12.8} fill="#0F172A" />
+          <KpiBar pct={progress ?? 0} fill="#0F172A" />
         </div>
       </div>
 
@@ -389,11 +616,13 @@ function KpiRow() {
           </label>
         </div>
         <div style={KPI_ROW_VALUE}>
-          <span style={{ ...KPI_VALUE, color: "#15803D" }}>85%</span>
-          <span style={KPI_CAPTION}>161 / 189 passed</span>
+          <span style={{ ...KPI_VALUE, color: rateColor }}>{passRate === null ? "—" : `${passRate}%`}</span>
+          <span style={KPI_CAPTION}>
+            {nf.format(passed)} / {nf.format(executedValid)} passed
+          </span>
         </div>
         <div style={KPI_ROW_BOTTOM}>
-          <KpiBar pct={85} fill="#15803D" />
+          <KpiBar pct={passRate ?? 0} fill={rateColor} />
         </div>
       </div>
 
@@ -403,16 +632,16 @@ function KpiRow() {
           <span style={KPI_LABEL}>Open Bugs</span>
         </div>
         <div style={KPI_ROW_VALUE}>
-          <span style={KPI_VALUE}>7</span>
+          <span style={KPI_VALUE}>{nf.format(openBugs)}</span>
         </div>
         <div style={{ ...KPI_ROW_BOTTOM, gap: 14, fontSize: 13, color: "#475569" }}>
           <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
             <Square color="#B91C1C" />
-            <span style={{ ...num, color: "#0F172A" }}>1</span> Critical
+            <span style={{ ...num, color: criticalBugs > 0 ? "#0F172A" : "#94A3B8" }}>{criticalBugs}</span> Critical
           </span>
           <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
             <Square color="#EA580C" />
-            <span style={{ ...num, color: "#0F172A" }}>1</span> High
+            <span style={{ ...num, color: highBugs > 0 ? "#0F172A" : "#94A3B8" }}>{highBugs}</span> High
           </span>
         </div>
       </div>
@@ -431,9 +660,20 @@ const TH: CSSProperties = {
   textAlign: "right",
 };
 
+/** Header tabel tetap terlihat saat isi card di-scroll (background solid). */
+const STICKY_TH: CSSProperties = {
+  position: "sticky",
+  top: 0,
+  zIndex: 10,
+  background: "#F8FAFC",
+};
+
 const TD: CSSProperties = { padding: "13px 10px", whiteSpace: "nowrap", textAlign: "right" };
 
-function CoverageBySuite() {
+/** Tinggi maksimum area tabel: jumlah suite nyata bisa panjang. */
+const COVERAGE_MAX_H = 460;
+
+function CoverageBySuite({ rows }: { rows: SuiteRow[] }) {
   return (
     <section style={{ ...CARD, display: "flex", flexDirection: "column", height: "100%" }}>
       <div
@@ -448,7 +688,7 @@ function CoverageBySuite() {
       >
         <div style={{ display: "flex", alignItems: "baseline", gap: 10, minWidth: 0 }}>
           <h2 style={CARD_TITLE}>Coverage by Suite</h2>
-          <span style={{ fontSize: 13, color: "#64748B", whiteSpace: "nowrap" }}>{SUITES.length} suites</span>
+          <span style={{ fontSize: 13, color: "#64748B", whiteSpace: "nowrap" }}>{rows.length} suites</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 14, fontSize: 12, color: "#64748B", flexWrap: "wrap" }}>
           <LegendItem color="#15803D" label="≥ 80%" />
@@ -457,7 +697,7 @@ function CoverageBySuite() {
         </div>
       </div>
 
-      <div style={{ overflowX: "auto" }}>
+      <div style={{ overflowX: "auto", overflowY: "auto", maxHeight: COVERAGE_MAX_H }}>
         <table style={{ width: "100%", minWidth: 760, borderCollapse: "collapse", fontSize: 14 }}>
           <thead>
             <tr
@@ -467,36 +707,42 @@ function CoverageBySuite() {
                 borderBottom: "1px solid #EEF1F5",
               }}
             >
-              <th style={{ ...TH, textAlign: "left", paddingLeft: 22 }}>Suite</th>
-              <th style={TH}>TC</th>
-              <th style={TH}>Tested</th>
-              <th style={TH}>Pass</th>
-              <th style={TH}>Failed</th>
-              <th style={TH}>Pass Rate</th>
-              <th style={{ ...TH, paddingLeft: 24 }}>Coverage</th>
-              <th style={{ ...TH, paddingRight: 22, fontWeight: 600, color: "#0F172A" }}>Last Activity ↓</th>
+              <th style={{ ...TH, ...STICKY_TH, textAlign: "left", paddingLeft: 22 }}>Suite</th>
+              <th style={{ ...TH, ...STICKY_TH }}>TC</th>
+              <th style={{ ...TH, ...STICKY_TH }}>Tested</th>
+              <th style={{ ...TH, ...STICKY_TH }}>Pass</th>
+              <th style={{ ...TH, ...STICKY_TH }}>Failed</th>
+              <th style={{ ...TH, ...STICKY_TH }}>Pass Rate</th>
+              <th style={{ ...TH, ...STICKY_TH, paddingLeft: 24 }}>Coverage</th>
+              <th style={{ ...TH, ...STICKY_TH, paddingRight: 22, fontWeight: 600, color: "#0F172A" }}>
+                Last Activity ↓
+              </th>
             </tr>
           </thead>
           <tbody>
-            {SUITES.map((s) => (
-              <tr key={s.name} style={{ borderBottom: "1px solid #F1F4F8" }}>
-                <td style={{ ...TD, textAlign: "left", paddingLeft: 22, fontWeight: 500, color: "#0F172A" }}>
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                    {s.name}
-                    {s.external && <ExternalLink size={13} color="#1D4ED8" aria-hidden="true" />}
-                  </span>
-                </td>
-                <td style={{ ...TD, ...num, color: "#334155" }}>{s.tc}</td>
-                <td style={{ ...TD, ...num, color: "#334155" }}>{s.tested}</td>
-                <td style={{ ...TD, ...num, color: "#334155" }}>{s.pass}</td>
-                <td style={{ ...TD, ...num, color: "#94A3B8" }}>{s.failed}</td>
-                <td style={{ ...TD, ...num, color: passRateColor(s.passRate) }}>
-                  {s.passRate === null ? "—" : `${s.passRate}%`}
-                </td>
-                <td style={{ ...TD, ...num, color: "#334155", paddingLeft: 24 }}>{s.coverage}%</td>
-                <td style={{ ...TD, color: "#64748B" }}>{s.lastActivity ?? "—"}</td>
-              </tr>
-            ))}
+            {rows.length === 0 ? (
+              <EmptyRow colSpan={8} label="Belum ada suite yang bisa dihitung." />
+            ) : (
+              rows.map((s) => (
+                <tr key={s.id} style={{ borderBottom: "1px solid #F1F4F8" }}>
+                  <td style={{ ...TD, textAlign: "left", paddingLeft: 22, fontWeight: 500, color: "#0F172A" }}>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                      {s.name}
+                      {s.external && <ExternalLink size={13} color="#1D4ED8" aria-hidden="true" />}
+                    </span>
+                  </td>
+                  <td style={{ ...TD, ...num, color: "#334155" }}>{s.tc}</td>
+                  <td style={{ ...TD, ...num, color: "#334155" }}>{s.tested}</td>
+                  <td style={{ ...TD, ...num, color: "#334155" }}>{s.pass}</td>
+                  <td style={{ ...TD, ...num, color: s.failed > 0 ? "#B91C1C" : "#94A3B8" }}>{s.failed}</td>
+                  <td style={{ ...TD, ...num, color: passRateColor(s.passRate) }}>
+                    {s.passRate === null ? "—" : `${s.passRate}%`}
+                  </td>
+                  <td style={{ ...TD, ...num, color: "#334155", paddingLeft: 24 }}>{s.coverage}%</td>
+                  <td style={{ ...TD, color: "#64748B" }}>{s.lastActivity ?? "—"}</td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
@@ -508,22 +754,21 @@ function CoverageBySuite() {
 
 const RING_R = 38;
 const RING_C = 2 * Math.PI * RING_R;
-const RING_SCORE = 10;
 
-function ScoreRing() {
+function ScoreRing({ score, color }: { score: number; color: string }) {
   return (
     <div style={{ position: "relative", width: 92, height: 92, flexShrink: 0 }}>
-      <svg width={92} height={92} viewBox="0 0 92 92" role="img" aria-label="Readiness score 10 of 100">
+      <svg width={92} height={92} viewBox="0 0 92 92" role="img" aria-label={`Readiness score ${score} of 100`}>
         <circle cx={46} cy={46} r={RING_R} fill="none" stroke="#EEF1F5" strokeWidth={9} />
         <circle
           cx={46}
           cy={46}
           r={RING_R}
           fill="none"
-          stroke="#DC2626"
+          stroke={color}
           strokeWidth={9}
           strokeLinecap="round"
-          strokeDasharray={`${(RING_SCORE / 100) * RING_C} ${RING_C}`}
+          strokeDasharray={`${(score / 100) * RING_C} ${RING_C}`}
           transform="rotate(-90 46 46)"
         />
       </svg>
@@ -538,52 +783,67 @@ function ScoreRing() {
           gap: 2,
         }}
       >
-        <span style={{ ...num, fontSize: 26, color: "#0F172A" }}>10</span>
+        <span style={{ ...num, fontSize: 26, color: "#0F172A" }}>{score}</span>
         <span style={{ fontSize: 11, color: "#64748B" }}>of 100</span>
       </div>
     </div>
   );
 }
 
-function ReleaseReadiness() {
+function ReleaseReadiness({ readiness }: { readiness: Readiness }) {
+  const blockers = readiness.critical + readiness.high;
   return (
     <section style={{ ...CARD, padding: "18px 20px", display: "flex", flexDirection: "column", gap: 16 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: 8, minWidth: 0 }}>
           <h2 style={CARD_TITLE}>Release Readiness</h2>
-          <span style={{ fontSize: 13, color: "#64748B", whiteSpace: "nowrap" }}>Release 19</span>
+          <span style={{ fontSize: 13, color: "#64748B", whiteSpace: "nowrap" }}>All releases</span>
         </div>
         <span style={{ display: "inline-flex", alignItems: "center", gap: 7 }}>
-          <Dot color="#DC2626" />
-          <span style={{ fontSize: 13, fontWeight: 600, color: "#B91C1C", whiteSpace: "nowrap" }}>Not Ready</span>
+          <Dot color={readiness.color} />
+          <span style={{ fontSize: 13, fontWeight: 600, color: readiness.color, whiteSpace: "nowrap" }}>
+            {readiness.label}
+          </span>
         </span>
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap" }}>
-        <ScoreRing />
+        <ScoreRing score={readiness.score} color={readiness.color} />
 
         <div style={{ display: "flex", flexDirection: "column", gap: 10, flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13 }}>
             <span style={{ color: "#475569" }}>Blockers</span>
             <span style={{ marginLeft: "auto", fontSize: 12, color: "#64748B", whiteSpace: "nowrap" }}>
-              1 Critical · 1 High
+              {readiness.critical} Critical · {readiness.high} High
             </span>
-            <span style={{ ...num, color: "#B91C1C", minWidth: 24, textAlign: "right" }}>2</span>
+            <span
+              style={{
+                ...num,
+                color: blockers > 0 ? "#B91C1C" : "#94A3B8",
+                minWidth: 24,
+                textAlign: "right",
+              }}
+            >
+              {blockers}
+            </span>
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13 }}>
             <span style={{ color: "#475569" }}>Test runs</span>
-            <span style={{ ...num, marginLeft: "auto", color: "#0F172A" }}>5</span>
+            <span style={{ ...num, marginLeft: "auto", color: "#0F172A" }}>{readiness.runTotal}</span>
           </div>
 
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13 }}>
               <span style={{ color: "#475569" }}>
-                Executed <span style={{ color: "#94A3B8" }}>· 11 / 37</span>
+                Executed{" "}
+                <span style={{ color: "#94A3B8" }}>
+                  · {nf.format(readiness.executedValid)} / {nf.format(readiness.effective)}
+                </span>
               </span>
-              <span style={{ ...num, marginLeft: "auto", color: "#0F172A" }}>30%</span>
+              <span style={{ ...num, marginLeft: "auto", color: "#0F172A" }}>{readiness.progress}%</span>
             </div>
-            <Bar pct={30} track="#E5E9EF" fill="#0F172A" height={5} />
+            <Bar pct={readiness.progress} track="#E5E9EF" fill="#0F172A" height={5} />
           </div>
         </div>
       </div>
@@ -593,39 +853,64 @@ function ReleaseReadiness() {
 
 /* ----------------------------- Health & Action ------------------------ */
 
-const HEALTH_LEGEND = [
-  { color: "#15803D", label: "Passed", count: "161", countColor: "#14532D", pct: "10.9%" },
-  { color: "#DC2626", label: "Failed", count: "0", countColor: "#94A3B8", pct: "0%" },
-  { color: "#D97706", label: "Blocked", count: "0", countColor: "#94A3B8", pct: "0%" },
-  { color: "#64748B", label: "Skipped", count: "28", countColor: "#334155", pct: "1.9%" },
-  { color: "#CBD5E1", label: "Untested", count: "1,293", countColor: "#334155", pct: "87.2%" },
-];
-
-function HealthAction() {
+function HealthAction({
+  health,
+  totalTc,
+  runsWithFailures,
+  notRunTc,
+}: {
+  health: HealthRow[];
+  totalTc: number;
+  runsWithFailures: number;
+  notRunTc: number;
+}) {
+  // Segmen bar hanya untuk kategori yang ada isinya, supaya celah antar segmen
+  // tidak menumpuk jadi garis kosong.
+  const segments = health.filter((r) => r.count > 0);
   return (
     <section style={{ ...CARD, flex: 1, display: "flex", flexDirection: "column" }}>
       <div style={{ padding: "18px 20px 6px", display: "flex", flexDirection: "column", gap: 12 }}>
         <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 }}>
           <h2 style={CARD_TITLE}>Health &amp; Action</h2>
-          <span style={{ fontSize: 12, color: "#64748B", whiteSpace: "nowrap" }}>1,482 cases</span>
+          <span style={{ fontSize: 12, color: "#64748B", whiteSpace: "nowrap" }}>
+            {nf.format(totalTc)} cases
+          </span>
         </div>
 
-        {/* Segmented bar: Passed (ujung kiri membulat) · Skipped · Untested (sisa) */}
+        {/* Segmented bar: ujung kiri & kanan membulat, proporsi dari data nyata */}
         <div style={{ display: "flex", gap: 3, height: 10 }}>
-          <div style={{ width: "10.9%", background: "#15803D", borderRadius: "999px 0 0 999px" }} />
-          <div style={{ width: "1.9%", background: "#64748B", borderRadius: 3 }} />
-          <div style={{ flex: 1, background: "#E2E8F0", borderRadius: "0 999px 999px 0" }} />
+          {segments.length === 0 ? (
+            <div style={{ flex: 1, background: "#E2E8F0", borderRadius: 999 }} />
+          ) : (
+            segments.map((r, i) => (
+              <div
+                key={r.label}
+                style={{
+                  width: `${r.pctNum}%`,
+                  background: r.color,
+                  borderRadius:
+                    segments.length === 1
+                      ? 999
+                      : i === 0
+                        ? "999px 0 0 999px"
+                        : i === segments.length - 1
+                          ? "0 999px 999px 0"
+                          : 3,
+                }}
+              />
+            ))
+          )}
         </div>
 
         <div style={{ display: "flex", flexDirection: "column" }}>
-          {HEALTH_LEGEND.map((r, i) => (
+          {health.map((r, i) => (
             <div
               key={r.label}
-              style={{ ...SEG_ROW, borderBottom: i < HEALTH_LEGEND.length - 1 ? "1px solid #F1F4F8" : "none" }}
+              style={{ ...SEG_ROW, borderBottom: i < health.length - 1 ? "1px solid #F1F4F8" : "none" }}
             >
               <Square color={r.color} />
               <span style={{ flex: 1, color: "#334155" }}>{r.label}</span>
-              <span style={{ ...num, color: r.countColor }}>{r.count}</span>
+              <span style={{ ...num, color: r.countColor }}>{nf.format(r.count)}</span>
               <span style={{ width: 48, textAlign: "right", fontSize: 12, color: "#64748B" }}>{r.pct}</span>
             </div>
           ))}
@@ -637,75 +922,96 @@ function HealthAction() {
       <div style={{ flex: 1, padding: "12px 20px 18px", display: "flex", flexDirection: "column", gap: 8 }}>
         <h3 style={{ fontSize: 13, fontWeight: 600, color: "#475569", margin: 0 }}>Needs Attention</h3>
 
-        <a
-          href="/test-runs"
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-            padding: "10px 12px",
-            borderRadius: 12,
-            border: "1px solid #FBE1E1",
-            background: "#FFFBFB",
-            textDecoration: "none",
-          }}
-        >
-          <span
+        {runsWithFailures > 0 ? (
+          <a
+            href="/test-runs"
             style={{
-              width: 34,
-              height: 34,
-              borderRadius: 9,
-              background: "#FEE2E2",
-              display: "inline-flex",
+              display: "flex",
               alignItems: "center",
-              justifyContent: "center",
-              flexShrink: 0,
+              gap: 12,
+              padding: "10px 12px",
+              borderRadius: 12,
+              border: "1px solid #FBE1E1",
+              background: "#FFFBFB",
+              textDecoration: "none",
             }}
           >
-            <AlertTriangle size={18} color="#B91C1C" aria-hidden="true" />
-          </span>
-          <span style={{ fontSize: 14, fontWeight: 500, color: "#0F172A", whiteSpace: "nowrap" }}>
-            <span style={{ ...num, color: "#B91C1C" }}>1</span> Test run with failures
-          </span>
-          <span style={{ marginLeft: "auto", fontSize: 13, fontWeight: 600, color: "#B91C1C", whiteSpace: "nowrap" }}>
-            View →
-          </span>
-        </a>
+            <span
+              style={{
+                width: 34,
+                height: 34,
+                borderRadius: 9,
+                background: "#FEE2E2",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                flexShrink: 0,
+              }}
+            >
+              <AlertTriangle size={18} color="#B91C1C" aria-hidden="true" />
+            </span>
+            <span style={{ fontSize: 14, fontWeight: 500, color: "#0F172A", whiteSpace: "nowrap" }}>
+              <span style={{ ...num, color: "#B91C1C" }}>{nf.format(runsWithFailures)}</span>{" "}
+              {runsWithFailures === 1 ? "Test run" : "Test runs"} with failures
+            </span>
+            <span style={{ marginLeft: "auto", fontSize: 13, fontWeight: 600, color: "#B91C1C", whiteSpace: "nowrap" }}>
+              View →
+            </span>
+          </a>
+        ) : (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+              padding: "10px 12px",
+              borderRadius: 12,
+              border: "1px solid #DCFCE7",
+              background: "#F7FEF9",
+            }}
+          >
+            <span style={{ fontSize: 14, fontWeight: 500, color: "#334155" }}>
+              Tidak ada test run dengan kegagalan.
+            </span>
+          </div>
+        )}
 
-        <a
-          href="/test-runs"
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-            padding: "10px 12px",
-            borderRadius: 12,
-            border: "1px solid #E2E8F0",
-            background: "#ffffff",
-            textDecoration: "none",
-          }}
-        >
-          <span
+        {notRunTc > 0 && (
+          <a
+            href="/test-runs"
             style={{
-              width: 34,
-              height: 34,
-              borderRadius: 9,
-              background: "#EFF4FF",
-              display: "inline-flex",
+              display: "flex",
               alignItems: "center",
-              justifyContent: "center",
-              flexShrink: 0,
+              gap: 12,
+              padding: "10px 12px",
+              borderRadius: 12,
+              border: "1px solid #E2E8F0",
+              background: "#ffffff",
+              textDecoration: "none",
             }}
           >
-            <Play size={18} color="#1D4ED8" aria-hidden="true" />
-          </span>
-          <span style={{ fontSize: 14, fontWeight: 500, color: "#0F172A", whiteSpace: "nowrap" }}>
-            <span style={{ ...num, color: "#1D4ED8" }}>1,293</span> Test cases ready to run
-          </span>
-          <span style={{ marginLeft: "auto", fontSize: 13, fontWeight: 600, color: "#1D4ED8", whiteSpace: "nowrap" }}>
-            Start →
-          </span>
-        </a>
+            <span
+              style={{
+                width: 34,
+                height: 34,
+                borderRadius: 9,
+                background: "#EFF4FF",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                flexShrink: 0,
+              }}
+            >
+              <Play size={18} color="#1D4ED8" aria-hidden="true" />
+            </span>
+            <span style={{ fontSize: 14, fontWeight: 500, color: "#0F172A", whiteSpace: "nowrap" }}>
+              <span style={{ ...num, color: "#1D4ED8" }}>{nf.format(notRunTc)}</span> Test cases ready to run
+            </span>
+            <span style={{ marginLeft: "auto", fontSize: 13, fontWeight: 600, color: "#1D4ED8", whiteSpace: "nowrap" }}>
+              Start →
+            </span>
+          </a>
+        )}
       </div>
 
       {/* Footer */}
@@ -733,7 +1039,7 @@ function HealthAction() {
 
 /* ------------------------------- Bottom row --------------------------- */
 
-function RecentTestRuns() {
+function RecentTestRuns({ rows }: { rows: RunRow[] }) {
   return (
     <section style={{ ...CARD, flex: "1 1 560px", minWidth: 0, display: "flex", flexDirection: "column" }}>
       <div style={{ padding: "18px 22px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
@@ -755,47 +1061,51 @@ function RecentTestRuns() {
             </tr>
           </thead>
           <tbody>
-            {RUNS.map((r, i) => (
-              <tr key={r.name} style={{ borderBottom: i < RUNS.length - 1 ? "1px solid #F1F4F8" : "none" }}>
-                <td style={{ padding: "12px 10px", paddingLeft: 22 }}>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 3, maxWidth: 240 }}>
-                    <span
-                      style={{
-                        fontWeight: 500,
-                        color: "#0F172A",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {r.name}
+            {rows.length === 0 ? (
+              <EmptyRow colSpan={5} label="Belum ada test run." />
+            ) : (
+              rows.map((r, i) => (
+                <tr key={r.id} style={{ borderBottom: i < rows.length - 1 ? "1px solid #F1F4F8" : "none" }}>
+                  <td style={{ padding: "12px 10px", paddingLeft: 22 }}>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 3, maxWidth: 240 }}>
+                      <span
+                        style={{
+                          fontWeight: 500,
+                          color: "#0F172A",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {r.name}
+                      </span>
+                      <span style={{ fontSize: 12, color: "#64748B", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {r.project} <span aria-hidden="true">·</span>{" "}
+                        <span style={{ fontWeight: 600, color: "#475569" }}>{r.env}</span>
+                      </span>
+                    </div>
+                  </td>
+                  <td style={{ padding: "12px 10px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <Bar pct={r.progress} track="#E9EDF2" fill="#1D4ED8" height={6} width={90} />
+                      <span style={{ ...num, fontSize: 12, color: "#334155" }}>{r.progress}%</span>
+                    </div>
+                  </td>
+                  <td style={{ padding: "12px 10px", textAlign: "right", ...num, color: passRateColor(r.passRate) }}>
+                    {r.passRate === null ? "—" : `${r.passRate}%`}
+                  </td>
+                  <td style={{ padding: "12px 10px" }}>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 13, color: "#334155", whiteSpace: "nowrap" }}>
+                      <Dot color={RUN_STATUS_DOT[r.status] ?? "#94A3B8"} />
+                      {r.status}
                     </span>
-                    <span style={{ fontSize: 12, color: "#64748B", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {r.project} <span aria-hidden="true">·</span>{" "}
-                      <span style={{ fontWeight: 600, color: "#475569" }}>{r.env}</span>
-                    </span>
-                  </div>
-                </td>
-                <td style={{ padding: "12px 10px" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <Bar pct={r.progress} track="#E9EDF2" fill="#1D4ED8" height={6} width={90} />
-                    <span style={{ ...num, fontSize: 12, color: "#334155" }}>{r.progress}%</span>
-                  </div>
-                </td>
-                <td style={{ padding: "12px 10px", textAlign: "right", ...num, color: passRateColor(r.passRate) }}>
-                  {r.passRate === null ? "—" : `${r.passRate}%`}
-                </td>
-                <td style={{ padding: "12px 10px" }}>
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 13, color: "#334155", whiteSpace: "nowrap" }}>
-                    <Dot color={RUN_STATUS_DOT[r.status]} />
-                    {r.status}
-                  </span>
-                </td>
-                <td style={{ padding: "12px 10px", paddingRight: 22, textAlign: "right", color: "#64748B", whiteSpace: "nowrap" }}>
-                  {r.updated}
-                </td>
-              </tr>
-            ))}
+                  </td>
+                  <td style={{ padding: "12px 10px", paddingRight: 22, textAlign: "right", color: "#64748B", whiteSpace: "nowrap" }}>
+                    {r.updated}
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
@@ -803,7 +1113,7 @@ function RecentTestRuns() {
   );
 }
 
-function RecentBugs() {
+function RecentBugs({ rows }: { rows: BugRow[] }) {
   return (
     <section style={{ ...CARD, flex: "1 1 520px", minWidth: 0, display: "flex", flexDirection: "column" }}>
       <div style={{ padding: "18px 22px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
@@ -823,44 +1133,48 @@ function RecentBugs() {
             </tr>
           </thead>
           <tbody>
-            {BUGS.map((b, i) => {
-              const sev = SEVERITY[b.severity];
-              return (
-                <tr key={b.title} style={{ borderBottom: i < BUGS.length - 1 ? "1px solid #F1F4F8" : "none" }}>
-                  <td style={{ padding: "12px 10px", paddingLeft: 22 }}>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 3, maxWidth: 280 }}>
-                      <span
-                        style={{
-                          fontWeight: 500,
-                          color: "#0F172A",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        {b.title}
+            {rows.length === 0 ? (
+              <EmptyRow colSpan={3} label="Tidak ada bug aktif." />
+            ) : (
+              rows.map((b, i) => {
+                const sev = SEVERITY[b.severity] ?? SEVERITY.MEDIUM;
+                return (
+                  <tr key={b.id} style={{ borderBottom: i < rows.length - 1 ? "1px solid #F1F4F8" : "none" }}>
+                    <td style={{ padding: "12px 10px", paddingLeft: 22 }}>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 3, maxWidth: 280 }}>
+                        <span
+                          style={{
+                            fontWeight: 500,
+                            color: "#0F172A",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {b.title}
+                        </span>
+                        <span style={{ fontSize: 12, color: "#64748B", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {b.module} <span aria-hidden="true">·</span>{" "}
+                          <span style={{ fontWeight: 600, color: "#475569" }}>{b.env}</span>
+                        </span>
+                      </div>
+                    </td>
+                    <td style={{ padding: "12px 10px", textAlign: "left" }}>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, color: sev.text, whiteSpace: "nowrap" }}>
+                        <Square color={sev.square} />
+                        {SEVERITY_LABEL[b.severity] ?? b.severity}
                       </span>
-                      <span style={{ fontSize: 12, color: "#64748B", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {b.module} <span aria-hidden="true">·</span>{" "}
-                        <span style={{ fontWeight: 600, color: "#475569" }}>{b.env}</span>
+                    </td>
+                    <td style={{ padding: "12px 10px", paddingRight: 22, textAlign: "left" }}>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 13, color: "#334155", whiteSpace: "nowrap" }}>
+                        <Dot color={bugStatusDot(b.status)} />
+                        {bugStatusLabel(b.status)}
                       </span>
-                    </div>
-                  </td>
-                  <td style={{ padding: "12px 10px", textAlign: "left" }}>
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, color: sev.text, whiteSpace: "nowrap" }}>
-                      <Square color={sev.square} />
-                      {b.severity}
-                    </span>
-                  </td>
-                  <td style={{ padding: "12px 10px", paddingRight: 22, textAlign: "left" }}>
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 13, color: "#334155", whiteSpace: "nowrap" }}>
-                      <Dot color={BUG_STATUS_DOT[b.status]} />
-                      {b.status}
-                    </span>
-                  </td>
-                </tr>
-              );
-            })}
+                    </td>
+                  </tr>
+                );
+              })
+            )}
           </tbody>
         </table>
       </div>
@@ -870,38 +1184,61 @@ function RecentBugs() {
 
 /* ------------------------------- Page --------------------------------- */
 
+/** Interval polling statistik dashboard (background, tanpa skeleton). */
+const DASHBOARD_POLL_MS = 45_000;
+
 export function Dashboard() {
+  const { data, error, loading, reload } = useApi<DashboardPayload>("/api/dashboard", {
+    pollMs: DASHBOARD_POLL_MS,
+    refetchOnFocus: true,
+    alwaysFresh: true,
+  });
+
+  if (error) {
+    return (
+      <div style={PAGE}>
+        <div style={PAGE_COLUMN}>
+          <ErrorBlock message={error.message} onRetry={reload} />
+        </div>
+      </div>
+    );
+  }
+
+  if (loading || !data) {
+    return (
+      <div style={PAGE}>
+        <div style={PAGE_COLUMN}>
+          <StatsCardsSkeleton />
+          <TableCardSkeleton />
+        </div>
+      </div>
+    );
+  }
+
+  const d = derive(data);
+
   return (
-    <div
-      style={{
-        fontFamily: SANS,
-        color: "#0F172A",
-        background: "#F1F3F6",
-        // Full-bleed ke dalam area konten AppShell (padding 1rem dibatalkan),
-        // lalu diberi padding halaman sesuai spesifikasi.
-        margin: "-1rem",
-        padding: "28px 24px 40px",
-        minHeight: "calc(100% + 2rem)",
-      }}
-    >
-      {/* Konten mengisi penuh lebar area konten (rata kiri), dengan padding halaman. */}
-      <div
-        style={{
-          width: "100%",
-          display: "flex",
-          flexDirection: "column",
-          gap: 20,
-        }}
-      >
-        <PageHeader />
-        <KpiRow />
+    <div style={PAGE}>
+      <div style={PAGE_COLUMN}>
+        <PageHeader greeting={d.greeting} userName={d.userName} />
+        <KpiRow
+          totalTc={d.totalTc}
+          progress={d.progress}
+          executedValid={d.executedValid}
+          effective={d.effective}
+          passRate={d.passRate}
+          passed={d.passed}
+          openBugs={d.openBugs}
+          criticalBugs={d.criticalBugs}
+          highBugs={d.highBugs}
+        />
 
         {/* Main row: Coverage (kiri) + Release Readiness & Health (kanan).
             `align-items: stretch` membuat kolom kanan setinggi kolom Coverage,
             sehingga tepi bawah Health & Action sejajar dengan card Coverage. */}
         <div style={{ display: "flex", flexWrap: "wrap", gap: 18, alignItems: "stretch" }}>
           <div style={{ flex: "999 1 640px", minWidth: 0 }}>
-            <CoverageBySuite />
+            <CoverageBySuite rows={d.suites} />
           </div>
           <div
             style={{
@@ -913,15 +1250,20 @@ export function Dashboard() {
               gap: 18,
             }}
           >
-            <ReleaseReadiness />
-            <HealthAction />
+            <ReleaseReadiness readiness={d.readiness} />
+            <HealthAction
+              health={d.health}
+              totalTc={d.totalTc}
+              runsWithFailures={d.runsWithFailures}
+              notRunTc={d.notRunTc}
+            />
           </div>
         </div>
 
         {/* Bottom row: Recent Test Runs / Recent & Critical Bugs */}
         <div style={{ display: "flex", flexWrap: "wrap", gap: 18 }}>
-          <RecentTestRuns />
-          <RecentBugs />
+          <RecentTestRuns rows={d.runs} />
+          <RecentBugs rows={d.bugs} />
         </div>
       </div>
     </div>

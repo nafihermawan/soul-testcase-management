@@ -39,6 +39,7 @@ import {
   reorderSections,
 } from "@/lib/actions/sections";
 import { ConfirmDialog } from "@/components/ui/feedback";
+import { MONO, SANS } from "@/components/reports/report-tokens";
 
 import {
   PrimaryButton,
@@ -210,7 +211,13 @@ export function TestCasesManager({
     failedRows: number[];
   }>({ open: false, status: "processing", total: 0, processed: 0, failedRows: [] });
 
-  // Wizard import: Step 1 (file dipilih) -> Step 2 (preview & mapping)
+  // Wizard import: modal dibuka LEBIH DULU (Step 1 upload), file dipilih dari
+  // dalam modal -> Step 2 (preview & mapping).
+  const [importOpen, setImportOpen] = useState(false);
+  // Nama file yang dipilih (diisi segera, termasuk saat parsing gagal) + pesan
+  // error parsing — keduanya dipakai state 2 (file card).
+  const [importFileName, setImportFileName] = useState<string | null>(null);
+  const [importFileError, setImportFileError] = useState<string | null>(null);
   const [importPreview, setImportPreview] = useState<{
     step: 1 | 2;
     fileName: string;
@@ -558,11 +565,14 @@ export function TestCasesManager({
     URL.revokeObjectURL(url);
   };
 
-  const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    // Reset input supaya file yang sama bisa dipilih lagi
-    e.target.value = "";
+  /**
+   * Baca & parse file import. Dipakai dua jalur: `<input type="file">` (tombol
+   * "Pilih File dari Komputer" di modal) dan drag & drop ke dropzone modal.
+   */
+  const parseImportFile = (file: File) => {
+    // Tampilkan file yang dipilih segera (state 2), termasuk bila parsing gagal.
+    setImportFileName(file.name);
+    setImportFileError(null);
     const reader = new FileReader();
     reader.onload = async () => {
       try {
@@ -591,6 +601,8 @@ export function TestCasesManager({
         }
 
         if (rows.length === 0) {
+          setImportPreview(null);
+          setImportFileError("File tidak berisi data.");
           showToast("File tidak berisi data.", "error");
           return;
         }
@@ -599,6 +611,8 @@ export function TestCasesManager({
         setImportPreview({ step: 1, fileName: file.name, headers: Object.keys(rows[0]), rows });
       } catch (err) {
         console.error(err);
+        setImportPreview(null);
+        setImportFileError("Gagal membaca file. Pastikan format sesuai template.");
         showToast("Gagal membaca file. Pastikan format sesuai template.", "error");
       }
     };
@@ -607,6 +621,21 @@ export function TestCasesManager({
     } else {
       reader.readAsBinaryString(file);
     }
+  };
+
+  /** onChange hidden file input (dipicu dari dalam modal upload). */
+  const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    // Reset input supaya file yang sama bisa dipilih lagi.
+    e.target.value = "";
+    if (file) parseImportFile(file);
+  };
+
+  /** Lepas file terpilih → kembali ke state 1 (modal tetap terbuka). */
+  const removeImportFile = () => {
+    setImportPreview(null);
+    setImportFileName(null);
+    setImportFileError(null);
   };
 
   return (
@@ -674,7 +703,7 @@ export function TestCasesManager({
             </SecondaryButton>
 
             <SecondaryButton
-              onClick={() => fileRef.current?.click()}
+              onClick={() => setImportOpen(true)}
               style={{
                 ...toolbarButtonStyle,
                 padding: "0 12px",
@@ -1014,21 +1043,40 @@ export function TestCasesManager({
         />
       )}
 
-      {/* Modal: Wizard Import (Step 1: file, Step 2: preview & mapping) */}
-      {importPreview && (
+      {/* Modal: Wizard Import (Step 1: upload file, Step 2: preview & mapping) */}
+      {importOpen && (
         <ImportWizardModal
-          step={importPreview.step}
-          fileName={importPreview.fileName}
-          headers={importPreview.headers}
-          rows={importPreview.rows}
-          onClose={() => setImportPreview(null)}
+          // Kunci berubah saat file/header/error berganti → modal di-mount ulang
+          // agar `mapping` (state internal) diinisialisasi dari header file baru.
+          key={`${importFileName ?? ""}|${importPreview?.headers.join(",") ?? ""}|${
+            importFileError ?? ""
+          }`}
+          step={importPreview?.step ?? 1}
+          fileName={importFileName ?? ""}
+          headers={importPreview?.headers ?? []}
+          rows={importPreview?.rows ?? []}
+          error={importFileError}
+          onClose={() => {
+            setImportOpen(false);
+            setImportPreview(null);
+            setImportFileName(null);
+            setImportFileError(null);
+          }}
+          onPickFile={() => fileRef.current?.click()}
+          onDropFile={parseImportFile}
+          onDownloadTemplate={handleDownloadTemplate}
+          onRemoveFile={removeImportFile}
           onProceedToPreview={() =>
             setImportPreview((prev) => (prev ? { ...prev, step: 2 } : prev))
           }
           onStartImport={async (mapping) => {
             // Tutup preview, buka modal progress, eksekusi dengan mapping
+            const sourceRows = importPreview?.rows ?? [];
             setImportPreview(null);
-            const mappedRows = importPreview.rows.map((r) => {
+            setImportOpen(false);
+            setImportFileName(null);
+            setImportFileError(null);
+            const mappedRows = sourceRows.map((r) => {
               const mapped: Record<string, string> = {};
               for (const [header, field] of Object.entries(mapping)) {
                 if (field) mapped[field] = r[header] ?? "";
@@ -2122,6 +2170,7 @@ function BulkUploadProgressModal({
 }) {
   const progress =
     upload.total > 0 ? Math.min(100, Math.round((upload.processed / upload.total) * 100)) : 0;
+  const progressTitleId = "import-progress-title";
 
   useEffect(() => {
     const prev = document.body.style.overflow;
@@ -2135,151 +2184,169 @@ function BulkUploadProgressModal({
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="Impor Test Case"
+      aria-labelledby={progressTitleId}
       style={{
         position: "fixed",
         inset: 0,
-        zIndex: 260,
+        zIndex: 300,
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
         padding: "1rem",
-        background: "rgba(0, 0, 0, 0.5)",
-        backdropFilter: "blur(4px)",
+        background: "rgba(15, 23, 42, 0.45)",
+        fontFamily: SANS,
       }}
+      // Saat impor berjalan modal TIDAK bisa ditutup lewat overlay (maupun Esc —
+      // tidak ada handler Esc di sini).
       onClick={upload.status === "processing" ? undefined : onClose}
     >
       <div
         style={{
-          width: "100%",
-          maxWidth: 420,
-          background: "#fff",
-          borderRadius: 12,
-          padding: "1.5rem",
-          border: "1px solid var(--border)",
-          boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)",
+          width: 440,
+          maxWidth: "calc(100vw - 48px)",
+          background: "#FFFFFF",
+          borderRadius: 18,
+          boxShadow: "0 24px 48px -12px rgba(15, 23, 42, 0.28)",
+          padding: "32px 32px 28px",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: 6,
           textAlign: "center",
-          animation: "modalIn 0.18s ease-out",
         }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* STATE 1: PROCESSING */}
         {upload.status === "processing" && (
           <>
-            <div
+            <span
               style={{
-                margin: "0 auto 1rem",
-                width: 48,
-                height: 48,
-                borderRadius: "50%",
-                background: "#FFFBEB",
-                color: "#D97706",
-                border: "1px solid #FDE68A",
-                display: "flex",
+                width: 52,
+                height: 52,
+                borderRadius: 14,
+                background: "#FFF8E8",
+                display: "inline-flex",
                 alignItems: "center",
                 justifyContent: "center",
               }}
             >
-              <Loader2
-                size={24}
-                className="animate-spin"
-                style={{ animation: "spin 1s linear infinite" }}
-              />
-            </div>
+              {/* Spinner 24px: track #FFF1D1, arc #F0A800 (lihat .import-spinner). */}
+              <svg
+                width={24}
+                height={24}
+                viewBox="0 0 24 24"
+                className="import-spinner"
+                aria-hidden="true"
+              >
+                <circle cx="12" cy="12" r="9" fill="none" stroke="#FFF1D1" strokeWidth={3} />
+                <circle
+                  cx="12"
+                  cy="12"
+                  r="9"
+                  fill="none"
+                  stroke="#F0A800"
+                  strokeWidth={3}
+                  strokeLinecap="round"
+                  strokeDasharray="14 56"
+                />
+              </svg>
+            </span>
 
             <h3
-              style={{
-                fontSize: "0.95rem",
-                fontWeight: 700,
-                margin: "0 0 0.25rem",
-                color: "#111827",
-              }}
+              id={progressTitleId}
+              style={{ fontSize: 17, fontWeight: 600, margin: 0, color: "#0F172A" }}
             >
-              Uploading Test Case...
+              Uploading Test Case…
             </h3>
-            <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", margin: "0 0 1.25rem" }}>
-              Processing Data ({upload.processed}/{upload.total})
+            <p style={{ margin: 0, fontSize: 13, color: "#64748B" }}>
+              Processing Data (
+              <span style={{ fontFamily: MONO, fontWeight: 600, color: "#334155" }}>
+                {upload.processed}
+              </span>
+              /{upload.total})
             </p>
 
             <div
               style={{
                 width: "100%",
-                background: "var(--surface-muted)",
-                borderRadius: 999,
-                height: 12,
-                marginBottom: "0.5rem",
-                overflow: "hidden",
-                border: "1px solid var(--border)",
+                marginTop: 18,
+                display: "flex",
+                flexDirection: "column",
+                gap: 8,
               }}
             >
               <div
+                role="progressbar"
+                aria-valuenow={progress}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-label="Proses impor test case"
                 style={{
-                  background: "#F59E0B",
-                  height: "100%",
+                  width: "100%",
+                  height: 8,
                   borderRadius: 999,
-                  width: `${progress}%`,
-                  transition: "width 0.3s ease-out",
+                  background: "#EEF1F5",
+                  overflow: "hidden",
                 }}
-              />
+              >
+                <div
+                  style={{
+                    background: "#FFC348",
+                    height: "100%",
+                    borderRadius: 999,
+                    width: `${progress}%`,
+                    transition: "width 0.3s ease-out",
+                  }}
+                />
+              </div>
+
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  fontSize: 12,
+                  color: "#64748B",
+                }}
+              >
+                <span>Proses Impor</span>
+                <span style={{ fontFamily: MONO, fontWeight: 600, color: "#334155" }}>
+                  {progress}%
+                </span>
+              </div>
             </div>
 
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                fontSize: "0.68rem",
-                color: "var(--text-muted)",
-                fontWeight: 500,
-              }}
-            >
-              <span>Proses Impor</span>
-              <span>{progress}%</span>
-            </div>
+            <p style={{ margin: "10px 0 0", fontSize: 12, color: "#94A3B8" }}>
+              Jangan tutup jendela ini sampai proses selesai.
+            </p>
           </>
         )}
 
         {/* STATE 2: SUCCESS */}
         {upload.status === "success" && (
           <>
-            <div
+            <span
               style={{
-                margin: "0 auto 1rem",
-                width: 48,
-                height: 48,
-                borderRadius: "50%",
-                background: "#D1FAE5",
-                color: "#059669",
-                display: "flex",
+                width: 52,
+                height: 52,
+                borderRadius: 14,
+                background: "#F0F9F3",
+                display: "inline-flex",
                 alignItems: "center",
                 justifyContent: "center",
               }}
             >
-              <CheckCircle2 size={24} />
-            </div>
+              <CheckCircle2 size={24} color="#15803D" />
+            </span>
 
-            <h3
-              style={{
-                fontSize: "0.95rem",
-                fontWeight: 700,
-                margin: "0 0 0.25rem",
-                color: "#111827",
-              }}
-            >
+            <h3 style={{ fontSize: 17, fontWeight: 600, margin: 0, color: "#0F172A" }}>
               Impor Berhasil!
             </h3>
-            <p
-              style={{
-                fontSize: "0.78rem",
-                color: "var(--text-secondary)",
-                margin: "0 0 1.5rem",
-                lineHeight: 1.5,
-              }}
-            >
+            <p style={{ margin: "4px 0 18px", fontSize: 13, color: "#64748B", lineHeight: 1.5 }}>
               Sebanyak{" "}
-              <span style={{ fontWeight: 600, color: "#111827" }}>
-                {upload.total - upload.failedRows.length} Test Cases
+              <span style={{ fontFamily: MONO, fontWeight: 600, color: "#334155" }}>
+                {upload.total - upload.failedRows.length}
               </span>{" "}
-              telah berhasil ditambahkan ke dalam suite.
+              Test Case telah berhasil ditambahkan ke dalam suite.
             </p>
 
             <button
@@ -2287,18 +2354,19 @@ function BulkUploadProgressModal({
               onClick={onClose}
               style={{
                 width: "100%",
-                padding: "0.5rem 0",
-                border: "none",
-                borderRadius: 6,
-                background: "#F59E0B",
-                color: "#000000",
-                fontSize: "0.8rem",
-                fontWeight: 500,
+                height: 40,
+                boxSizing: "border-box",
+                border: "1px solid #FFC348",
+                borderRadius: 10,
+                background: "#FFC348",
+                color: "#0F172A",
+                fontSize: 14,
+                fontWeight: 600,
                 cursor: "pointer",
                 transition: "background-color 0.15s ease",
               }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = "#D97706")}
-              onMouseLeave={(e) => (e.currentTarget.style.background = "#F59E0B")}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "#F0B53D")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "#FFC348")}
             >
               Selesai
             </button>
@@ -2308,40 +2376,24 @@ function BulkUploadProgressModal({
         {/* STATE 3: ERROR */}
         {upload.status === "error" && (
           <>
-            <div
+            <span
               style={{
-                margin: "0 auto 1rem",
-                width: 48,
-                height: 48,
-                borderRadius: "50%",
-                background: "#FEE2E2",
-                color: "#DC2626",
-                display: "flex",
+                width: 52,
+                height: 52,
+                borderRadius: 14,
+                background: "#FEF2F2",
+                display: "inline-flex",
                 alignItems: "center",
                 justifyContent: "center",
               }}
             >
-              <AlertCircle size={24} />
-            </div>
+              <AlertCircle size={24} color="#B91C1C" />
+            </span>
 
-            <h3
-              style={{
-                fontSize: "0.95rem",
-                fontWeight: 700,
-                margin: "0 0 0.25rem",
-                color: "#111827",
-              }}
-            >
+            <h3 style={{ fontSize: 17, fontWeight: 600, margin: 0, color: "#0F172A" }}>
               Gagal Mengunggah
             </h3>
-            <p
-              style={{
-                fontSize: "0.78rem",
-                color: "var(--text-secondary)",
-                margin: "0 0 1rem",
-                lineHeight: 1.5,
-              }}
-            >
+            <p style={{ margin: "4px 0 16px", fontSize: 13, color: "#64748B", lineHeight: 1.5 }}>
               Terjadi kesalahan saat membaca file. Pastikan format kolom sesuai dengan template.
             </p>
 
@@ -2377,18 +2429,25 @@ function BulkUploadProgressModal({
               onClick={onClose}
               style={{
                 width: "100%",
-                padding: "0.5rem 0",
-                border: "1px solid #D1D5DB",
-                borderRadius: 6,
-                background: "#fff",
-                color: "#374151",
-                fontSize: "0.8rem",
+                height: 40,
+                boxSizing: "border-box",
+                border: "1px solid #DDE2E9",
+                borderRadius: 10,
+                background: "#FFFFFF",
+                color: "#0F172A",
+                fontSize: 14,
                 fontWeight: 500,
                 cursor: "pointer",
-                transition: "background-color 0.15s ease",
+                transition: "background-color 0.15s ease, border-color 0.15s ease",
               }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-muted)")}
-              onMouseLeave={(e) => (e.currentTarget.style.background = "#fff")}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = "#FFF8E8";
+                e.currentTarget.style.borderColor = "#FFC348";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = "#FFFFFF";
+                e.currentTarget.style.borderColor = "#DDE2E9";
+              }}
             >
               Tutup &amp; Coba Lagi
             </button>

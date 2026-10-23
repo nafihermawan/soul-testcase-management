@@ -226,6 +226,18 @@ button,
   border-radius: 0 10px 10px 0 !important;
 }
 
+/* Spinner modal progress Import Test Case — hormati prefers-reduced-motion. */
+.import-spinner {
+  animation: spin 0.9s linear infinite;
+  transform-origin: 50% 50%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .import-spinner {
+    animation: none;
+  }
+}
+
 /* Field di panel Eksekusi: fokus kuning (border + ring). */
 .exec-field:focus,
 .exec-field:focus-visible {
@@ -306,7 +318,9 @@ button,
 
 /* Sub-menu accordion: animasi collapse via grid-template-rows (1fr <-> 0fr) */
 .sidebar-submenu-collapse {
-  will-change: grid-template-rows;
+  transition:
+    grid-template-rows var(--dur-base) var(--ease-in-out),
+    opacity var(--dur-base) var(--ease-in-out);
 }
 
 .sidebar-submenu-collapse > * {
@@ -334,11 +348,11 @@ button,
 @keyframes modalIn {
   from {
     opacity: 0;
-    transform: scale(0.96);
+    transform: translateY(8px) scale(0.98);
   }
   to {
     opacity: 1;
-    transform: scale(1);
+    transform: none;
   }
 }
 
@@ -354,40 +368,78 @@ button,
   }
 }
 
-/* Konten modal muncul membesar: scale 95% -> 100% */
+/* Konten modal muncul dari bawah sedikit (translateY + scale) */
 @keyframes modalPopIn {
   from {
     opacity: 0;
-    transform: scale(0.95);
+    transform: translateY(8px) scale(0.98);
   }
   to {
     opacity: 1;
-    transform: scale(1);
+    transform: none;
   }
 }
 
-/* Panel dropdown mengembang turun dari atas (opacity + translateY) */
+/* Panel dropdown mengembang turun dari trigger (opacity + translateY + scale) */
 @keyframes dropdownIn {
   from {
     opacity: 0;
-    transform: translateY(-8px);
+    transform: translateY(-4px) scale(0.98);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: none;
   }
 }
 
 .overlay-in {
-  animation: overlayIn 300ms ease-out;
+  animation: overlayIn var(--dur-slow, 280ms) var(--ease-out, ease-out);
 }
 
 .modal-pop-in {
-  animation: modalPopIn 300ms ease-out;
+  animation: modalPopIn var(--dur-slow, 280ms) var(--ease-out, ease-out);
 }
 
 .dropdown-panel {
-  animation: dropdownIn 200ms ease-in-out;
+  animation: dropdownIn var(--dur-base, 200ms) var(--ease-out, ease-out);
+}
+
+/* Toast: meluncur dari tepi kanan + fade masuk */
+@keyframes toastIn {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Tooltip: fade + naik 2px, delay tampil ~300ms */
+@keyframes tooltipIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 2px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+.ui-tooltip {
+  animation: tooltipIn var(--dur-fast, 120ms) var(--ease-out, ease-out) 300ms backwards;
+}
+
+/* Checkbox / radio: tanda putih tumbuh dari 0 → 1 */
+@keyframes checkPop {
+  from {
+    transform: scale(0);
+  }
+  to {
+    transform: scale(1);
+  }
 }
 
 /* Field filter: umpan balik fokus kuning lembut (#FFC348).
@@ -395,8 +447,8 @@ button,
    atas class biasa). */
 .filter-field {
   transition:
-    border-color 200ms ease,
-    box-shadow 200ms ease;
+    border-color var(--dur-fast, 120ms) var(--ease-out, ease-out),
+    box-shadow var(--dur-fast, 120ms) var(--ease-out, ease-out);
 }
 
 .filter-field:focus,
@@ -431,21 +483,28 @@ button,
   animation: scrollCueBounce 1.4s ease-in-out infinite;
 }
 
-/* Skeleton loader pulse */
-@keyframes skeletonPulse {
-  0%,
-  100% {
-    opacity: 1;
+/* Skeleton loader: shimmer lembut — warna dasar tetap sama. */
+@keyframes skeletonShimmer {
+  from {
+    background-position: 200% 0;
   }
-  50% {
-    opacity: 0.45;
+  to {
+    background-position: -200% 0;
   }
 }
 
 .skeleton-block {
-  background: #E2E8F0;
+  background-color: #E2E8F0;
+  background-image: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.55) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  background-size: 200% 100%;
+  background-repeat: no-repeat;
   border-radius: 6px;
-  animation: skeletonPulse 1.6s ease-in-out infinite;
+  animation: skeletonShimmer 1.2s linear infinite;
 }
 
 /* Transisi halus saat konten menggantikan skeleton loader */
@@ -456,12 +515,12 @@ button,
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: none;
   }
 }
 
 .content-fade-in {
-  animation: contentFadeIn 0.3s ease-out;
+  animation: contentFadeIn var(--dur-base, 200ms) var(--ease-out, ease-out);
 }
 
 /* Small circular spinner (export/import/save pending states) */
@@ -868,4 +927,131 @@ input[type="radio"]:focus-visible {
 .suite-name-link:hover {
   color: #1d4ed8;
   text-decoration: underline;
+}
+
+/* ==========================================================================
+   MOTION SYSTEM
+   Token global + transisi elemen bersama. Hanya opacity / transform /
+   background-color / border-color / color / box-shadow (dan grid-template-rows
+   untuk collapse) yang dianimasikan — tidak pernah `transition: all`.
+   ========================================================================== */
+:root {
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --dur-fast: 120ms;
+  --dur-base: 200ms;
+  --dur-slow: 280ms;
+}
+
+/* 1. Tombol (primer/sekunder/teks/ikon) — warna & tekan. */
+button,
+.btn,
+[role="button"] {
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+}
+
+button:active:not(:disabled),
+.btn:active,
+[role="button"]:active {
+  transform: scale(0.98);
+}
+
+/* 2. Input, select, textarea — border + focus ring. */
+input:not([type="checkbox"]):not([type="radio"]),
+select,
+textarea {
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out);
+}
+
+/* 3. Checkbox & radio — warna cepat; tanda putih tumbuh (checkPop). */
+input[type="checkbox"],
+input[type="radio"] {
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out);
+}
+
+input[type="checkbox"]:checked::before,
+input[type="radio"]:checked::before {
+  animation: checkPop var(--dur-fast) var(--ease-out);
+}
+
+/* 4. Baris tabel/list & item sidebar — hover background/warna. */
+tr,
+.row-action-item,
+.sidebar-item {
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+
+/* 5. Chevron yang berputar (sidebar & accordion). */
+.sidebar-item svg,
+.accordion-chevron {
+  transition: transform var(--dur-base) var(--ease-in-out);
+}
+
+/* 6. Collapse generik: grid-template-rows 0fr → 1fr + fade (anak wajib scroll). */
+.collapse-grid {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition:
+    grid-template-rows var(--dur-base) var(--ease-in-out),
+    opacity var(--dur-base) var(--ease-in-out);
+}
+
+.collapse-grid[data-open="true"] {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+
+.collapse-grid > * {
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* 7. Halaman/route: konten utama fade + naik sedikit (sidebar/topbar diam). */
+.app-main > * {
+  animation: contentFadeIn var(--dur-base) var(--ease-out);
+}
+
+/* 8. Menu / dropdown / popover / kebab — timing seragam (entrance). */
+[role="menu"],
+[role="listbox"] {
+  transform-origin: top center;
+  animation-duration: var(--dur-base) !important;
+  animation-timing-function: var(--ease-out) !important;
+}
+
+/* 9. Modal — dialog masuk lebih lambat dari isinya. */
+[aria-modal="true"] > * {
+  animation-duration: var(--dur-slow) !important;
+  animation-timing-function: var(--ease-out) !important;
+}
+
+/* 10. Progress bar (import & eksekusi). */
+[role="progressbar"] > * {
+  transition: width var(--dur-slow) var(--ease-out);
+}
+
+/* 11. Reduced motion — hormati preferensi OS (spin pun jadi nyaris instan). */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

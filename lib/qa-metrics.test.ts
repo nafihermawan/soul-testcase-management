@@ -8,6 +8,7 @@ import {
   executedValidCount,
   executionProgress,
   formatPct,
+  isActiveBugStatus,
   isBugOverdue,
   passRateOf,
   pct,
@@ -145,5 +146,24 @@ describe("SLA bug", () => {
 
   it("ageInDays menghitung hari penuh", () => {
     expect(ageInDays(daysAgo(3), now)).toBe(3);
+  });
+});
+
+describe("isActiveBugStatus — bug yang masih menahan penyelesaian", () => {
+  it("OPEN & IN_PROGRESS dianggap aktif", () => {
+    expect(isActiveBugStatus("OPEN")).toBe(true);
+    expect(isActiveBugStatus("IN_PROGRESS")).toBe(true);
+  });
+
+  it("RESOLVED & CLOSED tidak aktif (tidak boleh memblokir)", () => {
+    expect(isActiveBugStatus("RESOLVED")).toBe(false);
+    expect(isActiveBugStatus("CLOSED")).toBe(false);
+  });
+
+  it("nilai kosong / status asing tidak dianggap aktif", () => {
+    expect(isActiveBugStatus(null)).toBe(false);
+    expect(isActiveBugStatus(undefined)).toBe(false);
+    expect(isActiveBugStatus("")).toBe(false);
+    expect(isActiveBugStatus("RE_OPEN")).toBe(false);
   });
 });

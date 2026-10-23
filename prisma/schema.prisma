@@ -342,10 +342,14 @@ model Bug {
   externalLink String?
   testCaseId  String?
   testRunResultId String?
-  /** Suite/modul tempat bug berada. WAJIB: bug eksekusi mewarisi suite dari
-   *  TestCase-nya, bug ad-hoc memilih sendiri. Tidak boleh null agar tidak ada
-   *  baris bug dengan Module "—". */
-  suiteId     String
+  /** Suite/modul tempat bug berada. WAJIB saat bug dibuat/diedit (bug eksekusi
+   *  mewarisi suite dari TestCase-nya, bug ad-hoc memilih sendiri) — tapi boleh
+   *  NULL untuk RIWAYAT: ketika Suite dihapus, tautannya dilepas
+   *  (ON DELETE SET NULL) supaya suite lama tidak memblokir penghapusan. */
+  suiteId     String?
+  /** Snapshot nama Suite saat tautannya dilepas — supaya kolom Module bug
+   *  riwayat tetap terisi walau suite-nya sudah tidak ada. */
+  suiteName   String?
   /** Project pemilik suite di atas — dipakai untuk agregasi jumlah bug. */
   projectId   String?
   createdById String?
@@ -355,8 +359,11 @@ model Bug {
 
   testCase      TestCase?      @relation(fields: [testCaseId], references: [id], onDelete: SetNull)
   testRunResult TestRunResult? @relation(fields: [testRunResultId], references: [id], onDelete: SetNull)
-  // Suite tidak boleh dihapus selama masih dirujuk oleh bug.
-  suite         Suite          @relation(fields: [suiteId], references: [id], onDelete: Restrict)
+  // Suite boleh dihapus walau masih dirujuk bug RIWAYAT (CLOSED/RESOLVED):
+  // FK-nya di-SetNull, dan `deleteSuite` menyalin nama suite ke `suiteName`
+  // lebih dulu supaya kolom Module tidak hilang. Bug AKTIF tetap diblokir di
+  // level aplikasi (lihat `deleteSuite`).
+  suite         Suite?         @relation(fields: [suiteId], references: [id], onDelete: SetNull)
   project       Project?       @relation(fields: [projectId], references: [id], onDelete: SetNull)
   createdBy     User?          @relation(fields: [createdById], references: [id], onDelete: SetNull)
 

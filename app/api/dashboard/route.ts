@@ -182,6 +182,8 @@ export async function GET() {
         // Sumber UTAMA: kolom milik bug sendiri. Bug ad-hoc tidak punya
         // testCase/testRunResult, jadi Module & Env-nya dulu kosong di sini.
         environment: true,
+        // Snapshot nama suite — dipakai saat suite-nya sudah dihapus.
+        suiteName: true,
         suite: { select: { id: true, name: true, projectId: true } },
         // Fallback untuk data lama yang relasi barunya belum terisi.
         testCase: { select: { suite: { select: { id: true, name: true, projectId: true } } } },
@@ -263,7 +265,8 @@ export async function GET() {
       platform: suite ? platformByProject.get(suite.projectId) ?? null : null,
       environment: b.environment ?? b.testRunResult?.run?.environment ?? null,
       suiteId: suite?.id ?? null,
-      suiteName: suite?.name ?? null,
+      // `suiteName` snapshot dipakai saat suite-nya sudah dihapus (tautan dilepas).
+      suiteName: suite?.name ?? b.suiteName ?? null,
       createdAt: b.createdAt.toISOString(),
     };
   });

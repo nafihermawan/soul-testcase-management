@@ -60,6 +60,8 @@ export type BugRow = {
   } | null;
   /** Suite/Module tempat bug berada; null = tidak diketahui (mis. temuan tanpa suite). */
   suite?: { id: string; name: string } | null;
+  /** Nama modul hasil resolusi server (fallback snapshot saat suite dihapus). */
+  suiteName?: string | null;
   /** Test Run tempat bug ditemukan; null untuk temuan ad-hoc.
    *  `environment` run dipakai sebagai fallback bila bug.environment kosong. */
   run?: { id: string; name: string; environment?: string | null } | null;
@@ -159,6 +161,13 @@ function initialsOf(name: string | null | undefined): string {
  */
 const sourceTypeOf = (b: BugRow): BugSourceType =>
   b.sourceType ?? (b.testCase ? "EXECUTION" : "GENERAL_FINDING");
+
+/**
+ * Nama Module yang ditampilkan. `suiteName` sudah diresolusi server (nama suite
+ * hidup, atau snapshot setelah suite dihapus); relasi `suite` jadi fallback
+ * untuk payload lama/cache klien.
+ */
+const moduleNameOf = (b: BugRow): string => b.suiteName ?? b.suite?.name ?? "—";
 
 /** Urutan tampilan: status aktif di atas, selesai di bawah. */
 const BUG_STATUS_RANK: Record<BugRow["status"], number> = {
@@ -897,10 +906,10 @@ export function BugsPageClient({
                         {/* Module · Environment */}
                         <td style={td}>
                           <span
-                            title={`${b.suite?.name ?? "—"} · ${env ?? "—"}`}
+                            title={`${moduleNameOf(b)} · ${env ?? "—"}`}
                             style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
                           >
-                            <span style={{ color: "#334155" }}>{b.suite?.name ?? "—"}</span>
+                            <span style={{ color: "#334155" }}>{moduleNameOf(b)}</span>
                             <span style={{ color: "#94A3B8" }}> · </span>
                             {env ? (
                               <span style={{ fontWeight: 600, color: envColor(env) }}>{env}</span>

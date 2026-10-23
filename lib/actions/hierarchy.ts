@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/permissions";
 import { platformPrefix } from "@/lib/format";
+import { ACTIVE_BUG_STATUSES } from "@/lib/qa-metrics";
 
 export type HierarchyActionState = {
   error?: string;
@@ -194,22 +195,56 @@ export async function updateSuite(formData: FormData): Promise<HierarchyActionSt
   }
 }
 
+/**
+ * Pemakaian Suite oleh bug — dipakai UI untuk memutuskan antara toast error
+ * (masih ada bug AKTIF) atau modal konfirmasi (cuma riwayat bug Closed).
+ */
+export async function suiteBugUsage(
+  suiteId: string
+): Promise<{ error?: string; active?: number; closed?: number }> {
+  await requireRole("QA");
+  if (!suiteId) return { error: "Suite tidak ditemukan." };
+  try {
+    const [active, closed] = await Promise.all([
+      prisma.bug.count({ where: { suiteId, status: { in: [...ACTIVE_BUG_STATUSES] } } }),
+      prisma.bug.count({ where: { suiteId, status: { notIn: [...ACTIVE_BUG_STATUSES] } } }),
+    ]);
+    return { active, closed };
+  } catch (error) {
+    console.error(error);
+    return { error: "Gagal memeriksa pemakaian suite." };
+  }
+}
+
 export async function deleteSuite(formData: FormData): Promise<{ error?: string }> {
   await requireRole("QA");
   const id = String(formData.get("id") ?? "");
   if (!id) return {};
   try {
-    // Bug kini WAJIB menunjuk suite (FK ON DELETE RESTRICT): suite yang masih
-    // dipakai bug tidak boleh hilang. Beri pesan jelas, bukan gagal senyap.
-    const bugCount = await prisma.bug.count({ where: { suiteId: id } });
-    if (bugCount > 0) {
+    const suite = await prisma.suite.findUnique({ where: { id }, select: { name: true } });
+    if (!suite) return { error: "Suite tidak ditemukan." };
+
+    // Hanya bug AKTIF yang boleh memblokir. Bug CLOSED/RESOLVED — termasuk yang
+    // berada di Test Run COMPLETED dan tak bisa dipindah lagi — adalah riwayat,
+    // jadi jangan sampai membuat deadlock penghapusan.
+    const activeBugs = await prisma.bug.count({
+      where: { suiteId: id, status: { in: [...ACTIVE_BUG_STATUSES] } },
+    });
+    if (activeBugs > 0) {
       return {
-        error: `Suite ini masih dipakai oleh ${bugCount} bug. Pindahkan atau hapus bug-nya dulu.`,
+        error: `Suite ini masih dipakai oleh ${activeBugs} bug aktif. Selesaikan atau pindahkan bug-nya dulu.`,
       };
     }
-    await prisma.suite.delete({ where: { id } });
+
+    await prisma.$transaction([
+      // Snapshot nama suite ke bug riwayat SEBELUM FK-nya di-SetNull oleh delete,
+      // supaya kolom Module tidak berubah jadi "—".
+      prisma.bug.updateMany({ where: { suiteId: id }, data: { suiteName: suite.name } }),
+      prisma.suite.delete({ where: { id } }),
+    ]);
     revalidatePath("/");
     revalidatePath("/settings");
+    revalidatePath("/bugs");
     return {};
   } catch (error) {
     console.error(error);

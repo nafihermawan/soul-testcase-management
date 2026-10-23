@@ -10,7 +10,7 @@ import { completeRun, completeRunWithSkip, deleteRun, updateRunResult } from "@/
 import { createBug, updateBug, updateBugStatus } from "@/lib/actions/automation-bugs";
 import { ConfirmDialog, Spinner, Toast, useToast } from "@/components/ui/feedback";
 import { runCodeOf } from "@/lib/format";
-import { SKIP_REASON_OTHER } from "@/lib/qa-metrics";
+import { isActiveBugStatus, SKIP_REASON_OTHER } from "@/lib/qa-metrics";
 import { BugDetailModal } from "@/components/bugs/bug-detail-modal";
 import { EditRunModal } from "@/components/test-runs/edit-run-modal";
 import { useReportPdfDownload } from "@/components/test-runs/use-report-pdf-download";
@@ -25,11 +25,11 @@ import {
   Sq,
   VSep,
   groupItemsBySection,
+  type ActiveRunBug,
   type RunResultItem,
 } from "./run-executor-shared";
 
 import { BugModal } from "./bug-modal";
-import { BugOpenConfirmModal } from "./bug-open-confirm-modal";
 import { CompleteRunModal } from "./complete-run-modal";
 import { ExecutionModal } from "./execution-modal";
 import { RunItemCard } from "./run-item-card";
@@ -152,9 +152,6 @@ export function RunExecutor({
   // Modal ringkasan + overall notes sebelum Complete (Completion Summary)
   const [completeOpen, setCompleteOpen] = useState(false);
   const [overallNotes, setOverallNotes] = useState("");
-  // Gate Complete Run: muncul kalau masih ada bug OPEN yang tertaut ke run ini.
-  const [bugGateOpen, setBugGateOpen] = useState(false);
-  const [bugGateReason, setBugGateReason] = useState("");
   const [editOpen, setEditOpen] = useState(false);
   const [completing, setCompleting] = useState(false);
   /**
@@ -340,15 +337,24 @@ export function RunExecutor({
 
   // --- Complete Run flow ---
   /**
-   * Bug ber-status OPEN yang masih tertaut ke hasil eksekusi run ini (unik per
-   * bug). Dipakai sebagai gate: run tidak boleh langsung diselesaikan selama
-   * masih ada bug OPEN — QA harus mengisi alasan force-complete dulu.
+   * Bug yang masih AKTIF (belum CLOSED/RESOLVED) dan tertaut ke hasil eksekusi
+   * run ini (unik per bug). Quality gate: selama daftar ini tidak kosong, run
+   * tidak boleh diselesaikan — aturan yang sama ditegakkan di server
+   * (`completeRun` / `completeRunWithSkip`), jadi UI ini hanya cermin.
    */
-  const openBugs = useMemo(() => {
-    const map = new Map<string, { id: string; title: string }>();
+  const activeBugs = useMemo(() => {
+    const map = new Map<string, ActiveRunBug>();
     for (const item of items) {
       for (const b of item.bugs ?? []) {
-        if (b.status === "OPEN" && !map.has(b.id)) map.set(b.id, { id: b.id, title: b.title });
+        if (isActiveBugStatus(b.status) && !map.has(b.id)) {
+          map.set(b.id, {
+            id: b.id,
+            title: b.title,
+            status: b.status,
+            tcId: item.testCase?.tcId ?? null,
+            suiteName: item.testCase?.suite?.name ?? null,
+          });
+        }
       }
     }
     return Array.from(map.values());
@@ -360,36 +366,19 @@ export function RunExecutor({
     setCompleteOpen(true);
   };
 
-  /**
-   * @param forceReason Alasan force-complete saat masih ada bug OPEN (dari gate
-   *   modal). Tanpa argumen dan ada bug OPEN, fungsi ini menahan penyelesaian
-   *   dan membuka gate modal.
-   */
-  const finalizeComplete = async (forceReason?: string) => {
-    if (!forceReason && openBugs.length > 0) {
-      setCompleteOpen(false);
-      setBugGateReason("");
-      setBugGateOpen(true);
-      return;
-    }
-
+  const finalizeComplete = async () => {
     setCompleting(true);
-    // Catatan alasan dibawa serta ke overallNotes supaya jejaknya tersimpan.
-    const notes = forceReason
-      ? `${overallNotes.trim()}\n\n[Force complete — masih ada ${openBugs.length} bug OPEN] ${forceReason.trim()}`.trim()
-      : overallNotes;
     // Ada TC untested -> server menandainya SKIPPED sekaligus menyelesaikan run.
     const res =
       untested > 0
-        ? await completeRunWithSkip(runId, notes)
-        : await completeRun(runId, notes);
+        ? await completeRunWithSkip(runId, overallNotes)
+        : await completeRun(runId, overallNotes);
     setCompleting(false);
     if (res.error) {
       showToast(res.error, "error");
       return;
     }
     setCompleteOpen(false);
-    setBugGateOpen(false);
     showToast("Test run diselesaikan.", "success");
     refresh();
   };
@@ -1244,27 +1233,18 @@ export function RunExecutor({
         onCancel={() => setConfirmDelete(false)}
       />
 
-      {/* Modal: Completion Summary — review catatan per TC + overall notes */}
+      {/* Modal: Completion Summary — review catatan per TC + overall notes.
+          Kalau masih ada Bug aktif, modal ini sekaligus jadi gate (tombol
+          selesaikan dimatikan + daftar bug-nya ditampilkan). */}
       {completeOpen && (
         <CompleteRunModal
           items={items}
           untested={untested}
+          activeBugs={activeBugs}
           overallNotes={overallNotes}
           onOverallNotesChange={setOverallNotes}
           onCancel={() => setCompleteOpen(false)}
           onConfirm={() => void finalizeComplete()}
-          completing={completing}
-        />
-      )}
-
-      {/* Modal: gate bug OPEN — konfirmasi + alasan wajib sebelum Complete */}
-      {bugGateOpen && (
-        <BugOpenConfirmModal
-          bugs={openBugs}
-          reason={bugGateReason}
-          onReasonChange={setBugGateReason}
-          onReview={() => setBugGateOpen(false)}
-          onConfirm={() => void finalizeComplete(bugGateReason)}
           completing={completing}
         />
       )}

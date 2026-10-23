@@ -10,6 +10,7 @@ import {
   deleteSuite,
   moveSuite,
   reorderSuites,
+  suiteBugUsage,
   updateSuite,
 } from "@/lib/actions/hierarchy";
 import { useRefresh } from "@/lib/client/refresh-context";
@@ -160,8 +161,33 @@ function SuiteRow({
   const [confirmMove, setConfirmMove] = useState(false);
   const [deletePending, setDeletePending] = useState(false);
   const [movePending, setMovePending] = useState(false);
+  /** Riwayat bug (non-aktif) milik suite ini — dasar varian modal konfirmasi. */
+  const [closedBugCount, setClosedBugCount] = useState(0);
   const router = useRouter();
   const suiteHref = `/suites/${suite.id}`;
+
+  /**
+   * Klik "Hapus" memeriksa pemakaian suite LEBIH DULU: bug aktif = tolak
+   * (toast), sisa riwayat bug Closed = konfirmasi yang menjelaskan tautannya
+   * akan diputus tanpa menghapus laporan bug-nya.
+   */
+  const requestDelete = useCallback(async () => {
+    const res = await suiteBugUsage(suite.id);
+    if (res?.error) {
+      showToast(res.error, "error");
+      return;
+    }
+    const active = res.active ?? 0;
+    if (active > 0) {
+      showToast(
+        `Suite ini masih dipakai oleh ${active} bug aktif. Selesaikan atau pindahkan bug-nya dulu.`,
+        "error"
+      );
+      return;
+    }
+    setClosedBugCount(res.closed ?? 0);
+    setConfirmDelete(true);
+  }, [suite.id, showToast]);
 
   const handleDelete = useCallback(async () => {
     setDeletePending(true);
@@ -320,7 +346,7 @@ function SuiteRow({
                   {
                     label: "Hapus",
                     icon: <Trash2 size={16} />,
-                    onClick: () => setConfirmDelete(true),
+                    onClick: () => void requestDelete(),
                     destructive: true,
                   },
                 ]}
@@ -342,16 +368,30 @@ function SuiteRow({
         />
       )}
 
-      {/* Confirm hapus suite */}
+      {/* Confirm hapus suite — varian riwayat bug kalau suite masih punya bug
+          Closed/Resolved (tautannya diputus, laporan bug-nya tetap ada). */}
       <ConfirmDialog
         open={confirmDelete}
         title="Hapus Suite?"
         message={
-          <>
-            Suite <strong>{suite.name}</strong> beserta semua sub-suite &amp; test case di dalamnya
-            akan dihapus permanen.
-          </>
+          closedBugCount > 0 ? (
+            <>
+              Suite ini memiliki <strong>{closedBugCount} riwayat Bug (Closed)</strong>. Menghapus
+              Suite ini akan memutuskan tautan aktif tetapi tetap menyimpan riwayat laporan Bug.
+              Lanjutkan?
+              <br />
+              <br />
+              Suite <strong>{suite.name}</strong> beserta semua sub-suite &amp; test case di
+              dalamnya akan dihapus permanen.
+            </>
+          ) : (
+            <>
+              Suite <strong>{suite.name}</strong> beserta semua sub-suite &amp; test case di
+              dalamnya akan dihapus permanen.
+            </>
+          )
         }
+        confirmLabel={closedBugCount > 0 ? "Ya, Hapus Suite" : undefined}
         pending={deletePending}
         onConfirm={() => void handleDelete()}
         onCancel={() => setConfirmDelete(false)}

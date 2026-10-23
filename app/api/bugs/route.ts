@@ -67,6 +67,9 @@ export async function GET(req: NextRequest) {
       resolvedAt: b.resolvedAt?.toISOString() ?? null,
       testCase: b.testCase,
       suite: b.suite,
+      // Nama modul yang sudah diresolusi: suite hidup dulu, snapshot riwayat
+      // sebagai fallback setelah suite-nya dihapus. Semua renderer memakai ini.
+      suiteName: b.suite?.name ?? b.suiteName ?? null,
       project: b.project,
       run: b.testRunResult?.run ?? null,
       createdBy: b.createdBy,

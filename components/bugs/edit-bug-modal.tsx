@@ -168,6 +168,9 @@ export function EditBugModal({
       suite: selectedSuite
         ? { id: selectedSuite.id, name: selectedSuite.name }
         : bug.suite,
+      // Label Module dibaca dari `suiteName` yang sudah diresolusi — ikut
+      // di-patch, kalau tidak nama modul tetap yang lama sampai refetch.
+      suiteName: selectedSuite ? selectedSuite.name : (bug.suiteName ?? null),
       // Precondition OPSIONAL — dikirim apa adanya (boleh kosong).
       precondition: precondition.trim(),
       expectedResult: expectedResult.trim(),

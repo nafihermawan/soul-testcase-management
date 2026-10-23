@@ -2,13 +2,22 @@
 
 import { useEffect } from "react";
 import { createPortal } from "react-dom";
+import Link from "next/link";
 import { BulletText } from "@/components/ui/bullet-text";
-import { STATUS_BADGE, statusPillStyle, type RunResultItem } from "./run-executor-shared";
+import {
+  BUG_STATUS_BADGE,
+  FONT_MONO,
+  STATUS_BADGE,
+  statusPillStyle,
+  type ActiveRunBug,
+  type RunResultItem,
+} from "./run-executor-shared";
 
 /* Modal: ringkasan hasil pengujian sebelum run diselesaikan (Completion Summary). */
 export function CompleteRunModal({
   items,
   untested,
+  activeBugs,
   overallNotes,
   onOverallNotesChange,
   onCancel,
@@ -17,12 +26,16 @@ export function CompleteRunModal({
 }: {
   items: RunResultItem[];
   untested: number;
+  /** Bug aktif yang menahan penyelesaian run (quality gate). */
+  activeBugs: ActiveRunBug[];
   overallNotes: string;
   onOverallNotesChange: (v: string) => void;
   onCancel: () => void;
   onConfirm: () => void;
   completing: boolean;
 }) {
+  /** Gate: masih ada bug aktif => run tidak boleh diselesaikan. */
+  const blocked = activeBugs.length > 0;
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape" && !completing) onCancel();
@@ -108,6 +121,142 @@ export function CompleteRunModal({
               Review hasil pengujian dan tambahkan catatan akhir sebelum menyelesaikan run.
             </p>
           </div>
+
+          {/* Quality gate: run tidak boleh ditutup selama masih ada bug aktif. */}
+          {blocked && (
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: "0.6rem",
+                padding: "0.85rem",
+                borderRadius: 10,
+                background: "#FEF2F2",
+                border: "1px solid #FECACA",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: "0.5rem",
+                  color: "#B91C1C",
+                  fontSize: "0.78rem",
+                  lineHeight: 1.5,
+                }}
+              >
+                <span aria-hidden="true">⛔</span>
+                <span>
+                  Tidak dapat menyelesaikan Test Run. Masih terdapat{" "}
+                  <strong>{activeBugs.length}</strong> Bug aktif yang belum Closed/Resolved. Silakan
+                  selesaikan atau tautkan ulang Bug tersebut terlebih dahulu.
+                </span>
+              </div>
+
+              {/* Daftar ringkas bug aktif yang masih menggantung di run ini. */}
+              <div
+                className="thin-scrollbar"
+                style={{
+                  maxHeight: 150,
+                  overflowY: "auto",
+                  background: "#fff",
+                  border: "1px solid #FEE2E2",
+                  borderRadius: 8,
+                  display: "flex",
+                  flexDirection: "column",
+                }}
+              >
+                {activeBugs.map((b, i) => {
+                  const badge = BUG_STATUS_BADGE[b.status];
+                  return (
+                    <div
+                      key={b.id}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.5rem",
+                        padding: "0.45rem 0.6rem",
+                        borderBottom: i < activeBugs.length - 1 ? "1px solid #FEE2E2" : "none",
+                      }}
+                    >
+                      <span style={{ ...statusPillStyle(badge), flexShrink: 0 }}>
+                        {badge.label}
+                      </span>
+                      <span
+                        title={b.title}
+                        style={{
+                          flex: 1,
+                          minWidth: 0,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                          fontSize: "0.78rem",
+                          fontWeight: 600,
+                          color: "#1F2937",
+                        }}
+                      >
+                        {b.title}
+                      </span>
+                      <span
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 6,
+                          minWidth: 0,
+                          maxWidth: 190,
+                          flexShrink: 0,
+                        }}
+                      >
+                        <span
+                          style={{
+                            fontFamily: FONT_MONO,
+                            fontSize: "0.7rem",
+                            color: "#94A3B8",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {b.tcId ?? "—"}
+                        </span>
+                        <span
+                          title={b.suiteName ?? undefined}
+                          style={{
+                            fontSize: "0.7rem",
+                            color: "#94A3B8",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {b.suiteName ?? ""}
+                        </span>
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Tombol pintas: langsung ke Bugs Tracker untuk update status. */}
+              <Link
+                href="/bugs"
+                style={{
+                  alignSelf: "flex-start",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  padding: "0.35rem 0.7rem",
+                  borderRadius: 8,
+                  background: "#fff",
+                  border: "1px solid #FECACA",
+                  color: "#B91C1C",
+                  fontSize: "0.75rem",
+                  fontWeight: 600,
+                  textDecoration: "none",
+                }}
+              >
+                Buka Bugs Tracker →
+              </Link>
+            </div>
+          )}
 
           {untested > 0 && (
             <div
@@ -299,24 +448,28 @@ export function CompleteRunModal({
           <button
             type="button"
             onClick={onConfirm}
-            disabled={completing}
+            disabled={completing || blocked}
+            title={blocked ? "Selesaikan dulu Bug aktif yang tertaut ke run ini." : undefined}
             style={{
               height: 34,
               padding: "0 1rem",
               fontSize: "0.75rem",
               fontWeight: 600,
-              color: "#0F172A",
-              background: "#FFC348",
+              // Disabled = abu (bukan kuning pudar) supaya tidak terlihat bisa diklik.
+              color: blocked ? "#94A3B8" : "#0F172A",
+              background: blocked ? "#F1F5F9" : "#FFC348",
               border: "none",
               borderRadius: 8,
-              boxShadow: "0 1px 2px rgba(15, 23, 42, 0.08)",
-              cursor: completing ? "wait" : "pointer",
+              boxShadow: blocked ? "none" : "0 1px 2px rgba(15, 23, 42, 0.08)",
+              cursor: completing ? "wait" : blocked ? "not-allowed" : "pointer",
               transition: "background-color 0.15s ease",
             }}
             onMouseEnter={(e) => {
-              if (!completing) e.currentTarget.style.background = "#F0B53D";
+              if (!completing && !blocked) e.currentTarget.style.background = "#F0B53D";
             }}
-            onMouseLeave={(e) => (e.currentTarget.style.background = "#FFC348")}
+            onMouseLeave={(e) =>
+              (e.currentTarget.style.background = blocked ? "#F1F5F9" : "#FFC348")
+            }
           >
             {completing ? "Menyelesaikan..." : "Complete Run"}
           </button>

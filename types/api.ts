@@ -146,6 +146,11 @@ export type BugRow = {
   } | null;
   /** Suite/modul tempat bug ditemukan (diisi untuk temuan ad-hoc). */
   suite: { id: string; name: string } | null;
+  /**
+   * Nama modul yang sudah DIRESOLUSI: nama suite hidup, atau snapshot
+   * `Bug.suiteName` kalau suite-nya sudah dihapus. Semua tampilan memakai ini.
+   */
+  suiteName: string | null;
   /** Project pemilik suite di atas — dasar agregasi jumlah bug per project. */
   project: { id: string; name: string } | null;
   /** Test Run tempat bug ditemukan (bug dari eksekusi); null untuk ad-hoc.
@@ -173,6 +178,8 @@ export type BugEditableFields = {
   suiteId?: string | null;
   /** Suite hasil perubahan — dipakai untuk patch tampilan detail/daftar. */
   suite?: { id: string; name: string } | null;
+  /** Nama modul hasil resolusi, ikut di-patch supaya label Module tidak basi. */
+  suiteName?: string | null;
   expectedResult?: string | null;
   /** Prasyarat/kondisi awal sebelum bug direproduksi (opsional). */
   precondition?: string | null;

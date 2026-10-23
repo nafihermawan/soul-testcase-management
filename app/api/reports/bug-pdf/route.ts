@@ -67,7 +67,8 @@ export async function GET(request: Request) {
       externalLink: bug.externalLink,
       runName: bug.testRunResult?.run?.name ?? null,
       environment: bug.environment ?? bug.testRunResult?.run?.environment ?? null,
-      moduleName: bug.suite?.name ?? null,
+      // Suite hidup dulu; snapshot riwayat tetap dipakai setelah suite dihapus.
+      moduleName: bug.suite?.name ?? bug.suiteName ?? null,
       reporter: bug.createdBy?.name ?? null,
       createdAt: bug.createdAt.toISOString(),
       // Baris "Alasan Skipped" pada PDF mengambil alasan dari hasil eksekusi yang

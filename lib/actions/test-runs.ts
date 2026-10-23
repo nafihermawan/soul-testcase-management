@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/permissions";
 import { ACTIVE_RUN_STATUSES, type RunStatusValue } from "@/lib/run-status";
-import { SKIP_REASON_OTHER } from "@/lib/qa-metrics";
+import { ACTIVE_BUG_STATUSES, SKIP_REASON_OTHER } from "@/lib/qa-metrics";
 
 export type TestRunActionState = {
   error?: string;
@@ -425,6 +425,30 @@ function closeSourceBugOp(bug: { id: string } | null) {
 }
 
 /**
+ * Bug yang MASIH AKTIF (belum CLOSED/RESOLVED) dan tertaut ke hasil eksekusi
+ * run ini — dasar quality gate "Complete Test Run".
+ *
+ * Sengaja lewat `testRunResult.runId` (temuan run ini), BUKAN
+ * `TestRun.sourceBugId`: bug sumber re-test memang masih aktif saat di-retest,
+ * dan justru ditutup OLEH penyelesaian run — kalau ikut dihitung, run re-test
+ * tidak akan pernah bisa diselesaikan.
+ */
+async function activeBugsForRun(runId: string) {
+  return prisma.bug.findMany({
+    where: { testRunResult: { runId }, status: { in: [...ACTIVE_BUG_STATUSES] } },
+    select: { id: true, title: true, status: true },
+    orderBy: { createdAt: "asc" },
+  });
+}
+
+/** Pesan gate yang sama dipakai completeRun & completeRunWithSkip. */
+function activeBugGateError(count: number): TestRunActionState {
+  return {
+    error: `Tidak dapat menyelesaikan Test Run. Masih terdapat ${count} Bug aktif yang belum Closed/Resolved. Silakan selesaikan atau tautkan ulang Bug tersebut terlebih dahulu.`,
+  };
+}
+
+/**
  * Tandai run selesai. Run yang dibuat dari sebuah bug (re-test General Finding)
  * sekaligus menutup bug asalnya — re-test-nya sudah dijalankan. */
 export async function completeRun(
@@ -444,6 +468,10 @@ export async function completeRun(
         error: `Masih ada ${notRun} test case yang belum dieksekusi. Eksekusi semuanya, atau pakai "Selesaikan & tandai sisa sebagai Skipped".`,
       };
     }
+
+    // Quality gate: bug temuan run ini harus sudah Closed/Resolved dulu.
+    const activeBugs = await activeBugsForRun(runId);
+    if (activeBugs.length > 0) return activeBugGateError(activeBugs.length);
 
     const bug = await sourceBugToClose(runId);
     await prisma.$transaction([
@@ -473,6 +501,11 @@ export async function completeRunWithSkip(
 ): Promise<TestRunActionState> {
   await requireRole("QA");
   try {
+    // Quality gate yang sama: melewati sisa TC bukan alasan menutup run dengan
+    // bug aktif masih menggantung.
+    const activeBugs = await activeBugsForRun(runId);
+    if (activeBugs.length > 0) return activeBugGateError(activeBugs.length);
+
     const bug = await sourceBugToClose(runId);
     await prisma.$transaction([
       prisma.testRunResult.updateMany({

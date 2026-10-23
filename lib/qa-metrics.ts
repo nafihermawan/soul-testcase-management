@@ -221,6 +221,17 @@ export function severityRank(severity: string | null | undefined): number {
 /** Status bug yang dianggap masih "hidup" (belum selesai). */
 export const ACTIVE_BUG_STATUSES = ["OPEN", "IN_PROGRESS"] as const;
 
+/**
+ * Apakah status bug masih aktif (belum CLOSED/RESOLVED)?
+ *
+ * SATU-SATUNYA tempat aturan ini ditulis untuk pemakaian di komponen; query
+ * server memakai `in: [...ACTIVE_BUG_STATUSES]` dari konstanta yang sama.
+ * Dipakai quality gate "Complete Test Run" dan guard hapus Suite.
+ */
+export function isActiveBugStatus(status: string | null | undefined): boolean {
+  return !!status && (ACTIVE_BUG_STATUSES as readonly string[]).includes(status);
+}
+
 /** Status bug yang menandakan sudah diperbaiki & menunggu retest QA. */
 export const RETEST_BUG_STATUS = "RESOLVED";
 

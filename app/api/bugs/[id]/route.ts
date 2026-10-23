@@ -43,6 +43,8 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     resolvedAt: bug.resolvedAt?.toISOString() ?? null,
     testCase: bug.testCase,
     suite: bug.suite,
+    // Suite hidup dulu; snapshot riwayat dipakai setelah suite-nya dihapus.
+    suiteName: bug.suite?.name ?? bug.suiteName ?? null,
     project: bug.project,
     run: bug.testRunResult?.run ?? null,
     createdBy: bug.createdBy,

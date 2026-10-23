@@ -20,7 +20,7 @@ export type RunResultItem = {
     id: string;
     title: string;
     severity: string | null;
-    status: string;
+    status: BugStatus;
     externalLink: string | null;
   }[];
   testCase?: {
@@ -65,10 +65,16 @@ export const STATUS_BADGE: Record<
   SKIPPED: { label: "Skipped", bg: "#F3E8FF", color: "#7E22CE", weight: 600 },
 };
 
-/** Gaya pill status hasil eksekusi — kapsul ringkas, konsisten di semua tempat. */
-export const statusPillStyle = (
-  badge: (typeof STATUS_BADGE)[RunResultItem["status"]]
-): React.CSSProperties => ({
+/**
+ * Gaya pill status — kapsul ringkas, konsisten di semua tempat. Dipakai untuk
+ * badge hasil eksekusi (STATUS_BADGE) maupun badge status bug
+ * (BUG_STATUS_BADGE), jadi `weight` opsional dengan default 600.
+ */
+export const statusPillStyle = (badge: {
+  bg: string;
+  color: string;
+  weight?: number;
+}): React.CSSProperties => ({
   display: "inline-flex",
   alignItems: "center",
   flexShrink: 0,
@@ -80,7 +86,7 @@ export const statusPillStyle = (
   // line-height eksplisit supaya tinggi pill seimbang di semua konteks
   // (badge menempel pojok kanan kartu, bukan melebar mengikuti baris).
   lineHeight: 1.35,
-  fontWeight: badge.weight,
+  fontWeight: badge.weight ?? 600,
   whiteSpace: "nowrap",
 });
 
@@ -181,6 +187,20 @@ export const BUG_STATUS_BADGE: Record<BugStatus, { label: string; bg: string; co
   IN_PROGRESS: { label: "In Progress", bg: "#FFFBEB", color: "#D97706", border: "#FDE68A" },
   RESOLVED: { label: "Closed", bg: "#ECFDF5", color: "#059669", border: "#A7F3D0" },
   CLOSED: { label: "Closed", bg: "#ECFDF5", color: "#059669", border: "#A7F3D0" },
+};
+
+/**
+ * Bug AKTIF (belum Closed/Resolved) yang tertaut ke run ini — dasar quality
+ * gate "Complete Test Run" sekaligus daftar yang ditampilkan di modalnya.
+ */
+export type ActiveRunBug = {
+  id: string;
+  title: string;
+  status: BugStatus;
+  /** TC tempat bug ditemukan (konteks baris). */
+  tcId: string | null;
+  /** Suite/modul bug; boleh kosong kalau suite-nya sudah dihapus. */
+  suiteName: string | null;
 };
 
 /** Severity bug pada Bug Reporting Form (nilai disimpan uppercase, sama dgn data Bug). */

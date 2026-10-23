@@ -275,7 +275,7 @@ export function BugDetailModal({
                 >
                   <InfoPair label="Status" value={STATUS_LABEL[bug.status] ?? bug.status} />
                   <InfoPair label="Severity" value={bug.severity ?? "—"} />
-                  <InfoPair label="Suite / Module" value={bug.suite?.name ?? "—"} />
+                  <InfoPair label="Suite / Module" value={bug.suiteName ?? "—"} />
                   <InfoPair label="Project" value={bug.project?.name ?? "—"} />
                   <InfoPair label="Environment" value={bug.environment ?? "—"} />
                   <InfoPair

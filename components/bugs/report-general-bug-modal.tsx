@@ -9,7 +9,7 @@ import { filesFromClipboard } from "@/components/attachments/attachments-panel";
 import { CustomSelect } from "@/components/ui/custom-select";
 import { Select } from "@/components/ui/select";
 import { FieldError } from "@/components/ui/field-error";
-import { uploadAttachmentFile } from "@/lib/client/attachments";
+import { uploadAttachmentFile, type UploadPhase } from "@/lib/client/attachments";
 import { MAX_ATTACHMENT_BYTES } from "@/lib/storage/limits";
 import { ENVIRONMENT_OPTIONS } from "@/lib/qa-metrics";
 import { urlFormatError, normalizeUrl } from "@/lib/validation";
@@ -168,6 +168,8 @@ export function ReportGeneralBugModal({
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [saving, setSaving] = useState(false);
   const [uploadingEvidence, setUploadingEvidence] = useState(false);
+  // Video dikompres dulu di browser, jadi label tombol dibedakan dari upload.
+  const [uploadPhase, setUploadPhase] = useState<UploadPhase>("uploading");
   const inputRef = useRef<HTMLInputElement>(null);
   // Dipakai untuk merevoke object URL saat modal ditutup.
   const filesRef = useRef<StagedFile[]>([]);
@@ -337,7 +339,12 @@ export function ReportGeneralBugModal({
       setUploadingEvidence(true);
       const failed: string[] = [];
       for (const staged of files) {
-        const up = await uploadAttachmentFile(staged.file, { bugId: res.bugId });
+        const up = await uploadAttachmentFile(
+          staged.file,
+          { bugId: res.bugId },
+          undefined,
+          setUploadPhase
+        );
         if (!up.ok) failed.push(staged.file.name);
       }
       setUploadingEvidence(false);
@@ -362,6 +369,15 @@ export function ReportGeneralBugModal({
     onCreated(created, warning);
     onClose();
   };
+
+  // Label tombol utama: kompresi video bisa jadi tahap terlama saat submit.
+  const submitLabel = uploadingEvidence
+    ? uploadPhase === "compressing"
+      ? "Mengompres video…"
+      : "Mengunggah evidence…"
+    : saving
+    ? "Menyimpan..."
+    : "Laporkan Bug";
 
   return createPortal(
     <div
@@ -763,7 +779,7 @@ export function ReportGeneralBugModal({
                   Klik, Drag, atau Paste file di sini
                 </div>
                 <div style={{ fontSize: "0.68rem", color: "#94A3B8" }}>
-                  Gambar atau video · maks {MAX_MB} MB per file
+                  Gambar atau video · maks {MAX_MB} MB · video dikompres otomatis
                 </div>
               </div>
             )}
@@ -973,7 +989,7 @@ export function ReportGeneralBugModal({
             }}
             onMouseLeave={(e) => (e.currentTarget.style.background = "#FFC348")}
           >
-            {uploadingEvidence ? "Mengunggah evidence…" : saving ? "Menyimpan..." : "Laporkan Bug"}
+            {submitLabel}
           </button>
         </div>
       </div>

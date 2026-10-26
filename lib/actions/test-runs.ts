@@ -43,7 +43,12 @@ function handleError(error: unknown): TestRunActionState {
   };
 }
 
-/** Kumpulkan semua TestCase di dalam suite (termasuk semua sub-suite rekursif). */
+/** Kumpulkan semua TestCase di dalam suite (termasuk semua sub-suite rekursif).
+ *
+ *  TC berstatus DEPRECATED sengaja DIKECUALIKAN di sini, bukan di UI: form
+ *  Express Run mengirim `suiteIds` (suite milik TC yang dicentang) dan server
+ *  mengekspansi seluruh isi suite itu — tanpa filter ini, satu TC deprecated di
+ *  suite yang sama ikut tertarik masuk ke run walau sudah disembunyikan di UI. */
 async function collectTestCasesInSuite(suiteId: string): Promise<string[]> {
   const ids: string[] = [];
   const stack = [suiteId];
@@ -57,10 +62,46 @@ async function collectTestCasesInSuite(suiteId: string): Promise<string[]> {
     stack.push(...suite.children.map((c) => c.id));
   }
   const tcs = await prisma.testCase.findMany({
-    where: { suiteId: { in: ids } },
+    where: { suiteId: { in: ids }, status: { not: "DEPRECATED" } },
     select: { id: true },
   });
   return tcs.map((t) => t.id);
+}
+
+/** Pesan penolakan standar untuk TC berstatus Deprecated. */
+function deprecatedMessage(tcIds: string[]): string {
+  const shown = tcIds.slice(0, 3).join(", ");
+  const rest = tcIds.length > 3 ? ` dan ${tcIds.length - 3} lainnya` : "";
+  return `Test Case ${shown}${rest} berstatus Deprecated dan tidak dapat dimasukkan ke dalam Active Run.`;
+}
+
+/**
+ * Validasi "pre-add": tolak TC deprecated yang diminta EKSPLISIT ke dalam run.
+ *
+ * `allowed` berisi id yang SUDAH ada di run — dipakai jalur edit supaya run
+ * warisan (dibuat sebelum aturan ini ada) tetap bisa diedit; keanggotaannya
+ * tidak digugurkan, dan QA tetap bisa menandainya Skipped dengan alasan
+ * "Deprecated" saat eksekusi.
+ *
+ * Jalur BULK (suite terpilih) tidak lewat sini: kasus itu di-exclude diam-diam
+ * oleh `collectTestCasesInSuite`, bukan ditolak.
+ */
+async function deprecatedSelectionError(
+  testCaseIds: string[],
+  allowed: Set<string>
+): Promise<string | null> {
+  const candidates = Array.from(new Set(testCaseIds.filter(Boolean))).filter(
+    (id) => !allowed.has(id)
+  );
+  if (candidates.length === 0) return null;
+
+  const deprecated = await prisma.testCase.findMany({
+    where: { id: { in: candidates }, status: "DEPRECATED" },
+    select: { tcId: true },
+    orderBy: { tcId: "asc" },
+  });
+  if (deprecated.length === 0) return null;
+  return deprecatedMessage(deprecated.map((t) => t.tcId));
 }
 
 /** Buat Test Run baru (Express Run) dari daftar suite/TC terpilih.
@@ -85,6 +126,10 @@ export async function createTestRun(
   const projectId = projectIds[0] ?? "";
 
   try {
+    // Run baru: tidak ada keanggotaan lama, jadi semua TC deprecated ditolak.
+    const deprecated = await deprecatedSelectionError(testCaseIds, new Set());
+    if (deprecated) return { error: deprecated };
+
     const selected = new Set<string>(testCaseIds);
     for (const suiteId of suiteIds) {
       const collected = await collectTestCasesInSuite(suiteId);
@@ -183,6 +228,17 @@ export async function updateTestRun(
     });
     if (!run) return { error: "Run tidak ditemukan." };
 
+    const existing = await prisma.testRunResult.findMany({
+      where: { runId },
+      select: { testCaseId: true },
+    });
+    const existingIds = new Set(existing.map((r) => r.testCaseId));
+
+    // TC deprecated yang SUDAH ada di run dibiarkan (run warisan tetap bisa
+    // diedit); permintaan memasukkannya BARU yang ditolak.
+    const deprecated = await deprecatedSelectionError(testCaseIds, existingIds);
+    if (deprecated) return { error: deprecated };
+
     // Sama seperti create: TC terpilih = yang dicentang + seluruh isi suite terpilih.
     const selected = new Set<string>(testCaseIds);
     for (const suiteId of suiteIds) {
@@ -191,11 +247,6 @@ export async function updateTestRun(
     }
     if (selected.size === 0) return { error: "Tidak ada test case yang dipilih." };
 
-    const existing = await prisma.testRunResult.findMany({
-      where: { runId },
-      select: { testCaseId: true },
-    });
-    const existingIds = new Set(existing.map((r) => r.testCaseId));
     const toAdd = Array.from(selected).filter((id) => !existingIds.has(id));
     const toRemove = Array.from(existingIds).filter((id) => !selected.has(id));
 
@@ -588,6 +639,12 @@ export async function saveExecutionForTestCase(
       await startRunIfPending(existing.run.id, existing.run.status);
       revalidatePath(`/test-runs/${existing.run.id}`);
     } else {
+      // Cabang ini MEMBUAT baris hasil baru di run berjalan, jadi TC Deprecated
+      // tidak boleh masuk lewat sini. (Cabang update di atas tetap diizinkan:
+      // QA perlu menandai baris Deprecated warisan sebagai Skipped/Deprecated.)
+      if (tc.status === "DEPRECATED") {
+        return { error: deprecatedMessage([tc.tcId]) };
+      }
       // Belum ada run yang memuat TC ini: pakai run berjalan terbaru project,
       // kalau tidak ada baru run "Open" terbaru (Express Run satu TC).
       const activeRun =

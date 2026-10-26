@@ -3,14 +3,19 @@ import {
   presignAttachmentUpload,
   type AttachmentOwner,
 } from "@/lib/actions/attachments";
+import { compressVideoFile } from "@/lib/client/video-compress";
 import type { AttachmentItem } from "@/types/api";
 
 export type UploadAttachmentResult =
   | { ok: true; attachment: AttachmentItem }
   | { ok: false; error: string };
 
+/** Tahap upload yang perlu diketahui UI (video dikompres dulu di browser). */
+export type UploadPhase = "compressing" | "uploading";
+
 /**
- * Upload satu file evidence: presign -> PUT langsung ke R2 -> confirm.
+ * Upload satu file evidence: [kompres video] -> presign -> PUT langsung ke R2
+ * -> confirm.
  *
  * Dipakai dua tempat dengan kebutuhan berbeda:
  * - AttachmentsPanel: owner (TestCase/TestRunResult/Bug) sudah ada sejak awal.
@@ -20,12 +25,28 @@ export type UploadAttachmentResult =
 export async function uploadAttachmentFile(
   file: File,
   owner: AttachmentOwner,
-  onProgress?: (percent: number) => void
+  onProgress?: (percent: number) => void,
+  onPhase?: (phase: UploadPhase) => void
 ): Promise<UploadAttachmentResult> {
+  /**
+   * Video dikecilkan dulu di browser supaya yang tersimpan di R2 adalah hasil
+   * kompresi. `payload` (bukan `file`) yang dipakai untuk presign, PUT, dan
+   * confirm supaya `Attachment.size`/`mimeType` cocok dengan byte yang benar.
+   */
+  let payload = file;
+  if (file.type.startsWith("video/")) {
+    onPhase?.("compressing");
+    onProgress?.(0);
+    payload = (await compressVideoFile(file, onProgress)).file;
+  }
+
+  onPhase?.("uploading");
+  onProgress?.(0);
+
   const presign = await presignAttachmentUpload({
-    fileName: file.name,
-    mimeType: file.type,
-    size: file.size,
+    fileName: payload.name,
+    mimeType: payload.type,
+    size: payload.size,
     owner,
   });
   if (presign.error || !presign.uploadUrl || !presign.storageKey) {
@@ -38,7 +59,7 @@ export async function uploadAttachmentFile(
     await new Promise<void>((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       xhr.open("PUT", presign.uploadUrl!);
-      xhr.setRequestHeader("Content-Type", file.type);
+      xhr.setRequestHeader("Content-Type", payload.type);
       xhr.upload.onprogress = (e) => {
         if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100));
       };
@@ -52,7 +73,7 @@ export async function uploadAttachmentFile(
       };
       // Kegagalan di level jaringan (server tak terjangkau / offline).
       xhr.onerror = () => reject(new Error("Koneksi internet terputus. Periksa jaringan Anda."));
-      xhr.send(file);
+      xhr.send(payload);
     });
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Upload gagal." };
@@ -60,9 +81,9 @@ export async function uploadAttachmentFile(
 
   const confirmed = await confirmAttachment({
     storageKey: presign.storageKey,
-    fileName: file.name,
-    mimeType: file.type,
-    size: file.size,
+    fileName: payload.name,
+    mimeType: payload.type,
+    size: payload.size,
     owner,
   });
   if (confirmed.error || !confirmed.attachment) {

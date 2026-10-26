@@ -6,7 +6,7 @@ import {
   deleteAttachment,
   type AttachmentOwner,
 } from "@/lib/actions/attachments";
-import { uploadAttachmentFile } from "@/lib/client/attachments";
+import { uploadAttachmentFile, type UploadPhase } from "@/lib/client/attachments";
 import { MAX_ATTACHMENT_BYTES } from "@/lib/storage/limits";
 import type { AttachmentItem } from "@/types/api";
 
@@ -119,6 +119,8 @@ export function AttachmentsPanel({
   const panelIdRef = useRef(Symbol("attachments-panel"));
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
+  // Video dikompres dulu di browser, jadi labelnya dibedakan dari "Mengunggah".
+  const [phase, setPhase] = useState<UploadPhase>("uploading");
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<AttachmentItem | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -224,7 +226,7 @@ export function AttachmentsPanel({
 
       setUploading(true);
       setProgress(0);
-      const result = await uploadAttachmentFile(file, owner, setProgress);
+      const result = await uploadAttachmentFile(file, owner, setProgress, setPhase);
       setUploading(false);
       setProgress(0);
       if (!result.ok) {
@@ -339,7 +341,7 @@ export function AttachmentsPanel({
       let failure: string | null = null;
       for (const p of pending) {
         setProgress(0);
-        const result = await uploadAttachmentFile(p.file, owner, setProgress);
+        const result = await uploadAttachmentFile(p.file, owner, setProgress, setPhase);
         if (!result.ok) {
           failure = result.error;
           break;
@@ -394,6 +396,9 @@ export function AttachmentsPanel({
     display: "block",
     objectFit: "cover",
   };
+
+  // Label progres: fase kompresi video dibedakan dari upload byte ke R2.
+  const busyLabel = phase === "compressing" ? "Mengompres video…" : "Mengunggah…";
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
@@ -454,7 +459,7 @@ export function AttachmentsPanel({
                 style={{ color: "#64748B", animation: "spin 0.8s linear infinite" }}
               />
               <span style={{ fontSize: "0.78rem", fontWeight: 600, color: "#334155" }}>
-                Mengunggah… {progress}%
+                {busyLabel} {progress}%
               </span>
             </>
           ) : (
@@ -464,7 +469,7 @@ export function AttachmentsPanel({
                 Klik, Drag, atau Paste file di sini
               </span>
               <span style={{ fontSize: "0.7rem", color: "#94A3B8" }}>
-                Gambar atau video · maks {MAX_MB} MB per file
+                Gambar atau video · maks {MAX_MB} MB · video dikompres otomatis
               </span>
             </>
           )}
@@ -484,7 +489,7 @@ export function AttachmentsPanel({
           }}
         >
           <Loader2 size={14} style={{ color: "#64748B", animation: "spin 0.8s linear infinite" }} />
-          Mengunggah… {progress}%
+          {busyLabel} {progress}%
         </div>
       )}
 

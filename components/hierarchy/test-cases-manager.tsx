@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { formatCase } from "@/lib/format";
@@ -1433,6 +1433,54 @@ function TestCaseDetailModal({
     margin: "0 0 0.4rem",
   };
 
+  /** Label kecil di atas tiap nilai metadata. */
+  const metaLabel: React.CSSProperties = {
+    display: "block",
+    color: "#9CA3AF",
+    fontWeight: 500,
+    fontSize: "0.72rem",
+    marginBottom: "0.25rem",
+  };
+
+  /**
+   * Pemisah vertikal antar kolom metadata: 1px, tinggi sebanding tinggi teks
+   * (label + nilai ±32px), rata tengah terhadap blok teksnya.
+   * Warnanya `--border-strong` (#D1D5DB = gray-300) — sengaja lebih gelap dari
+   * `--border` supaya garisnya benar-benar terlihat di atas latar kartu.
+   */
+  const metaDivider: React.CSSProperties = {
+    width: 1,
+    height: 32,
+    background: "var(--border-strong)",
+    flexShrink: 0,
+    alignSelf: "center",
+  };
+
+  /**
+   * Kolom-kolom metadata header, disusun sebagai array supaya penambahan item
+   * baru otomatis mendapat pemisah vertikal — tanpa menambah divider manual.
+   */
+  const metaItems: { label: string; value: React.ReactNode; valueStyle: React.CSSProperties }[] = [
+    { label: "Priority", value: formatCase(tc.priority), valueStyle: priorityText },
+    { label: "Status", value: formatCase(tc.status), valueStyle: statusText },
+    {
+      label: "Author",
+      value: tc.createdBy?.name ?? "—",
+      valueStyle: { fontWeight: 600, color: "#1F2937", fontSize: "0.82rem" },
+    },
+    {
+      label: "Dibuat",
+      value: tc.createdAt
+        ? new Date(tc.createdAt).toLocaleDateString("id-ID", {
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+          })
+        : "—",
+      valueStyle: { fontWeight: 500, color: "#374151", fontSize: "0.82rem" },
+    },
+  ];
+
   return createPortal(
     <div
       role="dialog"
@@ -1536,84 +1584,30 @@ function TestCaseDetailModal({
             gap: "1.25rem",
           }}
         >
-          {/* Metadata grid */}
+          {/* Metadata: kolom sama lebar, dipisah garis vertikal 1px (gray-300,
+              self-center) yang rata tengah. Jarak 1rem di kiri-kanan tiap garis
+              supaya judul & value tidak menempel ke pembatasnya. */}
           <div
             style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-              gap: "1rem",
+              display: "flex",
+              alignItems: "stretch",
               background: "rgba(248, 250, 252, 0.8)",
               border: "1px solid rgba(229, 231, 235, 0.8)",
               borderRadius: 8,
               padding: "1rem",
             }}
           >
-            <div>
-              <span
-                style={{
-                  display: "block",
-                  color: "#9CA3AF",
-                  fontWeight: 500,
-                  fontSize: "0.72rem",
-                  marginBottom: "0.25rem",
-                }}
-              >
-                Priority
-              </span>
-              <span style={priorityText}>{formatCase(tc.priority)}</span>
-            </div>
-            <div>
-              <span
-                style={{
-                  display: "block",
-                  color: "#9CA3AF",
-                  fontWeight: 500,
-                  fontSize: "0.72rem",
-                  marginBottom: "0.25rem",
-                }}
-              >
-                Status
-              </span>
-              <span style={statusText}>{formatCase(tc.status)}</span>
-            </div>
-            <div>
-              <span
-                style={{
-                  display: "block",
-                  color: "#9CA3AF",
-                  fontWeight: 500,
-                  fontSize: "0.72rem",
-                  marginBottom: "0.25rem",
-                }}
-              >
-                Author
-              </span>
-              <span style={{ fontWeight: 600, color: "#1F2937", fontSize: "0.82rem" }}>
-                {tc.createdBy?.name ?? "—"}
-              </span>
-            </div>
-            <div>
-              <span
-                style={{
-                  display: "block",
-                  color: "#9CA3AF",
-                  fontWeight: 500,
-                  fontSize: "0.72rem",
-                  marginBottom: "0.25rem",
-                }}
-              >
-                Dibuat
-              </span>
-              <span style={{ fontWeight: 500, color: "#374151", fontSize: "0.82rem" }}>
-                {tc.createdAt
-                  ? new Date(tc.createdAt).toLocaleDateString("id-ID", {
-                      day: "2-digit",
-                      month: "short",
-                      year: "numeric",
-                    })
-                  : "—"}
-              </span>
-            </div>
+            {metaItems.map((item, index) => (
+              <Fragment key={item.label}>
+                {index > 0 && (
+                  <div aria-hidden="true" style={{ ...metaDivider, margin: "0 1rem" }} />
+                )}
+                <div style={{ flex: "1 1 0", minWidth: 0 }}>
+                  <span style={metaLabel}>{item.label}</span>
+                  <span style={item.valueStyle}>{item.value}</span>
+                </div>
+              </Fragment>
+            ))}
           </div>
 
           {/* Deskripsi / Skenario */}

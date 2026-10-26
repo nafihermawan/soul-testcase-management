@@ -1,7 +1,16 @@
 "use client";
 
-import type { CSSProperties } from "react";
-import { AlertTriangle, BarChart3, Bug, ExternalLink, Play, SlidersHorizontal } from "lucide-react";
+import { useState, type CSSProperties } from "react";
+import {
+  AlertTriangle,
+  BarChart3,
+  Bug,
+  ChevronLeft,
+  ChevronRight,
+  ExternalLink,
+  Play,
+  SlidersHorizontal,
+} from "lucide-react";
 
 import { ErrorBlock, StatsCardsSkeleton, TableCardSkeleton } from "@/components/ui/data-states";
 import { runStatusLabel } from "@/components/test-runs/test-run-status-badge";
@@ -665,20 +674,38 @@ const TH: CSSProperties = {
   textAlign: "right",
 };
 
-/** Header tabel tetap terlihat saat isi card di-scroll (background solid). */
-const STICKY_TH: CSSProperties = {
-  position: "sticky",
-  top: 0,
-  zIndex: 10,
-  background: "#F8FAFC",
-};
-
 const TD: CSSProperties = { padding: "13px 10px", whiteSpace: "nowrap", textAlign: "right" };
 
-/** Tinggi maksimum area tabel: jumlah suite nyata bisa panjang. */
-const COVERAGE_MAX_H = 460;
+/**
+ * Jumlah baris per halaman tabel Coverage. Sengaja tetap: tinggi card jadi
+ * stabil dan seimbang dengan kolom kanan (Release Readiness + Health & Action),
+ * tanpa baris terakhir yang terpotong setengah atau area kosong menggantung.
+ * Ubah angka ini saja kalau mau baris lebih banyak/sedikit.
+ */
+const COVERAGE_PAGE_SIZE = 10;
+
+/** Tombol pagination ringkas di footer card. */
+const PAGE_BTN: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  width: 26,
+  height: 26,
+  background: "#ffffff",
+  border: "1px solid #DDE2E9",
+  borderRadius: 7,
+  color: "#334155",
+};
 
 function CoverageBySuite({ rows }: { rows: SuiteRow[] }) {
+  const [page, setPage] = useState(0);
+  const pageCount = Math.max(1, Math.ceil(rows.length / COVERAGE_PAGE_SIZE));
+  // Clamp: daftar bisa menyusut (mis. suite dihapus) saat user ada di halaman akhir.
+  const current = Math.min(page, pageCount - 1);
+  const start = current * COVERAGE_PAGE_SIZE;
+  const visible = rows.slice(start, start + COVERAGE_PAGE_SIZE);
+  const from = rows.length === 0 ? 0 : start + 1;
+  const to = Math.min(start + COVERAGE_PAGE_SIZE, rows.length);
   return (
     <section style={{ ...CARD, display: "flex", flexDirection: "column", height: "100%" }}>
       <div
@@ -702,7 +729,7 @@ function CoverageBySuite({ rows }: { rows: SuiteRow[] }) {
         </div>
       </div>
 
-      <div style={{ overflowX: "auto", overflowY: "auto", maxHeight: COVERAGE_MAX_H }}>
+      <div style={{ overflowX: "auto" }}>
         <table style={{ width: "100%", minWidth: 760, borderCollapse: "collapse", fontSize: 14 }}>
           <thead>
             <tr
@@ -712,23 +739,21 @@ function CoverageBySuite({ rows }: { rows: SuiteRow[] }) {
                 borderBottom: "1px solid #EEF1F5",
               }}
             >
-              <th style={{ ...TH, ...STICKY_TH, textAlign: "left", paddingLeft: 22 }}>Suite</th>
-              <th style={{ ...TH, ...STICKY_TH }}>TC</th>
-              <th style={{ ...TH, ...STICKY_TH }}>Tested</th>
-              <th style={{ ...TH, ...STICKY_TH }}>Pass</th>
-              <th style={{ ...TH, ...STICKY_TH }}>Failed</th>
-              <th style={{ ...TH, ...STICKY_TH }}>Pass Rate</th>
-              <th style={{ ...TH, ...STICKY_TH, paddingLeft: 24 }}>Coverage</th>
-              <th style={{ ...TH, ...STICKY_TH, paddingRight: 22, fontWeight: 600, color: "#0F172A" }}>
-                Last Activity ↓
-              </th>
+              <th style={{ ...TH, textAlign: "left", paddingLeft: 22 }}>Suite</th>
+              <th style={TH}>TC</th>
+              <th style={TH}>Tested</th>
+              <th style={TH}>Pass</th>
+              <th style={TH}>Failed</th>
+              <th style={TH}>Pass Rate</th>
+              <th style={{ ...TH, paddingLeft: 24 }}>Coverage</th>
+              <th style={{ ...TH, paddingRight: 22, fontWeight: 600, color: "#0F172A" }}>Last Activity ↓</th>
             </tr>
           </thead>
           <tbody>
-            {rows.length === 0 ? (
+            {visible.length === 0 ? (
               <EmptyRow colSpan={8} label="Belum ada suite yang bisa dihitung." />
             ) : (
-              rows.map((s) => (
+              visible.map((s) => (
                 <tr key={s.id} style={{ borderBottom: "1px solid #F1F4F8" }}>
                   <td style={{ ...TD, textAlign: "left", paddingLeft: 22, fontWeight: 500, color: "#0F172A" }}>
                     <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
@@ -750,6 +775,62 @@ function CoverageBySuite({ rows }: { rows: SuiteRow[] }) {
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* Footer menempel di dasar card (`marginTop: auto`): sisa tinggi card
+          dipakai di sini, jadi tidak ada area kosong menggantung di bawah tabel. */}
+      <div
+        style={{
+          marginTop: "auto",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 12,
+          padding: "10px 22px",
+          borderTop: "1px solid #EEF1F5",
+          background: "#FAFBFC",
+          fontSize: 12,
+          color: "#64748B",
+          flexWrap: "wrap",
+        }}
+      >
+        <span style={{ whiteSpace: "nowrap" }}>
+          Menampilkan {from}–{to} dari {rows.length} suites
+        </span>
+
+        {pageCount > 1 && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <button
+              type="button"
+              aria-label="Halaman sebelumnya"
+              disabled={current === 0}
+              onClick={() => setPage(current - 1)}
+              style={{
+                ...PAGE_BTN,
+                color: current === 0 ? "#CBD5E1" : "#334155",
+                cursor: current === 0 ? "not-allowed" : "pointer",
+              }}
+            >
+              <ChevronLeft size={14} aria-hidden="true" />
+            </button>
+            <span style={{ ...num, fontSize: 12, color: "#475569", whiteSpace: "nowrap" }}>
+              {current + 1} / {pageCount}
+            </span>
+            <button
+              type="button"
+              aria-label="Halaman berikutnya"
+              disabled={current >= pageCount - 1}
+              onClick={() => setPage(current + 1)}
+              style={{
+                ...PAGE_BTN,
+                color: current >= pageCount - 1 ? "#CBD5E1" : "#334155",
+                cursor: current >= pageCount - 1 ? "not-allowed" : "pointer",
+              }}
+            >
+              <ChevronRight size={14} aria-hidden="true" />
+            </button>
+          </div>
+        )}
       </div>
     </section>
   );

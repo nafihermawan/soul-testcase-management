@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getFormattedDate, runCodeOf, sanitizeFilename } from "@/lib/format";
-import { RUN_STATUS_LABEL, type RunStatusValue } from "@/lib/run-status";
+import { RUN_STATUS_LABEL, isDeprecatedTcStatus, type RunStatusValue } from "@/lib/run-status";
 import { countsFromStatuses, formatPct, passRateOf } from "@/lib/qa-metrics";
 import { requireUser } from "@/lib/hierarchy";
 import { ReportActionBar } from "@/components/test-runs/report-action-bar";
@@ -74,6 +74,7 @@ export default async function RunReportPage({
           testCase: {
             select: {
               tcId: true,
+              status: true,
               suite: { select: { name: true, project: { select: { name: true } } } },
             },
           },
@@ -84,14 +85,25 @@ export default async function RunReportPage({
 
   if (!run) notFound();
 
-  const total = run.results.length;
-  const passed = run.results.filter((r) => r.status === "PASS").length;
-  const failed = run.results.filter((r) => r.status === "FAIL").length;
-  const blocked = run.results.filter((r) => r.status === "BLOCKED").length;
-  const skipped = run.results.filter((r) => r.status === "SKIPPED").length;
+  /**
+   * Cakupan yang sama dengan halaman eksekusi: TC yang sudah DEPRECATED tidak
+   * ikut di run yang BELUM selesai — supaya "Total TC", Pass Rate, dan daftar
+   * kartunya tidak berbeda dari yang terlihat di layar. Run COMPLETED tetap
+   * utuh sebagai riwayat (lihat `lib/run-status.ts`).
+   */
+  const results =
+    run.status === "COMPLETED"
+      ? run.results
+      : run.results.filter((r) => !isDeprecatedTcStatus(r.testCase?.status));
+
+  const total = results.length;
+  const passed = results.filter((r) => r.status === "PASS").length;
+  const failed = results.filter((r) => r.status === "FAIL").length;
+  const blocked = results.filter((r) => r.status === "BLOCKED").length;
+  const skipped = results.filter((r) => r.status === "SKIPPED").length;
   // Pass Rate = PASS / (PASS+FAIL+BLOCKED) — definisi tunggal dari lib/qa-metrics,
   // jadi TC yang di-Skip (dan yang belum dieksekusi) tidak menurunkannya.
-  const passRate = passRateOf(countsFromStatuses(run.results.map((r) => r.status)));
+  const passRate = passRateOf(countsFromStatuses(results.map((r) => r.status)));
 
   // Bug unik yang ditautkan ke hasil eksekusi run ini (satu bug bisa dirujuk
   // dari beberapa hasil, jadi didedupe berdasarkan id).
@@ -105,14 +117,14 @@ export default async function RunReportPage({
       externalLink: string | null;
     }
   >();
-  for (const r of run.results) {
+  for (const r of results) {
     for (const b of r.bugs) if (!bugMap.has(b.id)) bugMap.set(b.id, b);
   }
   const bugList = Array.from(bugMap.values());
 
   // Grouping per project -> per suite
-  const projectMap = new Map<string, Map<string, typeof run.results>>();
-  for (const r of run.results) {
+  const projectMap = new Map<string, Map<string, typeof results>>();
+  for (const r of results) {
     const suite = r.testCase?.suite;
     const pname = suite?.project?.name ?? "Unknown";
     const sname = suite?.name ?? "Tanpa Suite";

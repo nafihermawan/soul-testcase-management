@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/permissions";
-import { ACTIVE_RUN_STATUSES, type RunStatusValue } from "@/lib/run-status";
+import { ACTIVE_RUN_STATUSES, ACTIVE_RUN_TC_SCOPE, type RunStatusValue } from "@/lib/run-status";
 import { ACTIVE_BUG_STATUSES, SKIP_REASON_OTHER } from "@/lib/qa-metrics";
 
 export type TestRunActionState = {
@@ -519,8 +519,12 @@ export async function completeRun(
     // Run hanya boleh ditutup bila TIDAK ada TC yang masih NOT_RUN — supaya
     // status "Completed" SELALU berarti progress eksekusi 100%. Sisa TC boleh
     // ditandai SKIPPED lewat `completeRunWithSkip` (TC tetap punya status akhir).
+    //
+    // TC deprecated tidak ikut dihitung: barisnya sudah disembunyikan dari
+    // daftar eksekusi (lib/run-status.ts), jadi kalau ikut dihitung ia menjadi
+    // penghalang yang tidak terlihat oleh QA.
     const notRun = await prisma.testRunResult.count({
-      where: { runId, status: "NOT_RUN" },
+      where: { runId, status: "NOT_RUN", ...ACTIVE_RUN_TC_SCOPE },
     });
     if (notRun > 0) {
       return {
@@ -567,6 +571,9 @@ export async function completeRunWithSkip(
 
     const bug = await sourceBugToClose(runId);
     await prisma.$transaction([
+      // Sisa TC ditandai SKIPPED — TERMASUK baris TC deprecated yang
+      // disembunyikan dari daftar eksekusi, supaya invariantnya tetap utuh:
+      // run COMPLETED berarti setiap baris sudah punya status akhir.
       prisma.testRunResult.updateMany({
         where: { runId, status: "NOT_RUN" },
         data: { status: "SKIPPED" },

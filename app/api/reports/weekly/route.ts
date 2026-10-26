@@ -10,7 +10,7 @@ import {
   type ExecutionCounts,
   type RunResultStatus,
 } from "@/lib/qa-metrics";
-import { OPEN_RUN_STATUSES } from "@/lib/run-status";
+import { OPEN_RUN_STATUSES, ACTIVE_RUN_TC_SCOPE } from "@/lib/run-status";
 import type { WeeklyReportPayload, WeeklyReportTask } from "@/types/api";
 
 /** Rentang laporan: N hari terakhir (termasuk hari ini). */
@@ -39,7 +39,10 @@ export async function GET() {
       include: {
         project: { select: { name: true } },
         _count: { select: { results: true } },
-        results: { select: { status: true } },
+        // Run yang BELUM selesai: TC deprecated tidak ikut dihitung, supaya
+        // progress di laporan mingguan sama dengan halaman Active Runs.
+        // (Run COMPLETED di bawah sengaja tidak disaring — itu riwayat.)
+        results: { where: ACTIVE_RUN_TC_SCOPE, select: { status: true } },
       },
     }),
     prisma.testRun.findMany({

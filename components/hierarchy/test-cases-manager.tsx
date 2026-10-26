@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { formatCase } from "@/lib/format";
 import { useRefresh } from "@/lib/client/refresh-context";
+import { invalidateApiCache } from "@/lib/client/use-api";
 import {
   AlertCircle,
   Check,
@@ -475,6 +476,9 @@ export function TestCasesManager({
       return;
     }
     setLocalTestCases((prev) => prev.map((tc) => (tc.id === t.id ? { ...tc, ...data } : tc)));
+    // Cache payload klien (TTL 10 detik) dibuang supaya halaman Test Run tidak
+    // menyajikan daftar lama yang masih memuat TC ini (mis. setelah di-Deprecate).
+    invalidateApiCache();
   };
 
   const handleExport = async (format: "csv" | "xlsx") => {
@@ -827,6 +831,9 @@ export function TestCasesManager({
                     const updated = res.testCase;
                     setLocalTestCases((prev) => prev.map((tc) => (tc.id === updated.id ? updated : tc)));
                     setEditingTcId(null);
+                    // Edit bisa mengubah status (mis. jadi Deprecated) -> cache
+                    // payload run harus dibuang agar daftar eksekusi ikut segar.
+                    invalidateApiCache();
                   }
                   return res;
                 }}

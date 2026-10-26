@@ -222,6 +222,9 @@ export async function updateTestCase(
       await logActivity(id, "UPDATED", "Detail test case diperbarui", user.id);
     }
     revalidatePath(`/suites/${suiteId ?? tc.suiteId}`);
+    // Perubahan status mengubah CAKUPAN run yang belum selesai (TC Deprecated
+    // dikeluarkan dari daftar eksekusi) — invalidasi halaman run juga.
+    if (newStatus !== tc.status) revalidatePath("/test-runs");
     return {
       success: true,
       testCase: { ...updated, createdAt: updated.createdAt.toISOString() },
@@ -287,6 +290,8 @@ export async function quickUpdateTestCase(
     }
 
     revalidatePath(`/suites/${tc.suiteId}`);
+    // Sama seperti updateTestCase: status berubah -> cakupan run aktif berubah.
+    if (data.status && data.status !== tc.status) revalidatePath("/test-runs");
     return { success: true };
   } catch (error) {
     return handleError(error);

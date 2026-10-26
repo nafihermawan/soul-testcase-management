@@ -38,3 +38,28 @@ export const ACTIVE_RUN_STATUSES: RunStatusValue[] = ["IN_PROGRESS", "RE_OPEN"];
  * turun palsu.
  */
 export const EXECUTED_RUN_STATUSES: RunStatusValue[] = ["COMPLETED", "RE_OPEN"];
+
+/**
+ * Status TestCase yang dikeluarkan dari cakupan run yang BELUM selesai.
+ *
+ * TC yang di-Deprecate setelah terlanjur berada di sebuah run tidak boleh lagi
+ * tampil sebagai "Untested" di daftar eksekusi, tidak ikut dihitung di total &
+ * progress, dan tidak boleh menahan tombol Complete Run.
+ *
+ * Run COMPLETED sengaja TIDAK disaring: barisnya adalah riwayat eksekusi yang
+ * sah dan sudah punya status akhir.
+ *
+ * Ketiga bentuk di bawah adalah SATU aturan yang sama, dipakai sesuai bentuk
+ * datanya: `ACTIVE_RUN_TC_SCOPE` untuk query Prisma (daftar run & guard
+ * completeRun), `isDeprecatedTcStatus` untuk baris yang sudah ter-fetch
+ * (payload detail run, karena status run baru diketahui setelah query).
+ */
+export const DEPRECATED_TC_STATUS = "DEPRECATED" as const;
+
+export const ACTIVE_RUN_TC_SCOPE = {
+  testCase: { status: { not: DEPRECATED_TC_STATUS } },
+} as const;
+
+export function isDeprecatedTcStatus(status: string | null | undefined): boolean {
+  return status === DEPRECATED_TC_STATUS;
+}

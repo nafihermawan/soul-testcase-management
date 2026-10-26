@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { runCodeOf, monthRangeToDateRange } from "@/lib/format";
-import { OPEN_RUN_STATUSES } from "@/lib/run-status";
+import { OPEN_RUN_STATUSES, ACTIVE_RUN_TC_SCOPE } from "@/lib/run-status";
 import { countsFromStatuses, executionProgress } from "@/lib/qa-metrics";
 import { apiSession, apiRoleAtLeast, json401 } from "@/lib/api-auth";
 import type { ActiveRunsPayload, ActiveRunRow } from "@/types/api";
@@ -75,6 +75,10 @@ export async function GET(req: NextRequest) {
         // Multi-assignee (join table) — sumber utama kolom Assignee.
         assignees: { select: { user: { select: { id: true, name: true } } } },
         results: {
+          // Halaman ini hanya memuat run yang BELUM selesai, jadi TC deprecated
+          // tidak dihitung: total TC, progress, daftar suite, dan nama executor
+          // semuanya mengikuti cakupan yang sama (lib/run-status.ts).
+          where: ACTIVE_RUN_TC_SCOPE,
           select: {
             status: true,
             updatedBy: { select: { name: true } },

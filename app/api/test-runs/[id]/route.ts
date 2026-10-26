@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { apiSession, apiRoleAtLeast, json401, json404 } from "@/lib/api-auth";
 import { toAttachmentItems } from "@/lib/attachments";
 import { presignGetUrls } from "@/lib/storage/r2";
+import { isDeprecatedTcStatus } from "@/lib/run-status";
 import type { RunDetailPayload, RunResultItem, RunResultTestCase } from "@/types/api";
 
 export async function GET(
@@ -77,13 +78,24 @@ export async function GET(
     return json404("Test run tidak ditemukan.");
   }
 
+  /**
+   * Baris hasil eksekusi yang Test Case-nya sudah DEPRECATED dikeluarkan dari
+   * run yang BELUM selesai — kalau tidak, TC yang di-Deprecate belakangan tetap
+   * tampil sebagai "Untested" dan menahan Complete Run. Run COMPLETED tidak
+   * disaring supaya riwayatnya utuh. Aturan lengkapnya di `lib/run-status.ts`.
+   */
+  const scopedResults =
+    run.status === "COMPLETED"
+      ? run.results
+      : run.results.filter((r) => !isDeprecatedTcStatus(r.testCase?.status));
+
   // Presign sekali untuk SEMUA evidence di run ini (bukan per hasil eksekusi).
   const attachmentUrlMap = await presignGetUrls(
-    run.results.flatMap((r) => r.attachments.map((a) => a.storageKey))
+    scopedResults.flatMap((r) => r.attachments.map((a) => a.storageKey))
   );
 
   const results: RunResultItem[] = await Promise.all(
-    run.results.map(async (r) => ({
+    scopedResults.map(async (r) => ({
       id: r.id,
       status: r.status,
       titleSnapshot: r.titleSnapshot,
@@ -121,9 +133,10 @@ export async function GET(
     }))
   );
 
-  // Suite unik yang terlibat dalam run ini (dari test case yang dieksekusi)
+  // Suite unik yang terlibat dalam run ini (dari test case yang dieksekusi) —
+  // mengikuti `scopedResults` supaya daftar suite ikut bersih dari TC deprecated.
   const suiteMap = new Map<string, NonNullable<RunResultTestCase["suite"]>>();
-  for (const r of run.results) {
+  for (const r of scopedResults) {
     const s = r.testCase?.suite;
     if (s) suiteMap.set(s.id, s);
   }

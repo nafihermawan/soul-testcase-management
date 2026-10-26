@@ -40,8 +40,8 @@ enum TCType {
 }
 
 /// Status sebuah TestRun.
-/// - PENDING      : run sudah dibuat, testing belum dimulai
-/// - IN_PROGRESS  : sedang dieksekusi
+/// - PENDING      : run dibuat & siap ditest, belum ada eksekusi (label UI: "Open")
+/// - IN_PROGRESS  : sedang dieksekusi (otomatis saat hasil pertama masuk)
 /// - COMPLETED    : selesai (punya completedAt)
 /// - RE_OPEN      : pernah COMPLETED, dibuka lagi untuk retest/regresi
 /// "Belum selesai" (tampil di halaman Active Runs) = PENDING | IN_PROGRESS | RE_OPEN.

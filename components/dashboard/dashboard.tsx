@@ -4,6 +4,7 @@ import type { CSSProperties } from "react";
 import { AlertTriangle, BarChart3, Bug, ExternalLink, Play, SlidersHorizontal } from "lucide-react";
 
 import { ErrorBlock, StatsCardsSkeleton, TableCardSkeleton } from "@/components/ui/data-states";
+import { runStatusLabel } from "@/components/test-runs/test-run-status-badge";
 import { useApi } from "@/lib/client/use-api";
 import {
   addCounts,
@@ -213,10 +214,12 @@ const BUG_STATUS_LABEL: Record<string, string> = {
 const bugStatusDot = (s: string): string => BUG_STATUS_DOT[s] ?? "#94A3B8";
 const bugStatusLabel = (s: string): string => BUG_STATUS_LABEL[s] ?? s;
 
-/** Warna titik status run (tanpa pill). */
+/** Warna titik status run (tanpa pill) — kuncinya nilai status mentahnya. */
 const RUN_STATUS_DOT: Record<string, string> = {
-  "In Progress": "#D97706",
-  Completed: "#15803D",
+  PENDING: "#64748B",
+  IN_PROGRESS: "#D97706",
+  RE_OPEN: "#2563EB",
+  COMPLETED: "#15803D",
 };
 
 /** Warna teks Pass Rate per ambang; null (tanpa data) → muted. */
@@ -275,7 +278,9 @@ function derive(data: DashboardPayload) {
       env: r.environment ?? "—",
       progress: executionProgress(r.counts) ?? 0,
       passRate: passRateOf(r.counts),
-      status: r.status === "COMPLETED" ? "Completed" : "In Progress",
+      // Status mentahnya; label tampilan diambil dari `runStatusLabel` supaya
+      // "Open" (PENDING) tidak lagi terbaca sebagai "In Progress".
+      status: r.status,
       updated: fmtShortDate(r.updatedAt),
     }));
 
@@ -1097,7 +1102,7 @@ function RecentTestRuns({ rows }: { rows: RunRow[] }) {
                   <td style={{ padding: "12px 10px" }}>
                     <span style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 13, color: "#334155", whiteSpace: "nowrap" }}>
                       <Dot color={RUN_STATUS_DOT[r.status] ?? "#94A3B8"} />
-                      {r.status}
+                      {runStatusLabel(r.status)}
                     </span>
                   </td>
                   <td style={{ padding: "12px 10px", paddingRight: 22, textAlign: "right", color: "#64748B", whiteSpace: "nowrap" }}>

@@ -117,7 +117,9 @@ export async function createTestRun(
       data: {
         name: runName,
         projectId,
-        status: "IN_PROGRESS",
+        // Run baru = "Open" (siap ditest, belum ada eksekusi). Begitu hasil
+        // pertama masuk, `startRunIfPending` menaikkannya ke IN_PROGRESS.
+        status: "PENDING",
         sourceBugId,
         activityType: opts?.activityType?.trim() || null,
         platforms:
@@ -286,20 +288,26 @@ export async function updateRunResult(
       },
     });
 
-    // Begitu ada eksekusi, run yang tadinya PENDING memang "sedang berjalan".
-    if (result.run.status === "PENDING") {
-      await prisma.testRun.update({
-        where: { id: result.run.id },
-        data: { status: "IN_PROGRESS" },
-      });
-      revalidatePath("/test-runs");
-    }
+    // Begitu ada eksekusi, run yang tadinya "Open" (PENDING) jadi "In Progress".
+    await startRunIfPending(result.run.id, result.run.status);
 
     revalidatePath(`/test-runs/${result.run.id}`);
     return { success: true };
   } catch (error) {
     return handleError(error);
   }
+}
+
+/**
+ * Run baru dibuat berstatus PENDING ("Open"). Begitu hasil eksekusi pertama
+ * masuk, run itu otomatis jadi IN_PROGRESS — aturan ini dipakai jalur executor
+ * maupun eksekusi cepat dari halaman Test Case, jadi statusnya tidak bisa
+ * "nyangkut" di Open padahal sudah ada yang ditest.
+ */
+async function startRunIfPending(runId: string, status: string): Promise<void> {
+  if (status !== "PENDING") return;
+  await prisma.testRun.update({ where: { id: runId }, data: { status: "IN_PROGRESS" } });
+  revalidatePath("/test-runs");
 }
 
 /**
@@ -554,15 +562,18 @@ export async function saveExecutionForTestCase(
     });
     if (!tc) return { error: "Test case tidak ditemukan." };
 
-    // Run aktif terbaru yang berisi TC ini
-    const existing = await prisma.testRunResult.findFirst({
-      where: {
-        testCaseId,
-        run: { status: { in: ACTIVE_RUN_STATUSES } },
-      },
-      orderBy: { updatedAt: "desc" },
-      include: { run: { select: { id: true } } },
-    });
+    // Run aktif terbaru yang berisi TC ini. Run yang SEDANG dieksekusi
+    // (IN_PROGRESS/RE_OPEN) menang dulu; run "Open" (PENDING) baru dipakai kalau
+    // tidak ada yang sedang berjalan — supaya hasil tidak nyasar ke run lain
+    // hanya karena run Open lebih baru dibuat.
+    const findResultInRun = (statuses: RunStatusValue[]) =>
+      prisma.testRunResult.findFirst({
+        where: { testCaseId, run: { status: { in: statuses } } },
+        orderBy: { updatedAt: "desc" },
+        include: { run: { select: { id: true, status: true } } },
+      });
+    const existing =
+      (await findResultInRun(ACTIVE_RUN_STATUSES)) ?? (await findResultInRun(["PENDING"]));
 
     if (existing) {
       await prisma.testRunResult.update({
@@ -574,14 +585,22 @@ export async function saveExecutionForTestCase(
           updatedById: user.id,
         },
       });
+      await startRunIfPending(existing.run.id, existing.run.status);
       revalidatePath(`/test-runs/${existing.run.id}`);
     } else {
-      // Buat run baru (Express Run satu TC) kalau belum ada run aktif
-      const activeRun = await prisma.testRun.findFirst({
-        where: { status: { in: ACTIVE_RUN_STATUSES }, projectId: tc.suite?.projectId },
-        orderBy: { createdAt: "desc" },
-        select: { id: true },
-      });
+      // Belum ada run yang memuat TC ini: pakai run berjalan terbaru project,
+      // kalau tidak ada baru run "Open" terbaru (Express Run satu TC).
+      const activeRun =
+        (await prisma.testRun.findFirst({
+          where: { status: { in: ACTIVE_RUN_STATUSES }, projectId: tc.suite?.projectId },
+          orderBy: { createdAt: "desc" },
+          select: { id: true, status: true },
+        })) ??
+        (await prisma.testRun.findFirst({
+          where: { status: "PENDING", projectId: tc.suite?.projectId },
+          orderBy: { createdAt: "desc" },
+          select: { id: true, status: true },
+        }));
       if (activeRun) {
         await prisma.testRunResult.create({
           data: {
@@ -594,6 +613,7 @@ export async function saveExecutionForTestCase(
             updatedById: user.id,
           },
         });
+        await startRunIfPending(activeRun.id, activeRun.status);
         revalidatePath(`/test-runs/${activeRun.id}`);
       } else {
         return { error: "Tidak ada run berjalan untuk project ini." };

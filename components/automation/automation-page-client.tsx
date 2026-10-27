@@ -15,15 +15,19 @@ import {
   ChevronRight,
   CircleAlert,
   Clock4,
+  Cpu,
   FlaskConical,
   GitBranch,
   Info,
   Link2,
   Link2Off,
   Loader2,
+  Monitor,
   Pencil,
   RefreshCw,
   Search,
+  Server,
+  Smartphone,
   X,
 } from "lucide-react";
 import {
@@ -70,6 +74,14 @@ const PLATFORM_LABEL: Record<string, string> = {
   MOBILE: "Mobile",
   HARDWARE: "Hardware",
   API: "API",
+};
+
+/** Ikon platform — samakan dengan header run (WEB→Monitor, dst). */
+const PLATFORM_ICON: Record<string, typeof Smartphone> = {
+  WEB: Monitor,
+  MOBILE: Smartphone,
+  HARDWARE: Cpu,
+  API: Server,
 };
 
 /** Urutan grup Platform di dropdown filter Suite. Platform di luar daftar ditaruh paling akhir. */
@@ -1508,7 +1520,8 @@ function SuiteGroup({
                 textAlign: "left",
               }}
             >
-              {/* Kiri: chevron + nama suite + breadcrumb project */}
+              {/* Kiri: chevron + nama suite saja (metadata project pindah ke
+                  grup kanan). */}
               <span style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
                 <ChevronRight
                   size={15}
@@ -1519,12 +1532,37 @@ function SuiteGroup({
                     transition: "transform 0.18s ease",
                   }}
                 />
-                <span style={{ fontSize: 12, fontWeight: 700, color: "#0F172A" }}>
-                  {group.suiteName}
-                </span>
                 <span
                   style={{
-                    marginLeft: 8,
+                    fontSize: 12,
+                    fontWeight: 700,
+                    color: "#0F172A",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {group.suiteName}
+                </span>
+              </span>
+
+              {/* Kanan: nama project → garis pemisah → badge platform → badge
+                  jumlah TC & status. `gap: 12` = `gap-3`; garis tipis menjaga
+                  teks project dan badge platform tidak menempel. */}
+              <span
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                  flexShrink: 0,
+                  flexWrap: "wrap",
+                  justifyContent: "flex-end",
+                }}
+              >
+                <span
+                  title={group.projectName}
+                  style={{
+                    maxWidth: 200,
                     fontSize: 11,
                     fontWeight: 400,
                     color: "#94A3B8",
@@ -1534,21 +1572,17 @@ function SuiteGroup({
                   }}
                 >
                   {group.projectName}
-                  {group.platform ? ` · ${PLATFORM_LABEL[group.platform]}` : ""}
                 </span>
-              </span>
-
-              {/* Kanan: badge total TC & status, punya container sendiri */}
-              <span
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 6,
-                  flexShrink: 0,
-                  flexWrap: "wrap",
-                  justifyContent: "flex-end",
-                }}
-              >
+                <span
+                  aria-hidden="true"
+                  style={{ width: 1, height: 14, background: "var(--border)", flexShrink: 0 }}
+                />
+                {group.platform && (
+                  <GroupBadge
+                    icon={<PlatformIcon platform={group.platform} />}
+                    label={PLATFORM_LABEL[group.platform] ?? group.platform}
+                  />
+                )}
                 <GroupBadge label={`${group.total} TC`} />
                 {group.notAutomated > 0 && <GroupBadge label={`${group.notAutomated} Belum`} />}
                 {group.failing > 0 && <MiniBadge color="#BE123C" bg="#FFF1F2" border="#FECDD3" label={`${group.failing} Failing`} />}
@@ -1659,10 +1693,13 @@ const SUB_HEAD: React.CSSProperties = {
  * bermasalah (Failing/Stale/Unstable) sengaja tetap berwarna lewat MiniBadge
  * supaya sinyal problem-first tidak hilang.
  */
-function GroupBadge({ label }: { label: string }) {
+function GroupBadge({ label, icon }: { label: string; icon?: ReactNode }) {
   return (
     <span
       style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: icon ? 5 : undefined,
         padding: "2px 8px",
         borderRadius: 999,
         fontSize: 11,
@@ -1672,9 +1709,16 @@ function GroupBadge({ label }: { label: string }) {
         whiteSpace: "nowrap",
       }}
     >
+      {icon}
       {label}
     </span>
   );
+}
+
+/** Ikon platform untuk badge (fallback: Smartphone). */
+function PlatformIcon({ platform }: { platform: string }) {
+  const Icon = PLATFORM_ICON[platform.toUpperCase()] ?? Smartphone;
+  return <Icon size={12} aria-hidden="true" />;
 }
 
 function MiniBadge({ label, color, bg, border }: { label: string; color: string; bg: string; border: string }) {

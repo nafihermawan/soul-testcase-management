@@ -770,20 +770,51 @@ export function RunExecutor({
                     transition: "transform 300ms ease-in-out",
                   }}
                 />
-                <span style={{ fontSize: 16, fontWeight: 600, color: "#0F172A" }}>{s.name}</span>
-                <span style={{ fontSize: 13, color: "#64748B", whiteSpace: "nowrap" }}>{s.projectName}</span>
+                <span
+                  style={{
+                    fontSize: 16,
+                    fontWeight: 600,
+                    color: "#0F172A",
+                    // Nama suite boleh menyusut (ellipsis) agar metadata di
+                    // kanan tidak pernah terdorong.
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {s.name}
+                </span>
               </button>
 
+              {/* Kanan: metadata project → badge platform → jumlah TC.
+                  `gap: 12` = `gap-3`; VSep memisahkan tiap kelompok supaya
+                  teks project dan badge platform tidak menempel. */}
               <div
                 style={{
                   display: "flex",
                   alignItems: "center",
-                  gap: 14,
+                  gap: 12,
                   paddingRight: 6,
                   fontSize: 13,
                   color: "#475569",
+                  flexShrink: 0,
                 }}
               >
+                {/* Nama project — dipindah dari sisi judul suite. */}
+                <span
+                  title={s.projectName}
+                  style={{
+                    maxWidth: 200,
+                    fontSize: 13,
+                    color: "#64748B",
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                  }}
+                >
+                  {s.projectName}
+                </span>
+                <VSep />
                 {s.platform && (
                   <span style={{ display: "inline-flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}>
                     <PlatformIcon size={14} aria-hidden="true" /> {platformLabel(s.platform)}

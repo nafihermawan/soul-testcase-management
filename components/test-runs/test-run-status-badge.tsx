@@ -65,6 +65,23 @@ export function runStatusLabel(status: string): string {
   return runStatusConfig(status).label;
 }
 
+/**
+ * Warna titik status run untuk tabel yang memakai gaya "dot + teks" (Run
+ * History). Satu sumber warna supaya semua permukaan memakai hue yang sama.
+ */
+const statusDotColor: Record<string, string> = {
+  PENDING: "#64748B",
+  IN_PROGRESS: "#D97706",
+  COMPLETED: "#15803D",
+  RE_OPEN: "#2563EB",
+  DRAFT: "#64748B",
+  ABORTED: "#B91C1C",
+};
+
+export function runStatusDotColor(status: string): string {
+  return statusDotColor[status] ?? "#64748B";
+}
+
 export function TestRunStatusBadge({ status, className }: { status: string; className?: string }) {
   const cfg = runStatusConfig(status);
   return (

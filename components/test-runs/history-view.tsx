@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { HistoryRunRow } from "@/components/test-runs/history-run-row";
-import { STICKY_RUN_NAME_WIDTH } from "@/components/test-runs/run-list-columns";
+import { FONT_SANS } from "@/components/test-runs/run-executor-shared";
 import { HistoryControls } from "@/components/test-runs/history-controls";
 import { HistoryPagination } from "@/components/test-runs/history-pagination";
 import { RunRowActions } from "@/components/test-runs/run-row-actions";
@@ -11,58 +11,58 @@ import { useApi } from "@/lib/client/use-api";
 import type { HistoryPayload } from "@/types/api";
 
 /**
- * Definisi kolom tabel Run History — sumber tunggal untuk <colgroup> dan
- * <thead>. Dua kolom pertama berlebar TETAP (px) supaya offset `left` kolom
- * beku presisi; kolom sisanya memakai lebar tetap juga agar tabel bisa
- * discroll mendatar alih-alih saling menimpa di layar sempit.
+ * Kolom tabel Run History — sumber tunggal untuk <colgroup> dan <thead>.
+ *
+ * Run name memakai lebar `auto` supaya SELURUH sisa lebar tabel jatuh ke kolom
+ * itu (tidak ada kolom spacer); kolom lain berlebar tetap (px) dan alignment
+ * header selalu sama dengan alignment selnya.
  */
 const HISTORY_COLUMNS: {
   label: string;
-  width: string;
-  align?: "left" | "center" | "right";
-  /** Kolom BEKU: menempel di kiri saat tabel digeser mendatar. */
-  sticky?: "name";
+  width?: string;
+  align: "left" | "right";
+  /** Kolom BEKU: `name` menempel kiri, `aksi` menempel kanan. */
+  sticky?: "name" | "aksi";
 }[] = [
-  { label: "Run name", width: `${STICKY_RUN_NAME_WIDTH}px`, sticky: "name" },
-  { label: "Projects covered", width: "180px", align: "center" },
-  { label: "Suites included", width: "140px", align: "center" },
-  { label: "Platform", width: "100px", align: "center" },
-  { label: "Status", width: "130px", align: "center" },
-  { label: "Sprint", width: "80px", align: "center" },
-  { label: "QA", width: "120px", align: "center" },
-  { label: "Execution date", width: "130px", align: "center" },
-  { label: "Aksi", width: "140px", align: "right" },
+  { label: "Run name", align: "left", sticky: "name" },
+  { label: "Projects covered", width: "150px", align: "left" },
+  { label: "Suites included", width: "180px", align: "left" },
+  { label: "Platform", width: "110px", align: "left" },
+  { label: "Status", width: "120px", align: "left" },
+  { label: "Sprint", width: "60px", align: "right" },
+  { label: "QA", width: "140px", align: "left" },
+  { label: "Execution date", width: "110px", align: "left" },
+  { label: "Aksi", width: "56px", align: "right", sticky: "aksi" },
 ];
 
-/** Batas lebar kolom Run Name saat resizer-nya ditarik (px). */
-const RUN_NAME_MIN_W = 120;
-const RUN_NAME_MAX_W = 420;
+/**
+ * Lebar minimum tabel: cukup untuk laptop biasa TANPA scroll mendatar. Di
+ * bawah ini (layar sempit) kontainer tabel yang menggeser, bukan kartunya.
+ * Sisa lebar di atas minimum ini seluruhnya jatuh ke kolom Run name (auto).
+ */
+const TABLE_MIN_W = 1080;
 
-/** Gaya dasar <th> — teks kecil sentence case, slate-500 (bukan uppercase lagi). */
+/** Gaya dasar <th>: 12px/500 slate-500, sentence case, padding 0 12px. */
 const HEADER_TH: CSSProperties = {
   fontSize: 12,
-  fontWeight: 600,
-  letterSpacing: "0.05em",
+  fontWeight: 500,
   color: "#64748B",
-  padding: "0.6rem 16px",
+  padding: "0 12px",
   textAlign: "left",
-  // Judul kolom tidak boleh tertekuk ke baris baru — dengan table-layout fixed
-  // dan lebar kolom yang paten, wrap bikin header bertumpuk.
   whiteSpace: "nowrap",
 };
 
-/** Gaya <th> untuk kolom beku — background WAJIB opaque agar isi tabel yang
- *  digeser lewat di belakangnya tidak tembus pandang. Hanya Run name yang beku. */
-const stickyHeaderStyle = (which?: "name"): CSSProperties =>
-  which === "name"
-    ? {
-        position: "sticky",
-        left: 0,
-        zIndex: 20,
-        background: "#F8FAFC",
-        boxShadow: "2px 0 5px -2px rgba(0, 0, 0, 0.1)",
-      }
-    : {};
+/** <th> kolom beku kiri — background opaque agar sel yang lewat tidak tembus. */
+const STICKY_HEADER: CSSProperties = {
+  position: "sticky",
+  left: 0,
+  zIndex: 20,
+  background: "#F8FAFC",
+};
+
+/** Bayangan tepi kolom beku — hanya tampil saat ada konten yang lewat. */
+const SHADOW_LEFT = "2px 0 6px -2px rgba(15, 23, 42, 0.12)";
+const SHADOW_RIGHT = "-8px 0 8px -8px rgba(15, 23, 42, 0.12)";
 
 export type HistorySearchParams = {
   project?: string;
@@ -100,42 +100,37 @@ export function HistoryView({ searchParams }: { searchParams: HistorySearchParam
 
   const { data, error, loading, reload } = useApi<HistoryPayload>(apiPath);
 
+  const scrollRef = useRef<HTMLDivElement>(null);
   /**
-   * Lebar kolom Run Name (px) — bisa ditarik lewat resizer di border kanannya.
-   * Kolom-kolom setelahnya otomatis bergeser karena lebarnya diambil dari
-   * <colgroup>.
+   * Status geser tabel: `left` = kolom Run name (beku kiri) menampilkan
+   * bayangannya; `right` = kolom Aksi (beku kanan) menampilkan bayangannya —
+   * artinya masih ada konten yang lewat di bawah kolom itu.
    */
-  const [runNameWidth, setRunNameWidth] = useState(STICKY_RUN_NAME_WIDTH);
-  const [resizingName, setResizingName] = useState(false);
-  const [hoverResizer, setHoverResizer] = useState(false);
-  /** Hover di baris header — memunculkan garis resizer (group-hover). */
-  const [hoverHeaderRow, setHoverHeaderRow] = useState(false);
-  const resizeStart = useRef<{ x: number; width: number } | null>(null);
+  const [scrollState, setScrollState] = useState({ left: false, right: false });
 
-  // Pantau geseran mouse selama drag; lepas saat mouseup (dan kunci kursor).
+  /** Ukur ulang status geser dari elemen scroller. */
+  const measureScroll = (el: HTMLDivElement) => {
+    const left = el.scrollLeft > 0;
+    // Toleransi 1px untuk pembulatan sub-pixel.
+    const right = el.scrollLeft + el.clientWidth < el.scrollWidth - 1;
+    setScrollState((prev) =>
+      prev.left === left && prev.right === right ? prev : { left, right }
+    );
+  };
+
+  /**
+   * `onScroll` saja tidak cukup: tabel bisa sudah overflow sejak render pertama
+   * (tanpa pernah digeser). Jadi ukur setelah data berubah dan saat jendela
+   * berubah ukuran.
+   */
   useEffect(() => {
-    if (!resizingName) return;
-    const onMove = (e: MouseEvent) => {
-      const s = resizeStart.current;
-      if (!s) return;
-      setRunNameWidth(
-        Math.min(RUN_NAME_MAX_W, Math.max(RUN_NAME_MIN_W, s.width + (e.clientX - s.x)))
-      );
+    if (scrollRef.current) measureScroll(scrollRef.current);
+    const onResize = () => {
+      if (scrollRef.current) measureScroll(scrollRef.current);
     };
-    const onUp = () => setResizingName(false);
-    const prevCursor = document.body.style.cursor;
-    const prevSelect = document.body.style.userSelect;
-    document.body.style.cursor = "col-resize";
-    document.body.style.userSelect = "none";
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
-    return () => {
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
-      document.body.style.cursor = prevCursor;
-      document.body.style.userSelect = prevSelect;
-    };
-  }, [resizingName]);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [data]);
 
   /**
    * Salinan lokal daftar run + total, supaya mutasi baris (ubah status, hapus)
@@ -282,143 +277,117 @@ export function HistoryView({ searchParams }: { searchParams: HistorySearchParam
 
         {/* Satu divider tipis INSET — sejajar dengan konten header (judul di
             kiri, tombol Filter di kanan). */}
-        <div style={{ margin: "0 24px", height: 1, background: "#EEF0F3", flexShrink: 0 }} />
+        <div style={{ margin: "0 24px", height: 1, background: "#EEF1F5", flexShrink: 0 }} />
 
-        {/* Area tabel: `flex: 1` membuatnya mengambil sisa tinggi kartu supaya
-            pagination menempel di dasar walau barisnya sedikit. Bila tabel lebih
-            lebar dari kartu, area inilah yang bergeser mendatar — header row
-            tetap berada di atasnya. */}
+        {/* Area tabel: `flex: 1` supaya pagination menempel di dasar kartu.
+            Inset 24px kiri/kanan berada DI LUAR area scroll (sejajar judul
+            "Run History"), jadi tabel beserta scrollbar-nya tidak pernah
+            melewati tepi kartu. */}
         {runs.length === 0 ? (
           <div style={{ flex: 1, padding: "3rem 1.5rem", textAlign: "center", color: "var(--text-muted)", fontSize: "0.9rem" }}>
             Tidak ada run yang cocok dengan filter / pencarian.
           </div>
         ) : (
-          <div style={{ flex: 1, overflowX: "auto" }}>
-            <table
-              style={{
-                width: "100%",
-                // Lebar minimum = jumlah lebar kolom (px), dengan lantai 1250px
-                // supaya seluruh kolom terbentang penuh dan memicu scroll bar
-                // mendatar saat layar menyempit. Dengan table-layout: fixed,
-                // kolom tidak bisa menyusut di bawah nilainya.
-                minWidth: Math.max(
-                  1250,
-                  HISTORY_COLUMNS.reduce(
-                    (sum, c) =>
-                      sum + (c.sticky === "name" ? runNameWidth : parseInt(c.width, 10)),
-                    0
-                  )
-                ),
-                borderCollapse: "collapse",
-                fontSize: 12,
-                tableLayout: "fixed",
-              }}
+          <div style={{ flex: 1, minHeight: 0, padding: "0 24px" }}>
+            <div
+              ref={scrollRef}
+              style={{ width: "100%", overflowX: "auto" }}
+              onScroll={(e) => measureScroll(e.currentTarget)}
             >
-              <colgroup>
-                {HISTORY_COLUMNS.map((c) => (
-                  <col
-                    key={c.label}
-                    // Run Name memakai lebar dari state (bisa di-resize).
-                    style={{ width: c.sticky === "name" ? `${runNameWidth}px` : c.width }}
-                  />
-                ))}
-              </colgroup>
-              <thead>
-                <tr
-                  style={{ background: "#F8FAFC" }}
-                  onMouseEnter={() => setHoverHeaderRow(true)}
-                  onMouseLeave={() => setHoverHeaderRow(false)}
-                >
+              <table
+                style={{
+                  width: "100%",
+                  // Cukup untuk laptop biasa TANPA scroll mendatar; layar lebih
+                  // sempit membuat kontainer ini yang menggeser.
+                  minWidth: TABLE_MIN_W,
+                  borderCollapse: "collapse",
+                  tableLayout: "fixed",
+                  fontFamily: FONT_SANS,
+                  fontSize: 13,
+                }}
+              >
+                <colgroup>
                   {HISTORY_COLUMNS.map((c) => (
-                    <th
-                      key={c.label}
-                      scope="col"
-                      style={{
-                        ...HEADER_TH,
-                        textAlign: c.align ?? "left",
-                        background: "#F8FAFC",
-                        ...stickyHeaderStyle(c.sticky),
-                      }}
-                    >
-                      {c.label}
-                      {/* Resizer: garis tipis di border kanan kolom Run name.
-                          Default transparan (tak terlihat); muncul amber saat
-                          baris header / area resizer di-hover atau saat drag.
-                          `position: absolute` relatif ke th (sticky = positioned). */}
-                      {c.sticky === "name" && (
-                        <span
-                          role="separator"
-                          aria-orientation="vertical"
-                          aria-label="Ubah lebar kolom Run Name"
-                          title="Tarik untuk mengubah lebar kolom"
-                          onMouseDown={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            resizeStart.current = {
-                              x: e.clientX,
-                              width: runNameWidth,
-                            };
-                            setResizingName(true);
-                          }}
-                          onMouseEnter={() => setHoverResizer(true)}
-                          onMouseLeave={() => setHoverResizer(false)}
-                          style={{
-                            position: "absolute",
-                            top: 0,
-                            right: -4,
-                            width: 9,
-                            height: "100%",
-                            zIndex: 30,
-                            display: "flex",
-                            justifyContent: "center",
-                            cursor: "col-resize",
-                            userSelect: "none",
-                            touchAction: "none",
-                          }}
-                        >
-                          <span
-                            aria-hidden="true"
-                            style={{
-                              width: 2,
-                              height: "100%",
-                              background:
-                                resizingName || hoverResizer || hoverHeaderRow
-                                  ? "#FBBF24"
-                                  : "transparent",
-                              transition: "background-color 0.15s ease",
-                            }}
-                          />
-                        </span>
-                      )}
-                    </th>
+                    // Run name `auto` (menyerap sisa lebar); kolom lain tetap.
+                    <col key={c.label} style={{ width: c.sticky === "name" ? "auto" : c.width }} />
                   ))}
-                </tr>
-              </thead>
-              <tbody>
-                {runs.map((run) => (
-                  <HistoryRunRow
-                    key={run.id}
-                    {...run}
-                    extraAction={
-                      canDelete ? (
-                        <RunRowActions
-                          runId={run.id}
-                          runName={run.name}
-                          // Run History isinya run COMPLETED — di sini "Re-run"
-                          // relevan (mengembalikannya ke Active Runs).
-                          allowReRun
-                          // Preview report: tombol "Report" di baris kini
-                          // langsung mengunduh, jadi akses visual ada di sini.
-                          allowViewReport
-                          onReRun={() => removeRunLocally(run.id)}
-                          onDeleted={() => removeRunLocally(run.id)}
-                        />
-                      ) : undefined
-                    }
-                  />
-                ))}
-              </tbody>
-            </table>
+                </colgroup>
+                <thead>
+                  <tr
+                    style={{
+                      height: 40,
+                      background: "#F8FAFC",
+                      // SATU garis bawah untuk seluruh header (bukan per-sel).
+                      borderBottom: "1px solid #EEF1F5",
+                    }}
+                  >
+                    {HISTORY_COLUMNS.map((c, i) => (
+                      <th
+                        key={c.label}
+                        scope="col"
+                        style={{
+                          ...HEADER_TH,
+                          textAlign: c.align,
+                          // Sel tepi: padding 16px (tengah tetap 12px).
+                          ...(i === 0 ? { paddingLeft: 16 } : null),
+                          ...(i === HISTORY_COLUMNS.length - 1 ? { paddingRight: 16 } : null),
+                          // Kolom beku KIRI (Run name): bayangan hanya saat konten
+                          // sudah tergeser ke bawahnya.
+                          ...(c.sticky === "name"
+                            ? {
+                                ...STICKY_HEADER,
+                                boxShadow: scrollState.left ? SHADOW_LEFT : "none",
+                              }
+                            : null),
+                          // Kolom beku KANAN (Aksi): selalu menempel di kanan;
+                          // bayangan hanya saat masih ada konten di bawahnya.
+                          ...(c.sticky === "aksi"
+                            ? {
+                                position: "sticky" as const,
+                                right: 0,
+                                zIndex: 20,
+                                background: "#F8FAFC",
+                                boxShadow: scrollState.right ? SHADOW_RIGHT : "none",
+                              }
+                            : null),
+                        }}
+                      >
+                        {c.label}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {runs.map((run, index) => (
+                    <HistoryRunRow
+                      key={run.id}
+                      {...run}
+                      last={index === runs.length - 1}
+                      stickyShadow={scrollState.left}
+                      rightShadow={scrollState.right}
+                      extraAction={
+                        canDelete ? (
+                          <RunRowActions
+                            runId={run.id}
+                            runName={run.name}
+                            // Run History isinya run COMPLETED — di sini "Re-run"
+                            // relevan (mengembalikannya ke Active Runs).
+                            allowReRun
+                            // Preview visual + unduhan PDF sama-sama tersedia
+                            // di menu kebab ("Lihat Report" = item pertama).
+                            allowViewReport
+                            allowReport
+                            kebabVariant="box"
+                            onReRun={() => removeRunLocally(run.id)}
+                            onDeleted={() => removeRunLocally(run.id)}
+                          />
+                        ) : undefined
+                      }
+                    />
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 

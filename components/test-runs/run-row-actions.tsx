@@ -9,6 +9,7 @@ import {
 } from "@/components/settings/row-actions-menu";
 import { Toast, useToast } from "@/components/ui/feedback";
 import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
+import { useReportPdfDownload } from "@/components/test-runs/use-report-pdf-download";
 
 /**
  * Menu aksi (kebab ⋮) untuk baris run: (opsional) Re-run + Edit Run + Hapus.
@@ -21,8 +22,10 @@ export function RunRowActions({
   runName,
   allowReRun = false,
   allowViewReport = false,
+  allowReport = false,
   onReRun,
   onDeleted,
+  kebabVariant = "circle",
 }: {
   runId: string;
   runName: string;
@@ -30,14 +33,36 @@ export function RunRowActions({
   allowReRun?: boolean;
   /** Tampilkan "Lihat Detail Report" (preview visual, bukan unduhan). */
   allowViewReport?: boolean;
+  /**
+   * Tampilkan "Lihat Report" sebagai item PERTAMA menu: mengunduh PDF laporan
+   * langsung dari baris (dulu berupa tombol terpisah di kolom Aksi).
+   */
+  allowReport?: boolean;
   /** Dipanggil setelah Re-run sukses: parent membuang baris ini dari daftar. */
   onReRun?: () => void;
   onDeleted?: () => void;
+  /**
+   * Bentuk tombol kebab: `circle` (default, dipakai Active Runs) atau `box`
+   * (30×30 radius 8, dipakai tabel Run History).
+   */
+  kebabVariant?: "circle" | "box";
 }) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [reRunPending, setReRunPending] = useState(false);
   const { toast, showToast, dismissToast } = useToast();
+
+  /**
+   * Unduh PDF laporan langsung dari baris — perilaku tombol "Report" lama, kini
+   * dipindah ke item pertama menu kebab.
+   */
+  const { startPdfDownload } = useReportPdfDownload(() =>
+    showToast("Gagal mengunduh laporan.", "error")
+  );
+  const downloadReport = () => {
+    showToast("Mengunduh Laporan...", "success");
+    startPdfDownload(runId);
+  };
 
   /**
    * Re-run: run COMPLETED dikembalikan ke daftar Active Runs. Statusnya diset
@@ -59,6 +84,16 @@ export function RunRowActions({
   };
 
   const actions: RowAction[] = [
+    // "Lihat Report" selalu PALING ATAS: unduh PDF laporan baris ini.
+    ...(allowReport
+      ? [
+          {
+            label: "Lihat Report",
+            icon: <FileText size={14} />,
+            onClick: downloadReport,
+          },
+        ]
+      : []),
     // Re-run di atas Edit Run (aksi yang paling sering dipakai setelah selesai).
     ...(allowReRun
       ? [
@@ -110,7 +145,19 @@ export function RunRowActions({
       onClick={(e) => e.stopPropagation()}
       style={{ display: "inline-flex", verticalAlign: "middle" }}
     >
-      <RowActionsMenu actions={actions} />
+      <RowActionsMenu
+        actions={actions}
+        {...(kebabVariant === "box"
+          ? {
+              // Label aksesibilitas/tooltip khusus tabel Run History.
+              ariaLabel: `Aksi untuk ${runName}`,
+              iconSize: 16,
+              iconColor: "#475569",
+              triggerStyle: { width: 32, height: 32, padding: 0, borderRadius: 8 },
+              triggerClassName: "hist-kebab",
+            }
+          : {})}
+      />
 
       <ConfirmDeleteDialog
         open={confirmOpen}

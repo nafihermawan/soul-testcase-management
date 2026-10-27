@@ -216,6 +216,21 @@ button,
   border-radius: 12px !important;
 }
 
+/* ---------------- Tabel Run History ----------------
+   Hover tidak bisa dinyatakan sebagai inline style, jadi aturannya di sini. */
+
+/* Kebab kolom Aksi (32×32): hover slate-100, sedikit lebih tegas dari kebab
+   default aplikasi (#F3F4F6). Ditaruh SETELAH `.kebab-btn:hover` (specificity
+   sama) supaya menang urutan. */
+.hist-kebab:hover {
+  background: #f1f5f9;
+}
+
+/* Teks polos yang bisa di-hover (mis. "3 suites") — underline saat hover. */
+.hist-plain-link:hover {
+  text-decoration: underline;
+}
+
 /* Spinner modal progress Import Test Case — hormati prefers-reduced-motion. */
 .import-spinner {
   animation: spin 0.9s linear infinite;

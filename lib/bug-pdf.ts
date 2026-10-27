@@ -74,16 +74,42 @@ const GUTTER = 8; // jarak antar kolom metadata
 const FOOTER_Y = PAGE_H - 10;
 
 const INK = { title: "#0F172A", text: "#334155", muted: "#64748B", line: "#E2E8F0" };
+/** Teks anchor tetap untuk tautan evidence — TIDAK pernah memuat URL. */
+const VIDEO_ANCHOR = "Buka Video Evidence";
+const IMAGE_ANCHOR = "Buka Gambar Evidence";
+const FILE_ANCHOR = "Buka File Evidence";
+
+/** URL http(s) yang mungkin ikut menjadi teks (data lama / string mentah). */
+const URL_IN_TEXT = /(?:link evidence(?:\s+video)?:\s*)?(https?:\/\/[^\s]+)/i;
+
+/**
+ * Jaring pengaman terakhir sebelum teks dicetak: teks yang memuat URL http(s)
+ * TIDAK pernah dicetak mentah. URL-nya dipindah menjadi target klik dan teksnya
+ * diganti label anchor — padanan "regex replacement" pada spesifikasi, diterapkan
+ * di primitif PDF (engine ini jsPDF, bukan HTML, jadi tidak ada tag <a>).
+ */
+function sanitizeLinkText(
+  text: string,
+  url: string | null
+): { text: string; url: string | null; replaced: boolean } {
+  if (!text.includes("http")) return { text, url, replaced: false };
+  const match = URL_IN_TEXT.exec(text);
+  if (!match) return { text, url, replaced: false };
+  return { text: VIDEO_ANCHOR, url: url ?? match[1], replaced: true };
+}
+
 /** Biru link dokumen (blue-600) — dipakai SEMUA hyperlink di PDF ini. */
 const LINK = "#2563EB";
 
 /**
- * Kartu gambar evidence: selebar container (`TEXT_W`), rasio dijaga, tinggi
- * dibatasi CARD_MAX_H (padanan "max-width 100% + max-height 250px" ≈ 66 mm pada
- * 96 dpi), dengan padding dalam dan jarak antar kartu.
+ * Gambar evidence digambar TANPA kartu pembungkus: selebar konten (padanan
+ * `w-full object-contain`, rasio dijaga), dengan tinggi dibatasi CARD_MAX_H
+ * (padanan "max-height 250px" ≈ 66 mm pada 96 dpi) supaya satu screenshot tidak
+ * menghabiskan satu halaman. Border tipis 1px (padanan `border-gray-200`)
+ * mengelilingi GAMBAR-nya saja — tanpa padding tambahan.
  */
 const CARD_MAX_H = 66;
-const CARD_PAD = 1.5;
+/** Jarak antar gambar evidence (mm). */
 const CARD_GAP = 4;
 /** Tinggi satu baris hyperlink evidence (mm). */
 const LINK_ROW_H = 4.8;
@@ -540,9 +566,9 @@ export async function renderBugPdf(data: BugPdfData): Promise<ArrayBuffer> {
 
   /**
    * Ruang yang disisakan untuk Evidence dihitung dari isinya: label+garis
-   * Evidence, satu kartu gambar (sisa gambar melanjut ke halaman berikutnya),
-   * dan satu baris per video/non-gambar. Dibatasi supaya Actual Result tidak
-   * tergilas habis.
+   * Evidence, satu gambar (sisa gambar melanjut ke halaman berikutnya), dan satu
+   * baris per video/non-gambar. Dibatasi supaya Actual Result tidak tergilas
+   * habis.
    */
   const evidImages = data.evidence.filter((e) => e.url && isImageEvidence(e)).length;
   const evidLinks = data.evidence.filter((e) => e.url && !isImageEvidence(e)).length;
@@ -550,7 +576,7 @@ export async function renderBugPdf(data: BugPdfData): Promise<ArrayBuffer> {
   const evidenceReserve = Math.min(
     96,
     EVIDENCE_LABEL_H +
-      (evidImages > 0 ? CARD_MAX_H + CARD_PAD * 2 + CARD_GAP : 0) +
+      (evidImages > 0 ? CARD_MAX_H + CARD_GAP : 0) +
       evidLinks * LINK_ROW_H
   );
 
@@ -563,7 +589,7 @@ export async function renderBugPdf(data: BugPdfData): Promise<ArrayBuffer> {
     maxLinesFor(evidenceReserve)
   );
 
-  // ---------- Evidence: kartu gambar (embed) + hyperlink video/non-gambar ----------
+  // ---------- Evidence: gambar (embed) + hyperlink video/non-gambar ----------
   setLabelStyle(doc);
   doc.text("Evidence", M, y);
   const evidenceLineY = y + GAP.labelToLine;
@@ -594,7 +620,7 @@ export async function renderBugPdf(data: BugPdfData): Promise<ArrayBuffer> {
 
     /**
      * SEMUA evidence dirender berurutan sesuai urutan aslinya:
-     * - gambar yang berhasil diambil → kartu gambar (lebar container, rasio
+     * - gambar yang berhasil diambil → gambar langsung (selebar konten, rasio
      *   dijaga, tinggi dibatasi), bisa diklik ke file aslinya;
      * - gambar yang gagal diambil → baris peringatan + tautan aktif;
      * - video / file non-gambar → baris tautan (tidak pernah jadi frame video).
@@ -617,14 +643,23 @@ export async function renderBugPdf(data: BugPdfData): Promise<ArrayBuffer> {
       cy = ly + GAP.belowLine;
     };
 
-    /** Baris tautan bernomor: label tebal + URL biru bergaris bawah (bisa diklik). */
+    /** Baris tautan bernomor: label tebal + ANCHOR TEXT biru bergaris bawah (bisa diklik). */
     let linkIndex = 0;
     const drawLinkRow = (
-      label: string,
-      text: string,
-      url: string | null,
+      rawLabel: string,
+      rawText: string,
+      rawUrl: string | null,
       error = false
     ) => {
+      // Jaring pengaman: teks yang masih memuat URL mentah (data lama) diganti
+      // anchor, dan URL-nya dipindah jadi target klik. Kalau teks diganti, label
+      // lamanya ("Link Evidence Video:") ikut dibuang supaya barisnya persis
+      // "1. Buka Video Evidence".
+      const safe = sanitizeLinkText(rawText, rawUrl);
+      const label = safe.replaced ? "" : rawLabel;
+      const text = safe.text;
+      const url = safe.url;
+
       ensureSpace(LINK_ROW_H);
       linkIndex += 1;
       const prefix = `${linkIndex}. `;
@@ -633,11 +668,13 @@ export async function renderBugPdf(data: BugPdfData): Promise<ArrayBuffer> {
       doc.setTextColor(INK.text);
       doc.text(prefix, M, cy);
       let lx = M + doc.getTextWidth(prefix);
-      doc.setFont("helvetica", "bold");
-      // Pesan kegagalan diberi warna peringatan, label lain tetap netral.
-      doc.setTextColor(error ? "#B45309" : INK.text);
-      doc.text(label, lx, cy);
-      lx += doc.getTextWidth(label) + 1.5;
+      if (label) {
+        doc.setFont("helvetica", "bold");
+        // Pesan kegagalan diberi warna peringatan, label lain tetap netral.
+        doc.setTextColor(error ? "#B45309" : INK.text);
+        doc.text(label, lx, cy);
+        lx += doc.getTextWidth(label) + 1.5;
+      }
       doc.setFont("helvetica", "normal");
       if (!url) {
         // Tanpa URL: tidak ada yang bisa diklik, cukup nama filenya.
@@ -653,56 +690,93 @@ export async function renderBugPdf(data: BugPdfData): Promise<ArrayBuffer> {
       cy += LINK_ROW_H;
     };
 
-    for (const e of data.evidence) {
+    /**
+     * MAPPING sebelum render: tiap evidence diubah menjadi objek
+     * `{ kind, label, text, url }` (padanan `formattedEvidenceList` di spec).
+     * `text` selalu dari konstanta anchor (module-level) — data mentah (URL) cuma
+     * dipakai sebagai `url` target, jadi mustahil tercetak sebagai teks.
+     */
+    type FormattedEvidence =
+      | { kind: "image"; img: LoadedImage; url: string }
+      | { kind: "link"; label: string; text: string; url: string | null; error: boolean };
+
+    const formatted = data.evidence.map((e, index): FormattedEvidence => {
       if (!e.url) {
-        drawLinkRow("Evidence tanpa tautan:", e.fileName, null);
-        continue;
+        return {
+          kind: "link",
+          label: "Evidence tanpa tautan:",
+          text: e.fileName,
+          url: null,
+          error: false,
+        };
       }
       const result = loaded.get(e);
-      if (!result || !result.ok) {
-        // Bukan gambar (video/dll), atau gambar yang tidak bisa dipreview.
-        if (isImageEvidence(e)) {
-          drawLinkRow(
+      // Gambar yang berhasil diambil dirender sebagai gambar, bukan baris link.
+      if (result?.ok) return { kind: "image", img: result.img, url: e.url };
+
+      if (isImageEvidence(e)) {
+        return {
+          kind: "link",
+          label:
             result?.reason === "too_large"
-              ? "Preview dilewati (gambar melebihi batas dokumen), buka link:"
-              : "Gagal memuat preview gambar, buka link:",
-            e.url,
-            e.url,
-            true
-          );
-        } else {
-          drawLinkRow(
-            isVideoEvidence(e) ? "Link Evidence Video:" : "Link Evidence:",
-            e.url,
-            e.url
-          );
-        }
+              ? "Preview gambar dilewati (melebihi batas dokumen):"
+              : "Gagal memuat preview gambar:",
+          text: IMAGE_ANCHOR,
+          url: e.url,
+          error: true,
+        };
+      }
+      if (isVideoEvidence(e)) {
+        return {
+          kind: "link",
+          label: `Evidence Video ${index + 1}:`,
+          text: VIDEO_ANCHOR,
+          url: e.url,
+          error: false,
+        };
+      }
+      return {
+        kind: "link",
+        label: "Evidence File:",
+        text: FILE_ANCHOR,
+        url: e.url,
+        error: false,
+      };
+    });
+
+    // Log verifikasi (diminta di spesifikasi): hanya teks yang AKAN dicetak —
+    // URL mentah tidak pernah ikut karena teks tautan selalu anchor/label.
+    console.log(
+      "PDF Evidence Output:",
+      formatted
+        .map((it) => (it.kind === "image" ? "[gambar]" : `${it.label} ${it.text}`.trim()))
+        .join(" | ")
+    );
+
+    for (const item of formatted) {
+      if (item.kind === "link") {
+        drawLinkRow(item.label, item.text, item.url, item.error);
         continue;
       }
-      const img = result.img;
+      const img = item.img;
 
-      // Kartu gambar: fit container sambil menjaga rasio, lalu ditengahkan.
+      // Gambar TANPA kartu: selebar konten (padanan `w-full object-contain`),
+      // rasio dijaga, tinggi dibatasi CARD_MAX_H. Border 0,2 mm (≈1px) hanya di
+      // sekeliling gambar — tidak ada padding/kotak tambahan.
+      // RATA KIRI: tepi kiri gambar duduk tepat di margin teks (M), sejajar
+      // dengan judul/label section di atasnya — bukan di tengah halaman.
       const scale = Math.min(TEXT_W / img.w, CARD_MAX_H / img.h);
       const w = img.w * scale;
       const h = img.h * scale;
-      const boxH = h + CARD_PAD * 2;
-      ensureSpace(boxH + CARD_GAP);
-      doc.setDrawColor(INK.line);
+      const imgX = M;
+      ensureSpace(h + CARD_GAP);
+      doc.setDrawColor("#E5E7EB"); // gray-200
       doc.setLineWidth(0.2);
-      doc.rect(M, cy, TEXT_W, boxH);
-      doc.addImage(
-        img.dataUrl,
-        img.format,
-        M + (TEXT_W - w) / 2,
-        cy + CARD_PAD,
-        w,
-        h,
-        undefined,
-        IMAGE_COMPRESSION
-      );
-      // Seluruh kartu bisa diklik menuju file aslinya.
-      doc.link(M, cy, TEXT_W, boxH, { url: e.url });
-      cy += boxH + CARD_GAP;
+      doc.rect(imgX, cy, w, h);
+      doc.addImage(img.dataUrl, img.format, imgX, cy, w, h, undefined, IMAGE_COMPRESSION);
+      // Gambar bisa diklik menuju file aslinya.
+      doc.link(imgX, cy, w, h, { url: item.url });
+      cy += h + CARD_GAP;
     }
   }
 

@@ -95,7 +95,11 @@ export async function GET(request: Request) {
         // tidak membuka tab/viewer baru. Nama file di sini satu-satunya sumber;
         // klien memakai nama yang sama dari header ini.
         "content-disposition": `attachment; filename="${bugPdfFileName(data)}"`,
-        "cache-control": "no-store",
+        // Tidak boleh di-cache sama sekali: PDF harus selalu dibuat ulang dari
+        // data terbaru (evidence bisa berubah setelah bug diedit).
+        "cache-control": "no-store, no-cache, must-revalidate",
+        pragma: "no-cache",
+        expires: "0",
       },
     });
   } catch (error) {

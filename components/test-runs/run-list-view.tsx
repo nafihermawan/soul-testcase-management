@@ -68,7 +68,15 @@ export function RunListView({ searchParams }: { searchParams: ActiveRunsSearchPa
     return `/api/test-runs${qs ? `?${qs}` : ""}`;
   }, [searchParams]);
 
-  const { data, error, loading, reload } = useApi<ActiveRunsPayload>(apiPath);
+  /**
+   * `refetchOnFocus`: daftar run aktif dimuat ulang diam-diam saat tab kembali
+   * fokus, jadi perubahan dari halaman lain (mis. judul TC yang diedit, hasil
+   * eksekusi, status run) langsung tampil tanpa hard reload. Data lama tetap di
+   * layar sampai data baru tiba — tidak ada skeleton.
+   */
+  const { data, error, loading, reload } = useApi<ActiveRunsPayload>(apiPath, {
+    refetchOnFocus: true,
+  });
   /**
    * Query pencarian (sudah di-debounce oleh HistoryControls). Disaring di klien
    * dari daftar penuh yang sudah dimuat, jadi mengetik tidak memicu request,

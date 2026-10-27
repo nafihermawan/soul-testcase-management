@@ -306,6 +306,7 @@ export async function updateRunResult(
   data: {
     status: ResultStatus;
     actualResult?: string;
+    /** Catatan hasil PASS, sekaligus "Alasan Blocked" saat status BLOCKED. */
     notes?: string;
     /** Hanya relevan saat status SKIPPED; status lain selalu dikosongkan. */
     skipReason?: string;
@@ -315,6 +316,13 @@ export async function updateRunResult(
 ): Promise<TestRunActionState> {
   const user = await requireRole("QA");
   try {
+    // Blocked wajib punya alasan: kalau tidak, tidak ada konteks kenapa TC ini
+    // dilewati — dan riwayat eksekusinya jadi tidak bisa dipertanggungjawabkan.
+    // Dijaga di sini (bukan hanya di UI) supaya semua jalur tulis tunduk aturan.
+    if (data.status === "BLOCKED" && !data.notes?.trim()) {
+      return { error: "Alasan Blocked wajib diisi." };
+    }
+
     const result = await prisma.testRunResult.findUnique({
       where: { id: resultId },
       include: { run: { select: { id: true, status: true } } },

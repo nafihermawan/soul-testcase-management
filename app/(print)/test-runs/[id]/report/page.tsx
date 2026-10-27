@@ -520,6 +520,12 @@ export default async function RunReportPage({
                 const color = statusColor[r.status] ?? "#0F172A";
                 const skipNote = r.status === "SKIPPED" ? (r.skipReasonNote ?? "").trim() : "";
                 const notesText = (r.notes ?? "").trim();
+                /**
+                 * Kolom `notes` bermakna ganda: catatan hasil PASS, dan "Alasan
+                 * Blocked" saat statusnya BLOCKED (lihat panel Eksekusi) — jadi
+                 * labelnya ikut status supaya laporan tidak menyesatkan.
+                 */
+                const notesLabel = r.status === "BLOCKED" ? "Alasan Blocked" : "Notes";
                 // Notes kosong tidak diulang kalau keterangan skip sudah tampil
                 // di baris "Keterangan / Notes" (hindari dua label Notes).
                 const showNotesLine = notesText !== "" || skipNote === "";
@@ -549,7 +555,7 @@ export default async function RunReportPage({
                     </div>
                     {showNotesLine && (
                       <div style={{ color: "#334155", whiteSpace: "pre-wrap", overflowWrap: "break-word" }}>
-                        <span style={{ color: "#64748B" }}>• Notes : </span>
+                        <span style={{ color: "#64748B" }}>• {notesLabel} : </span>
                         {notesText || "—"}
                       </div>
                     )}

@@ -7,7 +7,16 @@ import { useApi } from "@/lib/client/use-api";
 import type { RunDetailPayload } from "@/types/api";
 
 export function RunDetailView({ runId }: { runId: string }) {
-  const { data, error, loading, reload } = useApi<RunDetailPayload>(`/api/test-runs/${runId}`);
+  /**
+   * `refetchOnFocus`: saat QA mengedit TC di halaman lain lalu kembali ke tab
+   * ini, daftar dimuat ulang diam-diam (tanpa skeleton) — judul TC yang baru
+   * langsung tampil tanpa hard reload. Refetch background tidak menimpa draft
+   * di modal eksekusi karena modal memegang state-nya sendiri (hanya di-reset
+   * lewat tombol Batal).
+   */
+  const { data, error, loading, reload } = useApi<RunDetailPayload>(`/api/test-runs/${runId}`, {
+    refetchOnFocus: true,
+  });
 
   if (error?.status === 404) {
     return (

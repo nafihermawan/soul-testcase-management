@@ -221,10 +221,27 @@ export async function updateTestCase(
     } else {
       await logActivity(id, "UPDATED", "Detail test case diperbarui", user.id);
     }
+
+    /**
+     * Cascade judul: baris hasil eksekusi menyimpan `titleSnapshot` (dipakai
+     * daftar eksekusi, modal, complete-run, dan laporan), jadi judul lama akan
+     * terus tampil di Active Run kalau snapshot-nya tidak ikut diperbarui.
+     *
+     * Hanya run yang BELUM selesai (PENDING/IN_PROGRESS/RE_OPEN) yang disamakan.
+     * Run COMPLETED sengaja dibiarkan: snapshot-nya adalah riwayat apa yang
+     * benar-benar dieksekusi saat itu.
+     */
+    if (title !== tc.title) {
+      await prisma.testRunResult.updateMany({
+        where: { testCaseId: id, run: { status: { not: "COMPLETED" } } },
+        data: { titleSnapshot: title },
+      });
+    }
+
     revalidatePath(`/suites/${suiteId ?? tc.suiteId}`);
-    // Perubahan status mengubah CAKUPAN run yang belum selesai (TC Deprecated
-    // dikeluarkan dari daftar eksekusi) — invalidasi halaman run juga.
-    if (newStatus !== tc.status) revalidatePath("/test-runs");
+    // Perubahan status mengubah CAKUPAN run aktif, dan perubahan judul mengubah
+    // snapshot di dalamnya — keduanya invalidasi halaman run.
+    if (newStatus !== tc.status || title !== tc.title) revalidatePath("/test-runs");
     return {
       success: true,
       testCase: { ...updated, createdAt: updated.createdAt.toISOString() },

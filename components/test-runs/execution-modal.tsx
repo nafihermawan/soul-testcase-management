@@ -41,6 +41,31 @@ const MODAL_TRANSITION_MS = 300;
 /** Jepit lebar kolom kiri ke rentang yang diizinkan. */
 const clampSplit = (pct: number) => Math.min(SPLIT_MAX_PCT, Math.max(SPLIT_MIN_PCT, pct));
 
+/**
+ * Gaya label form STANDAR panel ini (setara `text-sm font-medium text-gray-700
+ * mb-1.5`): 14px, weight 500, gray-700, jarak 6px ke field di bawahnya.
+ *
+ * Jarak label→field sengaja dibawa oleh `marginBottom` label ini, bukan oleh
+ * `gap` container — supaya semua field punya ritme yang sama dan tidak ada
+ * container yang dobel jarak.
+ */
+const FORM_LABEL: React.CSSProperties = {
+  fontSize: "0.875rem",
+  fontWeight: 500,
+  color: "#374151",
+  marginBottom: "0.375rem",
+};
+
+/** Jarak baku antar elemen form di panel ini (setara `mb-4` = 16px). */
+const FORM_GAP = 16;
+
+/** Garis pemisah horizontal form (setara `border-t border-gray-200`). */
+const FORM_DIVIDER: React.CSSProperties = {
+  flexShrink: 0,
+  height: 1,
+  background: "var(--border)",
+};
+
 export function ExecutionModal({
   item,
   canEdit,
@@ -377,6 +402,14 @@ export function ExecutionModal({
   const usesActualResult = status === "FAIL" || status === "BLOCKED";
 
   /**
+   * Kolom `notes` dipakai dua status:
+   * - PASS    : catatan eksekusi (opsional);
+   * - BLOCKED : "Alasan Blocked" — WAJIB, supaya QA memberi konteks penjelas
+   *             kenapa TC ini tidak bisa dijalankan.
+   */
+  const usesNotes = status === "PASS" || status === "BLOCKED";
+
+  /**
    * Section "Evidence" tampil saat penguji memilih Pass/Fail/Blocked, dan
    * disembunyikan saat Skipped. Saat modal baru dibuka (belum ada status yang
    * dipilih) section ini juga belum tampil — muncul begitu tombol Pass/Fail/
@@ -412,6 +445,7 @@ export function ExecutionModal({
    * - PASS         : aktif langsung (evidence opsional);
    * - SKIPPED      : wajib memilih alasan — dan, kalau alasannya "Lainnya",
    *                  wajib mengisi keterangannya;
+   * - BLOCKED      : wajib mengisi "Alasan Blocked";
    * - FAIL/BLOCKED : wajib ada evidence, atau sudah ada catatan.
    */
   const saveBlocked =
@@ -419,6 +453,7 @@ export function ExecutionModal({
     (status === "SKIPPED" &&
       (skippedReason === "" ||
         (skippedReason === SKIP_REASON_OTHER && skippedReasonNote.trim() === ""))) ||
+    (status === "BLOCKED" && notes.trim() === "") ||
     (requiresEvidence && !hasEvidence && (notes ?? "").trim() === "");
 
   /** Salin Test Data ke clipboard (tombol ringkas di samping nilainya). */
@@ -650,6 +685,12 @@ export function ExecutionModal({
       }
     }
 
+    // Blocked wajib menyertakan alasan (penjaga kedua di server action).
+    if (status === "BLOCKED" && !notes.trim()) {
+      setMsg("Alasan Blocked wajib diisi.");
+      return;
+    }
+
     setSaving(true);
 
     // Evidence (mode edit) baru diunggah/dihapus ke server saat Simpan diklik.
@@ -672,12 +713,13 @@ export function ExecutionModal({
        */
       actualResult: usesActualResult ? actualResult : item.actualResult ?? "",
       /**
-       * Notes hanya milik hasil PASS (field-nya pun cuma muncul di status itu).
-       * Untuk status lain, kirim BALIK nilai tersimpan apa adanya supaya catatan
-       * lama tidak terhapus hanya karena field-nya tidak ditampilkan — dan draft
-       * yang tidak terlihat tidak pernah ikut tersimpan.
+       * Notes dipakai hasil PASS (opsional) dan BLOCKED (alasan wajib) —
+       * field-nya hanya muncul di dua status itu. Untuk status lain, kirim
+       * BALIK nilai tersimpan apa adanya supaya catatan lama tidak terhapus
+       * hanya karena field-nya tidak ditampilkan — dan draft yang tidak
+       * terlihat tidak pernah ikut tersimpan.
        */
-      notes: status === "PASS" ? notes : item.notes ?? "",
+      notes: usesNotes ? notes : item.notes ?? "",
       skipReason: skippedReason,
       skipReasonNote: skippedReasonNote,
       // Mode Fail: "edit" memperbarui bug yang sudah ter-link, "new" membuat bug
@@ -1033,8 +1075,10 @@ export function ExecutionModal({
             </button>
           </div>
 
-          {/* Result selector — di ATAS, langsung di bawah header. */}
-          <div style={{ flexShrink: 0, padding: "0 24px 18px 24px" }}>
+          {/* Result selector — di ATAS, langsung di bawah header. Padding
+              horizontal mengikuti body (p-6); jarak ke divider diatur oleh
+              margin divider, bukan padding di sini. */}
+          <div style={{ flexShrink: 0, padding: "0 24px" }}>
             <div
               role="radiogroup"
               aria-label="Hasil eksekusi"
@@ -1085,11 +1129,35 @@ export function ExecutionModal({
                 );
               })}
             </div>
+          </div>
+
+          {/* Isi eksekusi — HANYA bagian ini yang scroll. */}
+          <div
+            style={{
+              flex: 1,
+              minHeight: 0,
+              minWidth: 0,
+              overflowY: "auto",
+              // Padding standar panel (p-6: 24px) — ATAS sengaja 0 supaya jarak
+              // tombol status → divider diatur `marginTop` divider (mt-4) tepat
+              // 16px, bukan ditumpuk padding container.
+              padding: "0 24px 24px",
+              display: "flex",
+              flexDirection: "column",
+              // Jarak baku antar elemen form (mb-4 = 16px).
+              gap: FORM_GAP,
+            }}
+          >
+            {/* Divider di bawah kelompok tombol status — SELALU tampil pada
+                SEMUA status (Pass/Fail/Blocked/Skipped), bukan hanya Blocked.
+                `marginTop` = mt-4 (16px dari tombol); jarak ke field pertama di
+                bawahnya datang dari `gap` body (mb-4). */}
+            <div aria-hidden="true" style={{ ...FORM_DIVIDER, marginTop: "1rem" }} />
 
             {/* Field kondisional: SKIPPED wajib menyertakan alasan. */}
             {status === "SKIPPED" && (
-              <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 12 }}>
-                <label htmlFor="skip-reason" style={{ fontSize: 13, fontWeight: 500, color: "#334155" }}>
+              <div style={{ display: "flex", flexDirection: "column" }}>
+                <label htmlFor="skip-reason" style={FORM_LABEL}>
                   Alasan Skipped <span style={{ color: "#B91C1C" }}>*</span>
                 </label>
                 <Select
@@ -1110,11 +1178,8 @@ export function ExecutionModal({
 
                 {/* Keterangan wajib hanya saat alasannya "Lainnya". */}
                 {skippedReason === SKIP_REASON_OTHER && (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 4 }}>
-                    <label
-                      htmlFor="skip-reason-note"
-                      style={{ fontSize: 13, fontWeight: 500, color: "#334155" }}
-                    >
+                  <div style={{ display: "flex", flexDirection: "column", marginTop: FORM_GAP }}>
+                    <label htmlFor="skip-reason-note" style={FORM_LABEL}>
                       Keterangan Alasan <span style={{ color: "#B91C1C" }}>*</span>
                     </label>
                     <ListTextarea
@@ -1141,30 +1206,43 @@ export function ExecutionModal({
               </div>
             )}
 
+            {/* Field kondisional: BLOCKED wajib menyertakan alasan. Disimpan di
+                kolom `notes` (sama seperti catatan hasil PASS). */}
+            {status === "BLOCKED" && (
+              <div style={{ display: "flex", flexDirection: "column" }}>
+                <label style={FORM_LABEL}>
+                  Notes <span style={{ color: "#B91C1C" }}>*</span>
+                </label>
+                <ListTextarea
+                  value={notes}
+                  onChange={setNotes}
+                  disabled={!editable}
+                  rows={3}
+                  required
+                  ariaLabel="Notes"
+                  placeholder="Masukkan alasan kenapa test case ini di-block (contoh: API server down, dependency fitur belum selesai, dll)"
+                  style={{
+                    padding: "10px 12px",
+                    lineHeight: 1.5,
+                    resize: "vertical",
+                    border: "1px solid #DDE2E9",
+                    borderRadius: 10,
+                    fontSize: 14,
+                    color: "#0F172A",
+                    background: "#fff",
+                    outline: "none",
+                  }}
+                />
+              </div>
+            )}
+
             {/* Catatan subtle: bug lama di-Closed otomatis saat bug baru disimpan. */}
             {isFail && activeBug && bugMode === "new" && (
-              <div style={{ fontSize: 12, fontWeight: 400, color: "#64748B", marginTop: 8 }}>
+              <div style={{ fontSize: 12, fontWeight: 400, color: "#64748B" }}>
                 Bug lama akan otomatis ditandai Closed saat bug baru disimpan.
               </div>
             )}
-          </div>
 
-          {/* Inset divider (bukan full width). */}
-          <div aria-hidden="true" style={{ flexShrink: 0, height: 1, background: "#EEF1F5", margin: "0 24px" }} />
-
-          {/* Isi eksekusi — HANYA bagian ini yang scroll. */}
-          <div
-            style={{
-              flex: 1,
-              minHeight: 0,
-              minWidth: 0,
-              overflowY: "auto",
-              padding: "20px 24px 22px",
-              display: "flex",
-              flexDirection: "column",
-              gap: 22,
-            }}
-          >
             {showBugForm ? (
               /* ===== State B — Fail terpilih, laporkan bug baru ===== */
               <>
@@ -1207,8 +1285,8 @@ export function ExecutionModal({
                   </div>
                 )}
 
-                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                  <label htmlFor="bug-title" style={{ fontSize: 13, fontWeight: 500, color: "#334155" }}>
+                <div style={{ display: "flex", flexDirection: "column" }}>
+                  <label htmlFor="bug-title" style={FORM_LABEL}>
                     Bug Title <span style={{ color: "#B91C1C" }}>*</span>
                   </label>
                   <input
@@ -1234,8 +1312,8 @@ export function ExecutionModal({
                 </div>
 
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                    <label htmlFor="bug-severity" style={{ fontSize: 13, fontWeight: 500, color: "#334155" }}>
+                  <div style={{ display: "flex", flexDirection: "column" }}>
+                    <label htmlFor="bug-severity" style={FORM_LABEL}>
                       Severity
                     </label>
                     <div style={{ position: "relative" }}>
@@ -1294,8 +1372,8 @@ export function ExecutionModal({
                     </div>
                   </div>
 
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                    <label htmlFor="bug-env" style={{ fontSize: 13, fontWeight: 500, color: "#334155" }}>
+                  <div style={{ display: "flex", flexDirection: "column" }}>
+                    <label htmlFor="bug-env" style={FORM_LABEL}>
                       Environment{" "}
                       <span style={{ fontWeight: 400, color: "#64748B" }}>(dari Test Run)</span>
                     </label>
@@ -1336,8 +1414,8 @@ export function ExecutionModal({
                   </div>
                 </div>
 
-                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                  <label style={{ fontSize: 13, fontWeight: 500, color: "#334155" }}>
+                <div style={{ display: "flex", flexDirection: "column" }}>
+                  <label style={FORM_LABEL}>
                     Bug Detail <span style={{ color: "#B91C1C" }}>*</span>
                   </label>
                   <ListTextarea
@@ -1387,20 +1465,15 @@ export function ExecutionModal({
 
                 {/* Notes — hanya muncul saat status PASS (opsional). */}
                 {status === "PASS" && (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: "#475569" }}>
-                      Notes
-                      {editable && (
-                        <span style={{ fontWeight: 400, color: "#64748B" }}> (opsional)</span>
-                      )}
-                    </span>
+                  <div style={{ display: "flex", flexDirection: "column" }}>
+                    <span style={FORM_LABEL}>Notes</span>
                     {editable ? (
                       <ListTextarea
                         value={notes}
                         onChange={setNotes}
                         rows={3}
                         ariaLabel="Notes"
-                        placeholder="Tambahkan catatan eksekusi jika ada (opsional)…"
+                        placeholder="Tambahkan catatan eksekusi jika ada…"
                         style={{
                           padding: "10px 12px",
                           lineHeight: 1.5,

@@ -479,17 +479,22 @@ export function RunExecutor({
 
       {/* Header — padding 22px, baris demi baris gap 16px. */}
       <div style={{ padding: 22, display: "flex", flexDirection: "column", gap: 16, flexShrink: 0 }}>
-        {/* Row 1: judul | aksi */}
-        <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: 16 }}>
+        {/* Row 1: judul | aksi. Tata letaknya di `.run-header-row` (menumpuk di
+            layar sempit, satu baris dari 640px). Judul memakai `flex: 1` +
+            `minWidth: 0` supaya judul panjang MEMBUNGKUS di sisinya sendiri dan
+            tidak pernah mendorong tombol aksi turun; wadah tombol `flexShrink: 0`
+            sehingga lebarnya tetap di kanan. */}
+        <div className="run-header-row">
           <h1
             style={{
+              flex: "1 1 0",
+              minWidth: 0,
               fontSize: 24,
               fontWeight: 600,
               letterSpacing: "-0.02em",
               color: "#0F172A",
               margin: 0,
               lineHeight: 1.2,
-              minWidth: 0,
               // Kata panjang tanpa spasi pun tetap dipatahkan, tidak melebar.
               overflowWrap: "break-word",
             }}
@@ -497,7 +502,7 @@ export function RunExecutor({
             {runName}
           </h1>
 
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
             {!isCompleted && canEdit && (
               <button
                 type="button"

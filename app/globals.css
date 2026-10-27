@@ -702,6 +702,24 @@ button,
   align-items: stretch;
 }
 
+/* Baris header run (judul + tombol aksi Edit/Complete): menumpuk di layar
+   sempit, satu baris dari 640px. Sengaja TANPA `flex-wrap` — dengan wrap, judul
+   yang panjang mendorong tombol aksi turun ke baris berikutnya. */
+.run-header-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+@media (min-width: 640px) {
+  .run-header-row {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+}
+
 /* Area scroll tabel Coverage: dibatasi di mobile, dilepas di desktop supaya
    tabel merenggang mengisi sisa tinggi card (yang mengikuti kolom kanan). */
 .coverage-scroll {

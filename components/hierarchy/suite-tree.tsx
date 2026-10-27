@@ -17,6 +17,7 @@ import { useRefresh } from "@/lib/client/refresh-context";
 import { parseReferenceLines, platformPrefix } from "@/lib/format";
 import { RowActionsMenu } from "@/components/settings/row-actions-menu";
 import { ConfirmDialog, Spinner, Toast, useToast } from "@/components/ui/feedback";
+import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
 import {
   HEAD_BG,
   LINE,
@@ -370,28 +371,21 @@ function SuiteRow({
 
       {/* Confirm hapus suite — varian riwayat bug kalau suite masih punya bug
           Closed/Resolved (tautannya diputus, laporan bug-nya tetap ada). */}
-      <ConfirmDialog
+      <ConfirmDeleteDialog
         open={confirmDelete}
-        title="Hapus Suite?"
-        message={
+        itemType="Suite"
+        itemName={suite.name}
+        impact={
           closedBugCount > 0 ? (
             <>
-              Suite ini memiliki <strong>{closedBugCount} riwayat Bug (Closed)</strong>. Menghapus
-              Suite ini akan memutuskan tautan aktif tetapi tetap menyimpan riwayat laporan Bug.
-              Lanjutkan?
-              <br />
-              <br />
-              Suite <strong>{suite.name}</strong> beserta semua sub-suite &amp; test case di
-              dalamnya akan dihapus permanen.
+              Suite ini memiliki <strong>{closedBugCount} riwayat Bug (Closed)</strong> — tautannya
+              akan diputus, tetapi laporan Bug-nya tetap tersimpan. Semua sub-suite &amp; test case
+              di dalamnya juga akan terhapus.
             </>
           ) : (
-            <>
-              Suite <strong>{suite.name}</strong> beserta semua sub-suite &amp; test case di
-              dalamnya akan dihapus permanen.
-            </>
+            "Semua sub-suite & test case di dalamnya juga akan terhapus."
           )
         }
-        confirmLabel={closedBugCount > 0 ? "Ya, Hapus Suite" : undefined}
         pending={deletePending}
         onConfirm={() => void handleDelete()}
         onCancel={() => setConfirmDelete(false)}

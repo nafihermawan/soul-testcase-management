@@ -5,10 +5,11 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRefresh } from "@/lib/client/refresh-context";
-import { Check, ChevronDown, Copy, Cpu, ExternalLink, FileDown, FileSpreadsheet, FolderOpen, Monitor, Pencil, Server, Smartphone } from "lucide-react";
+import { Check, ChevronDown, Cpu, ExternalLink, FileDown, FolderOpen, Monitor, Pencil, Server, Smartphone } from "lucide-react";
 import { completeRun, completeRunWithSkip, deleteRun, updateRunResult } from "@/lib/actions/test-runs";
 import { createBug, updateBug, updateBugStatus } from "@/lib/actions/automation-bugs";
-import { ConfirmDialog, Spinner, Toast, useToast } from "@/components/ui/feedback";
+import { Spinner, Toast, useToast } from "@/components/ui/feedback";
+import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
 import { runCodeOf } from "@/lib/format";
 import { isActiveBugStatus, SKIP_REASON_OTHER } from "@/lib/qa-metrics";
 import { BugDetailModal } from "@/components/bugs/bug-detail-modal";
@@ -33,24 +34,6 @@ import { BugModal } from "./bug-modal";
 import { CompleteRunModal } from "./complete-run-modal";
 import { ExecutionModal } from "./execution-modal";
 import { RunItemCard } from "./run-item-card";
-
-/** Baris menu pada dropdown "Export Report". */
-const EXPORT_MENU_ITEM: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: 8,
-  width: "100%",
-  padding: "8px 10px",
-  border: "none",
-  borderRadius: 6,
-  background: "transparent",
-  color: "#334155",
-  fontSize: 13,
-  fontWeight: 500,
-  textAlign: "left",
-  cursor: "pointer",
-  whiteSpace: "nowrap",
-};
 
 export function RunExecutor({
   runId,
@@ -155,12 +138,9 @@ export function RunExecutor({
   const [editOpen, setEditOpen] = useState(false);
   const [completing, setCompleting] = useState(false);
   /**
-   * Export Report = split button:
-   * - tombol utama  → langsung unduh PDF (tanpa modal)
-   * - chevron       → menu opsi tambahan (PDF / CSV / Slack)
+   * Export Report = tombol aksi TUNGGAL: sekali klik langsung generate &
+   * unduh PDF laporan run ini, tanpa dropdown/modal pilihan format.
    */
-  const [reportMenuOpen, setReportMenuOpen] = useState(false);
-  const exportBtnRef = useRef<HTMLDivElement>(null);
   const { toast, showToast, dismissToast } = useToast();
   const pdfError = useCallback(
     () => showToast("Gagal membuat PDF. Coba lagi.", "error"),
@@ -383,68 +363,6 @@ export function RunExecutor({
     refresh();
   };
 
-  // --- Report export helpers ---
-  const reportRows = items.map((item) => ({
-    tcId: item.testCase?.tcId ?? "—",
-    title: item.titleSnapshot,
-    suite: item.testCase?.suite?.name ?? "—",
-    status: item.status,
-    actualResult: item.actualResult ?? "",
-  }));
-
-  // Tutup menu export saat klik di luar / Escape / halaman digulir.
-  useEffect(() => {
-    if (!reportMenuOpen) return;
-    const onDown = (e: MouseEvent) => {
-      if (exportBtnRef.current?.contains(e.target as Node)) return;
-      setReportMenuOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setReportMenuOpen(false);
-    };
-    const onScroll = () => setReportMenuOpen(false);
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onKey);
-    window.addEventListener("scroll", onScroll, true);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("keydown", onKey);
-      window.removeEventListener("scroll", onScroll, true);
-    };
-  }, [reportMenuOpen]);
-
-  const exportCsv = () => {
-    setReportMenuOpen(false);
-    const header = ["TC ID", "Title", "Suite", "Status", "Actual Result"];
-    const esc = (v: string) => `"${String(v).replace(/"/g, '""')}"`;
-    const csv = [header.join(","), ...reportRows.map((r) => [r.tcId, r.title, r.suite, r.status, r.actualResult].map(esc).join(","))].join("\n");
-    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `test-run-${runCode}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-    showToast("CSV report diunduh.", "success");
-  };
-
-  const copySlackSummary = async () => {
-    setReportMenuOpen(false);
-    const lines = [
-      `*Test Run Report: ${runName}*`,
-      `Run ID: ${runCode} | ${activityType ?? ""}${environment ? ` | Env: ${envShort(environment)}` : ""}`,
-      `Total: ${items.length} TC | Passed: ${passed} | Failed: ${failed} | Skipped: ${items.filter((i) => i.status === "SKIPPED").length} | Untested: ${untested}`,
-      "",
-      ...reportRows.map((r) => `• ${r.tcId} - ${r.title} (${r.suite}): ${r.status}`),
-    ];
-    try {
-      await navigator.clipboard.writeText(lines.join("\n"));
-      showToast("Ringkasan Slack disalin.", "success");
-    } catch {
-      showToast("Gagal menyalin ke clipboard.", "error");
-    }
-  };
-
   return (
     <div
       style={{
@@ -552,108 +470,29 @@ export function RunExecutor({
                   />
                   Run Completed
                 </span>
-                {/* Split button: klik utama = unduh PDF langsung; chevron = menu opsi. */}
-                <div
-                  ref={exportBtnRef}
-                  style={{ position: "relative", display: "inline-flex", alignItems: "stretch" }}
+                {/* Tombol aksi tunggal: sekali klik langsung generate & unduh
+                    PDF laporan (tanpa dropdown / modal pilihan format). */}
+                <button
+                  type="button"
+                  onClick={() => startPdfDownload(runId)}
+                  disabled={pdfDownloading}
+                  aria-label="Export Report (unduh PDF)"
+                  style={{ ...BTN_SECONDARY, cursor: pdfDownloading ? "wait" : "pointer" }}
+                  onMouseEnter={(e) => {
+                    if (!pdfDownloading) e.currentTarget.style.background = "#F8FAFC";
+                  }}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = "#fff")}
                 >
-                  <button
-                    type="button"
-                    className="split-btn-left"
-                    onClick={() => startPdfDownload(runId)}
-                    disabled={pdfDownloading}
-                    aria-label="Export Report (unduh PDF)"
-                    style={{ ...BTN_SECONDARY, cursor: pdfDownloading ? "wait" : "pointer" }}
-                    onMouseEnter={(e) => {
-                      if (!pdfDownloading) e.currentTarget.style.background = "#F8FAFC";
-                    }}
-                    onMouseLeave={(e) => (e.currentTarget.style.background = "#fff")}
-                  >
-                    {pdfDownloading ? (
-                      <>
-                        <Spinner size={14} /> Menyiapkan PDF…
-                      </>
-                    ) : (
-                      <>
-                        <FileDown size={14} aria-hidden="true" /> Export Report
-                      </>
-                    )}
-                  </button>
-
-                  <button
-                    type="button"
-                    className="split-btn-right"
-                    onClick={() => setReportMenuOpen((v) => !v)}
-                    aria-haspopup="menu"
-                    aria-expanded={reportMenuOpen}
-                    aria-label="Opsi export lainnya"
-                    style={{ ...BTN_SECONDARY, padding: "0 10px", borderLeft: "none" }}
-                    onMouseEnter={(e) => (e.currentTarget.style.background = "#F8FAFC")}
-                    onMouseLeave={(e) => (e.currentTarget.style.background = "#fff")}
-                  >
-                    <ChevronDown
-                      size={14}
-                      aria-hidden="true"
-                      style={{
-                        transform: reportMenuOpen ? "rotate(180deg)" : "rotate(0deg)",
-                        transition: "transform 0.15s ease",
-                      }}
-                    />
-                  </button>
-
-                  {reportMenuOpen && (
-                    <div
-                      role="menu"
-                      style={{
-                        position: "absolute",
-                        top: "calc(100% + 6px)",
-                        right: 0,
-                        zIndex: 20,
-                        minWidth: 258,
-                        background: "#fff",
-                        border: "1px solid #E2E8F0",
-                        borderRadius: 10,
-                        boxShadow: "0 12px 24px -6px rgba(15, 23, 42, 0.18)",
-                        padding: 4,
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: 2,
-                      }}
-                    >
-                      <button
-                        type="button"
-                        role="menuitem"
-                        onClick={() => startPdfDownload(runId)}
-                        disabled={pdfDownloading}
-                        style={EXPORT_MENU_ITEM}
-                        onMouseEnter={(e) => (e.currentTarget.style.background = "#F8FAFC")}
-                        onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-                      >
-                        <FileDown size={15} aria-hidden="true" /> Export as PDF (Direct Download)
-                      </button>
-                      <button
-                        type="button"
-                        role="menuitem"
-                        onClick={exportCsv}
-                        style={EXPORT_MENU_ITEM}
-                        onMouseEnter={(e) => (e.currentTarget.style.background = "#F8FAFC")}
-                        onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-                      >
-                        <FileSpreadsheet size={15} aria-hidden="true" /> Export as CSV / Excel
-                      </button>
-                      <button
-                        type="button"
-                        role="menuitem"
-                        onClick={() => void copySlackSummary()}
-                        style={EXPORT_MENU_ITEM}
-                        onMouseEnter={(e) => (e.currentTarget.style.background = "#F8FAFC")}
-                        onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-                      >
-                        <Copy size={15} aria-hidden="true" /> Copy Slack Summary
-                      </button>
-                    </div>
+                  {pdfDownloading ? (
+                    <>
+                      <Spinner size={14} /> Menyiapkan PDF…
+                    </>
+                  ) : (
+                    <>
+                      <FileDown size={14} aria-hidden="true" /> Export Report
+                    </>
                   )}
-                </div>
+                </button>
               </>
             )}
           </div>
@@ -1218,15 +1057,11 @@ export function RunExecutor({
       )}
 
       {/* Confirm hapus run */}
-      <ConfirmDialog
+      <ConfirmDeleteDialog
         open={confirmDelete}
-        title="Hapus Run?"
-        message={
-          <>
-            Test run <strong>{runName}</strong> beserta seluruh hasil eksekusinya akan dihapus
-            permanen.
-          </>
-        }
+        itemType="Test Run"
+        itemName={runName}
+        impact="Seluruh hasil eksekusinya juga akan terhapus."
         pending={deletePending}
         onConfirm={async () => {
           setDeletePending(true);

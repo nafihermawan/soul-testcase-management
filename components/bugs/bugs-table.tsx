@@ -22,7 +22,8 @@ import {
   RowActionsMenu,
   type RowAction,
 } from "@/components/settings/row-actions-menu";
-import { ConfirmDialog, Toast, useToast } from "@/components/ui/feedback";
+import { Toast, useToast } from "@/components/ui/feedback";
+import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
 import { FilterModal } from "@/components/ui/filter-modal";
 import {
   FilterField,
@@ -1105,14 +1106,10 @@ export function BugsPageClient({
         )}
       </div>
 
-      <ConfirmDialog
+      <ConfirmDeleteDialog
         open={deleteTarget !== null}
-        title="Hapus Bug?"
-        message={
-          <>
-            Bug <strong>{deleteTarget?.title}</strong> akan dihapus permanen.
-          </>
-        }
+        itemType="Bug"
+        itemName={deleteTarget?.title}
         pending={deletePending}
         onConfirm={removeBug}
         onCancel={() => setDeleteTarget(null)}

@@ -7,7 +7,8 @@ import type { HierarchyActionState } from "@/lib/actions/hierarchy";
 import { createProject, deleteProject, updateProject } from "@/lib/actions/hierarchy";
 import { useRefresh } from "@/lib/client/refresh-context";
 import { RowActionsMenu } from "@/components/settings/row-actions-menu";
-import { ConfirmDialog, Spinner, Toast, useToast } from "@/components/ui/feedback";
+import { Spinner, Toast, useToast } from "@/components/ui/feedback";
+import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
 import { Select } from "@/components/ui/select";
 
 type Project = {
@@ -528,15 +529,11 @@ export function ProjectsManager({
       )}
 
       {/* Confirm hapus */}
-      <ConfirmDialog
+      <ConfirmDeleteDialog
         open={deleteTarget !== null}
-        title="Hapus Project?"
-        message={
-          <>
-            Project <strong>{deleteTarget?.name}</strong> beserta semua suite &amp; test case di
-            dalamnya akan dihapus permanen.
-          </>
-        }
+        itemType="Project"
+        itemName={deleteTarget?.name}
+        impact="Semua suite & test case di dalamnya juga akan terhapus."
         pending={deletePending}
         onConfirm={() => deleteTarget && void handleDelete(deleteTarget)}
         onCancel={() => setDeleteTarget(null)}

@@ -54,6 +54,26 @@ export function TestCaseTable({
     );
   }
 
+  /** TC yang statusnya Deprecated — selalu diletakkan di bawah. */
+  const isDeprecated = (t: TestCase) => t.status === "DEPRECATED";
+
+  /**
+   * Urutan tampilan tabel: TC non-Deprecated lebih dulu, lalu semua TC
+   * Deprecated di bagian paling bawah.
+   *
+   * Urutan DI DALAM tiap grup sengaja TIDAK diacak ulang — mengikuti urutan dari
+   * server (`order` lalu `createdAt`, lihat `/api/suites/[id]`) supaya urutan
+   * yang sudah ada tidak berubah. Partisi ditulis sebagai dua filter (bukan
+   * `sort`) agar urutannya stabil.
+   *
+   * Dihitung saat render, bukan disimpan di state, sehingga mengubah status TC
+   * lewat dropdown langsung memindahkan barisnya ke bawah tanpa reload.
+   */
+  const orderedTestCases = [
+    ...testCases.filter((t) => !isDeprecated(t)),
+    ...testCases.filter(isDeprecated),
+  ];
+
   return (
     <div style={{ width: "100%", overflowX: "auto" }}>
       <table
@@ -129,7 +149,7 @@ export function TestCaseTable({
           </tr>
         </thead>
         <tbody>
-          {testCases.map((t) => (
+          {orderedTestCases.map((t) => (
             <tr
               key={t.id}
               draggable={canEdit && !!onDragTcStart}
@@ -158,6 +178,8 @@ export function TestCaseTable({
                 borderBottom: "1px solid var(--border)",
                 cursor: "pointer",
                 transition: "background 0.15s ease",
+                // Cue visual untuk TC Deprecated — tetap bisa diinteraksi.
+                opacity: isDeprecated(t) ? 0.6 : 1,
               }}
               onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(248, 250, 252, 0.8)")}
               onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}

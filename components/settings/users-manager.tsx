@@ -6,7 +6,8 @@ import { Pencil, Trash2, X } from "lucide-react";
 import { addUserByEmail, removeUser, updateUser } from "@/lib/actions/users";
 import { useRefresh } from "@/lib/client/refresh-context";
 import { RowActionsMenu } from "@/components/settings/row-actions-menu";
-import { ConfirmDialog, Spinner, Toast, useToast } from "@/components/ui/feedback";
+import { Spinner, Toast, useToast } from "@/components/ui/feedback";
+import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
 import { Select } from "@/components/ui/select";
 import { InitialsAvatar } from "@/components/ui/avatar";
 
@@ -511,14 +512,10 @@ export function UsersManager({
       {modal?.mode === "edit" && <UserModal title="Edit User" initial={modal.user} onClose={() => setModal(null)} />}
 
       {/* Confirm hapus */}
-      <ConfirmDialog
+      <ConfirmDeleteDialog
         open={deleteTarget !== null}
-        title="Hapus Akses User?"
-        message={
-          <>
-            Akses <strong>{deleteTarget?.email}</strong> akan dihapus permanen dari sistem.
-          </>
-        }
+        itemType="Akses User"
+        itemName={deleteTarget?.email}
         pending={deletePending}
         onConfirm={() => deleteTarget && void remove(deleteTarget)}
         onCancel={() => setDeleteTarget(null)}

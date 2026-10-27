@@ -6,7 +6,8 @@ import Link from "next/link";
 import { Pencil, Trash2 } from "lucide-react";
 import { deleteTestCase } from "@/lib/actions/test-cases";
 import { formatCase } from "@/lib/format";
-import { ConfirmDialog, Toast, useToast } from "@/components/ui/feedback";
+import { Toast, useToast } from "@/components/ui/feedback";
+import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
 
 const badge = (label: string, bg: string, color: string) => (
   <span
@@ -173,15 +174,11 @@ export function TestCasePageHeader({
         )}
       </div>
 
-      <ConfirmDialog
+      <ConfirmDeleteDialog
         open={confirmDelete}
-        title="Hapus Test Case?"
-        message={
-          <>
-            Test case <strong>{code}</strong> akan dihapus permanen beserta riwayat run &amp; bug
-            terkaitnya.
-          </>
-        }
+        itemType="Test Case"
+        itemName={code}
+        impact="Riwayat run & bug terkaitnya juga akan terhapus."
         pending={deleting}
         onConfirm={() => void doDelete()}
         onCancel={() => setConfirmDelete(false)}

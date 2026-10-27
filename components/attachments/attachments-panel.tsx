@@ -7,6 +7,7 @@ import {
   type AttachmentOwner,
 } from "@/lib/actions/attachments";
 import { uploadAttachmentFile, type UploadPhase } from "@/lib/client/attachments";
+import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
 import { MAX_ATTACHMENT_BYTES } from "@/lib/storage/limits";
 import type { AttachmentItem } from "@/types/api";
 
@@ -124,6 +125,8 @@ export function AttachmentsPanel({
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<AttachmentItem | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  /** Attachment yang menunggu konfirmasi hapus (dialog standar aplikasi). */
+  const [deleteTarget, setDeleteTarget] = useState<AttachmentItem | null>(null);
   const [dragging, setDragging] = useState(false);
   // Cermin lokal daftar attachment; prop tetap otoritatif saat berubah.
   const [items, setItems] = useState<AttachmentItem[]>(attachments);
@@ -610,7 +613,14 @@ export function AttachmentsPanel({
                   {canEdit && (
                     <button
                       type="button"
-                      onClick={() => void remove(att)}
+                      onClick={() => {
+                        // Mode `deferred`: penghapusan masih bisa dibatalkan
+                        // lewat "Batal" (belum menyentuh server), jadi tanpa
+                        // dialog. Di luar itu file langsung terhapus → minta
+                        // konfirmasi dulu dengan dialog standar aplikasi.
+                        if (deferred) void remove(att);
+                        else setDeleteTarget(att);
+                      }}
                       disabled={deletingId === att.id}
                       title="Hapus attachment"
                       aria-label={`Hapus ${att.fileName}`}
@@ -733,6 +743,21 @@ export function AttachmentsPanel({
           />
         </div>
       )}
+
+      {/* Konfirmasi hapus attachment (dialog standar aplikasi) */}
+      <ConfirmDeleteDialog
+        open={deleteTarget !== null}
+        itemType="Attachment"
+        itemName={deleteTarget?.fileName}
+        impact="File akan dihapus permanen dari storage."
+        pending={deleteTarget !== null && deletingId === deleteTarget.id}
+        onConfirm={async () => {
+          if (!deleteTarget) return;
+          await remove(deleteTarget);
+          setDeleteTarget(null);
+        }}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   );
 }

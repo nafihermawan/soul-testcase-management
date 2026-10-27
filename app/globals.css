@@ -216,16 +216,6 @@ button,
   border-radius: 12px !important;
 }
 
-/* Split button "Export Report": dua segmen menyatu (sudut dalam siku).
-   Perlu !important agar menang dari radius global 3px. */
-.split-btn-left {
-  border-radius: 10px 0 0 10px !important;
-}
-
-.split-btn-right {
-  border-radius: 0 10px 10px 0 !important;
-}
-
 /* Spinner modal progress Import Test Case — hormati prefers-reduced-motion. */
 .import-spinner {
   animation: spin 0.9s linear infinite;
@@ -398,6 +388,105 @@ button,
 
 .modal-pop-in {
   animation: modalPopIn var(--dur-slow, 280ms) var(--ease-out, ease-out);
+}
+
+/* Keluar 200ms (kebalikan masuk) untuk dialog yang ditutup — tanpa ini dialog
+   "hilang mendadak" padahal masuknya beranimasi. */
+@keyframes overlayOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes modalOut {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+}
+
+.overlay-out {
+  animation: overlayOut var(--dur-base, 200ms) var(--ease-out, ease-out) forwards;
+}
+
+.modal-out {
+  animation: modalOut var(--dur-base, 200ms) var(--ease-out, ease-out) forwards;
+}
+
+/* ---------------- Dialog konfirmasi hapus (ConfirmDeleteDialog) ----------------
+   Hover & :focus-visible tidak bisa dinyatakan sebagai inline style, jadi
+   aturannya hidup di sini. `background` tombol SENGAJA tidak pernah di-set
+   inline — inline selalu menang atas stylesheet, dan hover-nya akan mati. */
+
+/* Font "Geist" (sama dengan FONT_SANS di run-executor-shared) + fallback. */
+.confirm-delete-font {
+  font-family: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.cd-btn {
+  height: 40px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background-color var(--dur-fast, 120ms) var(--ease-out, ease-out),
+    border-color var(--dur-fast, 120ms) var(--ease-out, ease-out),
+    box-shadow var(--dur-fast, 120ms) var(--ease-out, ease-out);
+}
+
+.cd-btn:disabled {
+  cursor: not-allowed;
+}
+
+/* Sekunder — "Batal" */
+.cd-btn-secondary {
+  padding: 0 16px;
+  border: 1px solid #DDE2E9;
+  background: #ffffff;
+  color: #0f172a;
+}
+
+.cd-btn-secondary:hover:not(:disabled),
+.cd-btn-secondary:focus-visible {
+  background: #fff8e8;
+  border-color: #ffc348;
+}
+
+/* Danger — "Hapus" */
+.cd-btn-danger {
+  padding: 0 18px;
+  border: 1px solid #b91c1c;
+  background: #b91c1c;
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.cd-btn-danger:hover:not(:disabled) {
+  background: #991b1b;
+}
+
+.cd-btn-danger:focus-visible {
+  box-shadow: 0 0 0 3px #fecaca;
+  outline: none;
+}
+
+/* Hormati preferensi pengguna: dialog ini tidak beranimasi sama sekali.
+   Ditaruh SETELAH kelas di atas supaya tidak kalah urutan (specificity sama). */
+@media (prefers-reduced-motion: reduce) {
+  .overlay-in,
+  .modal-pop-in,
+  .overlay-out,
+  .modal-out {
+    animation: none;
+  }
 }
 
 .dropdown-panel {

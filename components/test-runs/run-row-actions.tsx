@@ -7,7 +7,8 @@ import {
   RowActionsMenu,
   type RowAction,
 } from "@/components/settings/row-actions-menu";
-import { ConfirmDialog, Toast, useToast } from "@/components/ui/feedback";
+import { Toast, useToast } from "@/components/ui/feedback";
+import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
 
 /**
  * Menu aksi (kebab ⋮) untuk baris run: (opsional) Re-run + Edit Run + Hapus.
@@ -111,14 +112,11 @@ export function RunRowActions({
     >
       <RowActionsMenu actions={actions} />
 
-      <ConfirmDialog
+      <ConfirmDeleteDialog
         open={confirmOpen}
-        title="Hapus Run?"
-        message={
-          <>
-            Run <strong>{runName}</strong> beserta seluruh hasil eksekusinya akan dihapus permanen.
-          </>
-        }
+        itemType="Test Run"
+        itemName={runName}
+        impact="Seluruh hasil eksekusinya juga akan terhapus."
         pending={pending}
         onConfirm={doDelete}
         onCancel={() => setConfirmOpen(false)}

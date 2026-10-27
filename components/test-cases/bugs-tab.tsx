@@ -4,7 +4,8 @@ import { useState } from "react";
 import { Bug, ExternalLink, Trash2 } from "lucide-react";
 import { createBug, deleteBug, updateBugStatus } from "@/lib/actions/automation-bugs";
 import { useRefresh } from "@/lib/client/refresh-context";
-import { ConfirmDialog, Spinner, Toast, useToast } from "@/components/ui/feedback";
+import { Spinner, Toast, useToast } from "@/components/ui/feedback";
+import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
 import { Select } from "@/components/ui/select";
 import { ENVIRONMENT_OPTIONS } from "@/lib/qa-metrics";
 
@@ -226,14 +227,10 @@ export function BugsTab({ testCaseId, bugs }: { testCaseId: string; bugs: BugIte
       )}
 
       {/* Confirm hapus bug */}
-      <ConfirmDialog
+      <ConfirmDeleteDialog
         open={deleteTarget !== null}
-        title="Hapus Bug?"
-        message={
-          <>
-            Bug <strong>{deleteTarget?.title}</strong> akan dihapus permanen.
-          </>
-        }
+        itemType="Bug"
+        itemName={deleteTarget?.title}
         pending={deletePending}
         onConfirm={() => deleteTarget && void removeBug(deleteTarget)}
         onCancel={() => setDeleteTarget(null)}

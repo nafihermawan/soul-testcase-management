@@ -4,7 +4,8 @@ import { useState } from "react";
 import { Code2, Link2, Trash2 } from "lucide-react";
 import { removeAutomationLink, upsertAutomationLink } from "@/lib/actions/automation-bugs";
 import { useRefresh } from "@/lib/client/refresh-context";
-import { ConfirmDialog, Spinner, Toast, useToast } from "@/components/ui/feedback";
+import { Spinner, Toast, useToast } from "@/components/ui/feedback";
+import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
 import { Select } from "@/components/ui/select";
 
 export type AutomationInfo = {
@@ -377,10 +378,9 @@ export function AutomationTab({
       )}
 
       {/* Confirm hapus automation link */}
-      <ConfirmDialog
+      <ConfirmDeleteDialog
         open={confirmRemove}
-        title="Hapus Link Automation?"
-        message={<>Link automation untuk test case ini akan dihapus permanen.</>}
+        itemType="Link Automation"
         pending={pending}
         onConfirm={() => void remove()}
         onCancel={() => setConfirmRemove(false)}

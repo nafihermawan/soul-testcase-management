@@ -39,7 +39,7 @@ import {
   renameSection as renameSectionAction,
   reorderSections,
 } from "@/lib/actions/sections";
-import { ConfirmDialog } from "@/components/ui/feedback";
+import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
 import { MONO, SANS } from "@/components/reports/report-tokens";
 
 import {
@@ -183,6 +183,8 @@ export function TestCasesManager({
   const [detailTc, setDetailTc] = useState<TestCase | null>(null);
   // Modal konfirmasi hapus test case
   const [deleteTcTarget, setDeleteTcTarget] = useState<TestCase | null>(null);
+  /** Sedang menghapus TC — dialog konfirmasi menampilkan spinner. */
+  const [tcDeleting, setTcDeleting] = useState(false);
   // Modal konfirmasi hapus section
   const [sectionDeleteTarget, setSectionDeleteTarget] = useState<{
     id: string;
@@ -194,6 +196,8 @@ export function TestCasesManager({
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   // Jumlah TC yang dihapus via bulk (disimpan agar label konsisten saat success)
   const [bulkDeleteCount, setBulkDeleteCount] = useState(0);
+  /** Sedang menghapus massal — dialog konfirmasi menampilkan spinner. */
+  const [bulkDeleting, setBulkDeleting] = useState(false);
   // Toast notification
   const [toast, setToast] = useState<{ show: boolean; message: string; type: "success" | "error" }>(
     {
@@ -1041,14 +1045,25 @@ export function TestCasesManager({
         />
       )}
 
-      {/* Modal: Konfirmasi Hapus Test Case */}
-      {deleteTcTarget && (
-        <DeleteTestCaseModal
-          tcTitle={deleteTcTarget.title}
-          onClose={() => setDeleteTcTarget(null)}
-          onConfirm={() => handleDeleteTC(deleteTcTarget)}
-        />
-      )}
+      {/* Konfirmasi hapus test case — dialog standar aplikasi */}
+      <ConfirmDeleteDialog
+        open={deleteTcTarget !== null}
+        itemType="Test Case"
+        itemName={deleteTcTarget?.title}
+        impact="Riwayat run & bug terkaitnya juga akan terhapus."
+        pending={tcDeleting}
+        onConfirm={async () => {
+          if (!deleteTcTarget) return;
+          setTcDeleting(true);
+          try {
+            await handleDeleteTC(deleteTcTarget);
+          } finally {
+            setTcDeleting(false);
+            setDeleteTcTarget(null);
+          }
+        }}
+        onCancel={() => setDeleteTcTarget(null)}
+      />
 
       {/* Modal: Wizard Import (Step 1: upload file, Step 2: preview & mapping) */}
       {importOpen && (
@@ -1161,14 +1176,24 @@ export function TestCasesManager({
         />
       )}
 
-      {/* Modal: Bulk Delete confirm */}
-      {bulkDeleteOpen && (
-        <DeleteTestCaseModal
-          tcTitle={`${bulkDeleteCount} test case terpilih`}
-          onClose={() => setBulkDeleteOpen(false)}
-          onConfirm={() => bulkDelete()}
-        />
-      )}
+      {/* Konfirmasi hapus massal — dialog standar aplikasi */}
+      <ConfirmDeleteDialog
+        open={bulkDeleteOpen}
+        itemType="Test Case"
+        itemName={`${bulkDeleteCount} test case`}
+        impact="Semua test case terpilih dihapus permanen, termasuk riwayat run & bug terkaitnya."
+        pending={bulkDeleting}
+        onConfirm={async () => {
+          setBulkDeleting(true);
+          try {
+            await bulkDelete();
+          } finally {
+            setBulkDeleting(false);
+            setBulkDeleteOpen(false);
+          }
+        }}
+        onCancel={() => setBulkDeleteOpen(false)}
+      />
 
       {/* Floating Action Bar */}
       {selectedTcIds.size > 0 && (
@@ -1303,15 +1328,11 @@ export function TestCasesManager({
       )}
 
       {/* Confirm hapus section */}
-      <ConfirmDialog
+      <ConfirmDeleteDialog
         open={sectionDeleteTarget !== null}
-        title="Hapus Section?"
-        message={
-          <>
-            Section <strong>{sectionDeleteTarget?.name}</strong> akan dihapus. Test case di dalamnya
-            akan kembali ke &quot;Unassigned Test Cases&quot; (tidak ikut terhapus).
-          </>
-        }
+        itemType="Section"
+        itemName={sectionDeleteTarget?.name}
+        impact='Test case di dalamnya tidak ikut terhapus; kembali menjadi "Unassigned Test Cases".'
         onConfirm={() => {
           if (sectionDeleteTarget) void deleteSection(sectionDeleteTarget.id);
           setSectionDeleteTarget(null);
@@ -1876,285 +1897,6 @@ function TestCaseDetailModal({
     document.body
   );
 }
-
-function DeleteTestCaseModal({
-  tcTitle,
-  onClose,
-  onConfirm,
-}: {
-  tcTitle: string;
-  onClose: () => void;
-  onConfirm: () => void | Promise<void>;
-}) {
-  const [phase, setPhase] = useState<"confirm" | "processing" | "success">("confirm");
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Cleanup timer saat modal unmount
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-    };
-  }, []);
-
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && phase === "confirm") onClose();
-    };
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [phase, onClose]);
-
-  useEffect(() => {
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, []);
-
-  const handleConfirm = async () => {
-    setPhase("processing");
-    try {
-      await onConfirm();
-      setPhase("success");
-      timerRef.current = setTimeout(() => {
-        onClose();
-      }, 900);
-    } catch {
-      // Gagal: kembali ke konfirmasi supaya user bisa coba lagi
-      setPhase("confirm");
-    }
-  };
-
-  return createPortal(
-    <div
-      role="alertdialog"
-      aria-modal="true"
-      aria-label="Hapus Test Case"
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 250,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: "1rem",
-        background: "rgba(0, 0, 0, 0.5)",
-        backdropFilter: "blur(4px)",
-      }}
-      onClick={phase === "confirm" ? onClose : undefined}
-    >
-      <div
-        style={{
-          width: "100%",
-          maxWidth: 400,
-          background: "#fff",
-          borderRadius: 12,
-          padding: "1.5rem",
-          border: "1px solid var(--border)",
-          boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)",
-          textAlign: "center",
-          position: "relative",
-          animation: "modalIn 0.18s ease-out",
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Close (hanya saat konfirmasi) */}
-        {phase === "confirm" && (
-          <button
-            type="button"
-            aria-label="Tutup"
-            onClick={onClose}
-            style={{
-              position: "absolute",
-              top: "0.9rem",
-              right: "0.9rem",
-              border: "none",
-              background: "none",
-              color: "var(--text-muted)",
-              cursor: "pointer",
-              padding: "0.25rem",
-              borderRadius: 6,
-              display: "flex",
-            }}
-          >
-            <X size={16} />
-          </button>
-        )}
-
-        {/* STATE 1: KONFIRMASI */}
-        {phase === "confirm" && (
-          <>
-            {/* Warning icon badge */}
-            <div
-              style={{
-                margin: "0 auto 1rem",
-                width: 48,
-                height: 48,
-                borderRadius: "50%",
-                background: "#FEE2E2",
-                color: "#DC2626",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <Trash2 size={22} />
-            </div>
-
-            <h3
-              style={{
-                fontSize: "1.05rem",
-                fontWeight: 700,
-                margin: "0 0 0.5rem",
-                color: "#111827",
-              }}
-            >
-              Hapus Test Case?
-            </h3>
-            <p
-              style={{
-                fontSize: "0.8rem",
-                color: "var(--text-secondary)",
-                margin: "0 0 1.5rem",
-                lineHeight: 1.55,
-              }}
-            >
-              Apakah Anda yakin ingin menghapus{" "}
-              <span style={{ fontWeight: 600, color: "#111827" }}>&quot;{tcTitle}&quot;</span>?
-              Tindakan ini tidak dapat dibatalkan.
-            </p>
-
-            {/* Actions */}
-            <div style={{ display: "flex", gap: "0.6rem", justifyContent: "center" }}>
-              <button
-                type="button"
-                onClick={onClose}
-                style={{
-                  flex: 1,
-                  padding: "0.5rem 0",
-                  border: "1px solid #D1D5DB",
-                  borderRadius: 6,
-                  background: "#fff",
-                  color: "#374151",
-                  fontSize: "0.8rem",
-                  fontWeight: 500,
-                  cursor: "pointer",
-                  transition: "background-color 0.15s ease",
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-muted)")}
-                onMouseLeave={(e) => (e.currentTarget.style.background = "#fff")}
-              >
-                Batal
-              </button>
-              <button
-                type="button"
-                onClick={() => void handleConfirm()}
-                style={{
-                  flex: 1,
-                  padding: "0.5rem 0",
-                  border: "none",
-                  borderRadius: 6,
-                  background: "#DC2626",
-                  color: "#fff",
-                  fontSize: "0.8rem",
-                  fontWeight: 500,
-                  cursor: "pointer",
-                  boxShadow: "var(--shadow-sm)",
-                  transition: "background-color 0.15s ease",
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = "#B91C1C")}
-                onMouseLeave={(e) => (e.currentTarget.style.background = "#DC2626")}
-              >
-                Hapus
-              </button>
-            </div>
-          </>
-        )}
-
-        {/* STATE 2: PROCESSING */}
-        {phase === "processing" && (
-          <>
-            <div
-              style={{
-                margin: "0 auto 1rem",
-                width: 48,
-                height: 48,
-                borderRadius: "50%",
-                background: "#FFFBEB",
-                color: "#D97706",
-                border: "1px solid #FDE68A",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <Loader2 size={24} style={{ animation: "spin 1s linear infinite" }} />
-            </div>
-
-            <h3
-              style={{
-                fontSize: "0.95rem",
-                fontWeight: 700,
-                margin: "0 0 0.25rem",
-                color: "#111827",
-              }}
-            >
-              Menghapus Test Case...
-            </h3>
-            <p
-              style={{
-                fontSize: "0.78rem",
-                color: "var(--text-muted)",
-                margin: "0",
-                lineHeight: 1.5,
-              }}
-            >
-              Mohon tunggu, sedang memproses penghapusan &quot;{tcTitle}&quot;.
-            </p>
-          </>
-        )}
-
-        {/* STATE 3: SUCCESS */}
-        {phase === "success" && (
-          <>
-            <div
-              style={{
-                margin: "0 auto 1rem",
-                width: 48,
-                height: 48,
-                borderRadius: "50%",
-                background: "#D1FAE5",
-                color: "#059669",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <CheckCircle2 size={24} />
-            </div>
-
-            <h3
-              style={{
-                fontSize: "0.95rem",
-                fontWeight: 700,
-                margin: "0 0 0.25rem",
-                color: "#111827",
-              }}
-            >
-              Berhasil Dihapus!
-            </h3>
-            <p style={{ fontSize: "0.78rem", color: "var(--text-secondary)", margin: "0" }}>
-              &quot;{tcTitle}&quot; telah dihapus.
-            </p>
-          </>
-        )}
-      </div>
-    </div>,
-    document.body
-  );
-}
-
 
 function BulkUploadProgressModal({
   upload,

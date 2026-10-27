@@ -219,10 +219,10 @@ button,
 /* ---------------- Tabel Run History ----------------
    Hover tidak bisa dinyatakan sebagai inline style, jadi aturannya di sini. */
 
-/* Kebab kolom Aksi (32×32): hover slate-100, sedikit lebih tegas dari kebab
-   default aplikasi (#F3F4F6). Ditaruh SETELAH `.kebab-btn:hover` (specificity
-   sama) supaya menang urutan. */
-.hist-kebab:hover {
+/* Kebab kotak (Run History & Settings › Projects): hover slate-100, sedikit
+   lebih tegas dari kebab default aplikasi (#F3F4F6). Ditaruh SETELAH
+   `.kebab-btn:hover` (specificity sama) supaya menang urutan. */
+.kebab-slate:hover {
   background: #f1f5f9;
 }
 

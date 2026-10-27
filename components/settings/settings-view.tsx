@@ -1,16 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Search } from "lucide-react";
+import { Plus } from "lucide-react";
 import { Card } from "@/components/ui";
-import { ProjectsManager, type PlatformFilter } from "@/components/settings/projects-manager";
-import {
-  UsersManager,
-  type RoleFilter,
-  type UserItem,
-} from "@/components/settings/users-manager";
+import { ProjectsManager } from "@/components/settings/projects-manager";
+import { UsersManager, type UserItem } from "@/components/settings/users-manager";
 import { PageTabs } from "@/components/ui/page-tabs";
-import { Select } from "@/components/ui/select";
 import { RefreshContext } from "@/lib/client/refresh-context";
 
 type ProjectItem = {
@@ -30,14 +25,14 @@ const amberButtonStyle: React.CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
   gap: 6,
-  height: 32,
-  padding: "0 12px",
-  borderRadius: 8,
+  height: 44,
+  padding: "0 16px",
+  borderRadius: 10,
   border: "none",
   background: "#F59E0B",
-  color: "#fff",
+  color: "#111827",
   fontWeight: 500,
-  fontSize: 12,
+  fontSize: 13,
   cursor: "pointer",
   whiteSpace: "nowrap",
   transition: "background-color 0.15s ease",
@@ -61,11 +56,7 @@ export function SettingsView({
   reload: () => void;
 }) {
   const [tab, setTab] = useState<SettingsTabKey>("projects");
-  const [userQuery, setUserQuery] = useState("");
-  const [userRole, setUserRole] = useState<RoleFilter>("ALL");
   const [createUserOpen, setCreateUserOpen] = useState(false);
-  const [projectQuery, setProjectQuery] = useState("");
-  const [platformFilter, setPlatformFilter] = useState<PlatformFilter>("ALL");
   const [createProjectOpen, setCreateProjectOpen] = useState(false);
 
   return (
@@ -100,119 +91,25 @@ export function SettingsView({
             </div>
 
             {tab === "users" ? (
-              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                <div style={{ position: "relative" }}>
-                  <Search
-                    size={13}
-                    style={{
-                      position: "absolute",
-                      left: 9,
-                      top: "50%",
-                      transform: "translateY(-50%)",
-                      color: "#94A3B8",
-                    }}
-                  />
-                  <input
-                    value={userQuery}
-                    onChange={(e) => setUserQuery(e.target.value)}
-                    placeholder="Cari nama/email user..."
-                    aria-label="Cari nama atau email user"
-                    style={{
-                      width: 240,
-                      height: 32,
-                      paddingLeft: 28,
-                      paddingRight: 10,
-                      background: "#F8FAFC",
-                      border: "1px solid #E2E8F0",
-                      borderRadius: 8,
-                      fontSize: 12,
-                      color: "#1E293B",
-                      boxSizing: "border-box",
-                    }}
-                  />
-                </div>
-
-                <Select
-                  value={userRole}
-                  size="sm"
-                  ariaLabel="Filter role"
-                  style={{ width: 132 }}
-                  onChange={(e) => setUserRole(e.target.value as RoleFilter)}
-                >
-                  <option value="ALL">All Roles</option>
-                  <option value="QA">QA</option>
-                  <option value="DEVELOPER">Developer</option>
-                  <option value="PRODUCT">Product</option>
-                  <option value="LEAD">Lead QA</option>
-                </Select>
-
-                <button
-                  type="button"
-                  onClick={() => setCreateUserOpen(true)}
-                  style={amberButtonStyle}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = "#D97706")}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = "#F59E0B")}
-                >
-                  <Plus size={14} /> Tambah User
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={() => setCreateUserOpen(true)}
+                style={amberButtonStyle}
+                onMouseEnter={(e) => (e.currentTarget.style.background = "#D97706")}
+                onMouseLeave={(e) => (e.currentTarget.style.background = "#F59E0B")}
+              >
+                <Plus size={14} /> Tambah User
+              </button>
             ) : (
-              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                <div style={{ position: "relative" }}>
-                  <Search
-                    size={13}
-                    style={{
-                      position: "absolute",
-                      left: 9,
-                      top: "50%",
-                      transform: "translateY(-50%)",
-                      color: "#94A3B8",
-                    }}
-                  />
-                  <input
-                    value={projectQuery}
-                    onChange={(e) => setProjectQuery(e.target.value)}
-                    placeholder="Cari nama/key project..."
-                    aria-label="Cari nama atau key project"
-                    style={{
-                      width: 240,
-                      height: 32,
-                      paddingLeft: 28,
-                      paddingRight: 10,
-                      background: "#F8FAFC",
-                      border: "1px solid #E2E8F0",
-                      borderRadius: 8,
-                      fontSize: 12,
-                      color: "#1E293B",
-                      boxSizing: "border-box",
-                    }}
-                  />
-                </div>
-
-                <Select
-                  value={platformFilter}
-                  size="sm"
-                  ariaLabel="Filter platform"
-                  style={{ width: 140 }}
-                  onChange={(e) => setPlatformFilter(e.target.value as PlatformFilter)}
-                >
-                  <option value="ALL">All Platforms</option>
-                  <option value="WEB">WEB</option>
-                  <option value="MOBILE">MOBILE</option>
-                  <option value="HARDWARE">HARDWARE</option>
-                  <option value="API">API</option>
-                </Select>
-
-                <button
-                  type="button"
-                  onClick={() => setCreateProjectOpen(true)}
-                  style={amberButtonStyle}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = "#D97706")}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = "#F59E0B")}
-                >
-                  <Plus size={14} /> Tambah Project
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={() => setCreateProjectOpen(true)}
+                style={amberButtonStyle}
+                onMouseEnter={(e) => (e.currentTarget.style.background = "#D97706")}
+                onMouseLeave={(e) => (e.currentTarget.style.background = "#F59E0B")}
+              >
+                <Plus size={14} /> Tambah Project
+              </button>
             )}
           </div>
         </Card>
@@ -227,34 +124,21 @@ export function SettingsView({
           ]}
         />
 
-        {/* Card 2 — konten, full-width & full-height */}
-        <Card
-          style={{
-            padding: 0,
-            minHeight: "calc(100vh - 190px)",
-            display: "flex",
-            flexDirection: "column",
-          }}
-        >
-          <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
-            {tab === "projects" ? (
-              <ProjectsManager
-                projects={projects}
-                query={projectQuery}
-                platformFilter={platformFilter}
-                createOpen={createProjectOpen}
-                onCreateHandled={() => setCreateProjectOpen(false)}
-              />
-            ) : (
-              <UsersManager
-                users={users}
-                query={userQuery}
-                roleFilter={userRole}
-                createOpen={createUserOpen}
-                onCreateHandled={() => setCreateUserOpen(false)}
-              />
-            )}
-          </div>
+        {/* Card 2 — konten; tinggi MENGIKUTI ISI tabel (tanpa area kosong di bawah). */}
+        <Card style={{ padding: 0, border: "1px solid #E5E7EB" }}>
+          {tab === "projects" ? (
+            <ProjectsManager
+              projects={projects}
+              createOpen={createProjectOpen}
+              onCreateHandled={() => setCreateProjectOpen(false)}
+            />
+          ) : (
+            <UsersManager
+              users={users}
+              createOpen={createUserOpen}
+              onCreateHandled={() => setCreateUserOpen(false)}
+            />
+          )}
         </Card>
       </div>
     </RefreshContext.Provider>

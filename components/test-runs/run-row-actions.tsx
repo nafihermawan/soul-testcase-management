@@ -154,7 +154,7 @@ export function RunRowActions({
               iconSize: 16,
               iconColor: "#475569",
               triggerStyle: { width: 32, height: 32, padding: 0, borderRadius: 8 },
-              triggerClassName: "hist-kebab",
+              triggerClassName: "kebab-slate",
             }
           : {})}
       />

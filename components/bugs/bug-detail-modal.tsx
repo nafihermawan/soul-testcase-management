@@ -77,6 +77,9 @@ export function BugDetailModal({
   const [canAttach, setCanAttach] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  /** Status unduhan PDF: tombol disabled + spinner selama proses. */
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
   /** Edit Bug Modal sedang terbuka di atas modal ini. */
   const [editing, setEditing] = useState(false);
 
@@ -142,13 +145,40 @@ export function BugDetailModal({
     bug?.precondition?.trim() || bug?.testCase?.precondition?.trim() || "";
 
   /**
-   * Export PDF bug. Dokumen dirakit DI SERVER (`/api/reports/bug-pdf`) — server
-   * yang mengambil byte evidence dari R2 (bebas CORS browser), jadi preview
-   * gambar dijamin muncul. Tab baru langsung menampilkan PDF-nya.
+   * Export PDF bug → **unduh langsung**, tanpa tab baru.
+   *
+   * Dokumen dirakit di SERVER (`/api/reports/bug-pdf`) karena server yang
+   * mengambil byte evidence dari R2 (bebas CORS browser). Respons diambil
+   * sebagai Blob lalu dipicu lewat `<a download>`: tidak ada navigasi/tab baru,
+   * dan kegagalan server tidak membawa halaman pergi ke JSON error.
+   * Server juga mengirim `Content-Disposition: attachment` sebagai penjaga.
    */
-  const exportPdf = () => {
-    if (!bug) return;
-    window.open(`/api/reports/bug-pdf?bugId=${encodeURIComponent(bug.id)}`, "_blank");
+  const exportPdf = async () => {
+    if (!bug || exporting) return;
+    setExportError(null);
+    setExporting(true);
+    try {
+      const res = await fetch(`/api/reports/bug-pdf?bugId=${encodeURIComponent(bug.id)}`);
+      if (!res.ok) throw new Error(String(res.status));
+      const blob = await res.blob();
+      // Nama file diambil dari header server supaya sama persis dengan yang
+      // ditetapkan backend (klien tidak mengarang nama sendiri).
+      const disposition = res.headers.get("content-disposition") ?? "";
+      const match = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disposition);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = match?.[1] ?? `BUG-REPORT_${bug.id}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      // Revoke ditunda: unduhan butuh blob-nya tetap hidup sesaat.
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch {
+      setExportError("Gagal membuat PDF. Coba lagi.");
+    } finally {
+      setExporting(false);
+    }
   };
 
   return createPortal(
@@ -438,11 +468,17 @@ export function BugDetailModal({
               padding: "1rem 1.5rem",
             }}
           >
+            {exportError && (
+              <span style={{ marginRight: "auto", fontSize: "0.72rem", color: "#B91C1C" }}>
+                {exportError}
+              </span>
+            )}
             {bug && (
               <button
                 type="button"
-                onClick={exportPdf}
-                title="Download laporan bug (PDF) — link evidence bisa diklik tanpa login"
+                onClick={() => void exportPdf()}
+                disabled={exporting}
+                title="Unduh laporan bug (PDF) — link evidence bisa diklik tanpa login"
                 style={{
                   display: "inline-flex",
                   alignItems: "center",
@@ -454,13 +490,14 @@ export function BugDetailModal({
                   color: "#334155",
                   fontSize: "0.75rem",
                   fontWeight: 500,
-                  cursor: "pointer",
+                  cursor: exporting ? "wait" : "pointer",
                   transition: "background-color 0.15s ease",
                 }}
                 onMouseEnter={(e) => (e.currentTarget.style.background = "#F8FAFC")}
                 onMouseLeave={(e) => (e.currentTarget.style.background = "#fff")}
               >
-                <FileDown size={13} /> Export PDF
+                {exporting ? <Spinner size={13} /> : <FileDown size={13} />}
+                {exporting ? "Menyiapkan PDF…" : "Export PDF"}
               </button>
             )}
             {bug && canEdit && (

@@ -2,14 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Pencil, Trash2, X } from "lucide-react";
+import { Pencil, Search, Star, Trash2, X } from "lucide-react";
 import { addUserByEmail, removeUser, updateUser } from "@/lib/actions/users";
 import { useRefresh } from "@/lib/client/refresh-context";
 import { RowActionsMenu } from "@/components/settings/row-actions-menu";
 import { Spinner, Toast, useToast } from "@/components/ui/feedback";
 import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
 import { Select } from "@/components/ui/select";
-import { InitialsAvatar } from "@/components/ui/avatar";
 
 export type UserItem = {
   id: string;
@@ -20,52 +19,40 @@ export type UserItem = {
   isQaLead: boolean;
 };
 
-/** Filter role di toolbar: role sistem + opsi khusus "Lead QA". */
-export type RoleFilter = "ALL" | UserItem["role"] | "LEAD";
+/** Filter role TIDAK punya tab "Lead" — lead terhitung sebagai QA. */
+type RoleTab = "ALL" | UserItem["role"];
+
+const ROLE_TABS: { value: RoleTab; label: string }[] = [
+  { value: "ALL", label: "Semua" },
+  { value: "DEVELOPER", label: "Developer" },
+  { value: "QA", label: "QA" },
+  { value: "PRODUCT", label: "Product" },
+];
+
+/** Siklus sort kolom Nama: default ↕ → A–Z ↑ → Z–A ↓. */
+type NameSort = "default" | "asc" | "desc";
+
+/** Lebar kolom tabel Users (grid): Nama | Email | Role | Opsi. */
+const USER_COLS = "minmax(240px, 1.6fr) minmax(280px, 2fr) 280px 64px";
+
+/** Lebar minimum tabel — di bawah ini container yang menggeser mendatar. */
+const USER_MIN_W = 860;
+
+/** Gaya seragam untuk header kolom (identik dengan tabel Projects). */
+const USER_COL_HEAD: React.CSSProperties = {
+  fontSize: 12,
+  fontWeight: 600,
+  textTransform: "uppercase",
+  letterSpacing: "0.05em",
+  color: "#64748B",
+  whiteSpace: "nowrap",
+};
 
 const roleOptions = [
   { value: "QA", label: "QA" },
   { value: "DEVELOPER", label: "Developer" },
   { value: "PRODUCT", label: "Product" },
 ] as const;
-
-/** Warna badge role: QA/Lead QA amber, Developer blue, Product purple. */
-const ROLE_BADGE: Record<UserItem["role"], { bg: string; color: string; border: string }> = {
-  QA: { bg: "#FFFBEB", color: "#B45309", border: "#FDE68A" },
-  DEVELOPER: { bg: "#EFF6FF", color: "#1D4ED8", border: "#BFDBFE" },
-  PRODUCT: { bg: "#F5F3FF", color: "#6D28D9", border: "#DDD6FE" },
-};
-
-function RoleBadge({ label, tone }: { label: string; tone: UserItem["role"] }) {
-  const t = ROLE_BADGE[tone];
-  return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        padding: "2px 10px",
-        borderRadius: 999,
-        background: t.bg,
-        color: t.color,
-        border: `1px solid ${t.border}`,
-        fontSize: 11,
-        fontWeight: 600,
-        whiteSpace: "nowrap",
-      }}
-    >
-      {label}
-    </span>
-  );
-}
-
-/** Divider inset antar baris (tidak mentok tepi kartu). */
-const insetRowDivider: React.CSSProperties = {
-  backgroundImage:
-    "linear-gradient(to right, transparent 0, transparent 16px, #F1F5F9 16px, #F1F5F9 calc(100% - 16px), transparent calc(100% - 16px))",
-  backgroundSize: "100% 1px",
-  backgroundPosition: "top left",
-  backgroundRepeat: "no-repeat",
-};
 
 const roleLabel = (role: UserItem["role"]) =>
   roleOptions.find((r) => r.value === role)?.label ?? role;
@@ -353,16 +340,10 @@ function UserModal({
 
 export function UsersManager({
   users,
-  query,
-  roleFilter,
   createOpen,
   onCreateHandled,
 }: {
   users: UserItem[];
-  /** Pencarian dari toolbar di card header SettingsView. */
-  query: string;
-  /** Filter role dari toolbar di card header SettingsView. */
-  roleFilter: RoleFilter;
   /** Sinyal dari tombol "Tambah User" di card header. */
   createOpen: boolean;
   onCreateHandled: () => void;
@@ -373,6 +354,12 @@ export function UsersManager({
   const [deletePending, setDeletePending] = useState(false);
   const { toast, showToast, dismissToast } = useToast();
 
+  /** Filter role (segmented) + pencarian nama/email — keduanya di sisi klien. */
+  const [tab, setTab] = useState<RoleTab>("ALL");
+  const [query, setQuery] = useState("");
+  /** Sort kolom Nama; `default` = urutan dari server (tidak diubah). */
+  const [sort, setSort] = useState<NameSort>("default");
+
   // Tombol "Tambah User" ada di card header → buka modal create lalu reset sinyal.
   useEffect(() => {
     if (!createOpen) return;
@@ -380,38 +367,30 @@ export function UsersManager({
     onCreateHandled();
   }, [createOpen, onCreateHandled]);
 
+  /** Jumlah user per role untuk badge segmented filter (Lead ikut terhitung QA). */
+  const countOf = (value: RoleTab) =>
+    value === "ALL" ? users.length : users.filter((u) => u.role === value).length;
+
   // Pencarian + filter role diterapkan di sisi klien (daftar user sudah lengkap).
   const needle = query.trim().toLowerCase();
   const filtered = users.filter((u) => {
-    if (roleFilter === "LEAD") {
-      if (!u.isQaLead) return false;
-    } else if (roleFilter !== "ALL" && u.role !== roleFilter) {
-      return false;
-    }
+    if (tab !== "ALL" && u.role !== tab) return false;
     if (!needle) return true;
     return `${u.name ?? ""} ${u.email}`.toLowerCase().includes(needle);
   });
 
-  const th: React.CSSProperties = {
-    position: "sticky",
-    top: 0,
-    zIndex: 10,
-    background: "#F8FAFC",
-    padding: "10px 10px",
-    fontSize: 13,
-    fontWeight: 600,
-    color: "#64748B",
-    textAlign: "left",
-    whiteSpace: "nowrap",
-    borderBottom: "1px solid #E5E7EB",
-  };
+  /** Urutan tampil: hasil filter/search, lalu diurutkan bila sort Nama aktif. */
+  const byName = (a: UserItem, b: UserItem) =>
+    (a.name ?? a.email).localeCompare(b.name ?? b.email, "id", { sensitivity: "base" });
+  const visible =
+    sort === "default"
+      ? filtered
+      : [...filtered].sort((a, b) => (sort === "asc" ? byName(a, b) : byName(b, a)));
 
-  const td: React.CSSProperties = {
-    padding: "10px 10px",
-    fontSize: 13,
-    color: "#475569",
-    whiteSpace: "nowrap",
-  };
+  /** Klik header Nama: default ↕ → A–Z ↑ → Z–A ↓ → default ↕. */
+  const cycleSort = () =>
+    setSort((prev) => (prev === "default" ? "asc" : prev === "asc" ? "desc" : "default"));
+  const sortGlyph = sort === "asc" ? "↑" : sort === "desc" ? "↓" : "↕";
 
   const remove = async (user: UserItem) => {
     setDeletePending(true);
@@ -429,82 +408,277 @@ export function UsersManager({
 
   return (
     <>
-      {/* Tabel — card pembungkus & toolbar hidup di SettingsView (card header). */}
-      <div style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
-          <thead>
-            <tr>
-              <th style={th}>Nama</th>
-              <th style={th}>Email</th>
-              <th style={th}>Role</th>
-              <th style={{ ...th, textAlign: "right" }}>Opsi</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={4}
-                  style={{ padding: "2rem 12px", textAlign: "center", fontSize: 13, color: "#94A3B8" }}
+      <div style={{ display: "flex", flexDirection: "column" }}>
+        {/* Toolbar — DI DALAM card tabel, di atas header kolom. */}
+        <div
+          style={{
+            padding: "16px 20px",
+            borderBottom: "1px solid #EEF0F3",
+            display: "flex",
+            flexWrap: "wrap",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+          }}
+        >
+          {/* Segmented filter role, tiap tab dengan badge jumlah user. */}
+          <div
+            role="tablist"
+            aria-label="Filter role"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 2,
+              background: "#F1F5F9",
+              padding: 4,
+              borderRadius: 10,
+            }}
+          >
+            {ROLE_TABS.map((t) => {
+              const active = tab === t.value;
+              return (
+                <button
+                  key={t.value}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => setTab(t.value)}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    height: 32,
+                    padding: "0 10px",
+                    border: "none",
+                    borderRadius: 8,
+                    background: active ? "#FFFFFF" : "transparent",
+                    boxShadow: active ? "0 1px 2px rgba(15, 23, 42, 0.08)" : "none",
+                    color: active ? "#0F172A" : "#475569",
+                    fontWeight: active ? 600 : 500,
+                    fontSize: 13,
+                    cursor: "pointer",
+                    transition: "background-color 0.15s ease, color 0.15s ease",
+                  }}
                 >
-                  {users.length === 0
-                    ? "Belum ada user. Tambahkan user pertama."
-                    : "Tidak ada user yang cocok dengan pencarian / filter."}
-                </td>
-              </tr>
-            ) : (
-              filtered.map((u) => (
-                <tr key={u.id} style={insetRowDivider}>
-                  <td style={td}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-                      <InitialsAvatar name={u.name ?? u.email} size={20} fontSize={10} />
-                      <span
-                        style={{
-                          fontSize: 13,
-                          fontWeight: 600,
-                          color: "#1E293B",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                        }}
-                        title={u.name ?? "—"}
-                      >
-                        {u.name ?? "—"}
-                      </span>
-                    </div>
-                  </td>
-                  <td style={{ ...td, fontSize: 12, color: "#64748B" }}>{u.email}</td>
-                  <td style={td}>
+                  {t.label}
+                  <span
+                    style={{
+                      minWidth: 18,
+                      padding: "1px 6px",
+                      borderRadius: 999,
+                      fontSize: 11,
+                      fontWeight: 600,
+                      textAlign: "center",
+                      background: active ? "#FEF3C7" : "#E2E8F0",
+                      color: active ? "#92400E" : "#475569",
+                    }}
+                  >
+                    {countOf(t.value)}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Pencarian berdasarkan NAMA atau EMAIL (case-insensitive). */}
+          <div style={{ position: "relative", width: 320, maxWidth: "100%" }}>
+            <Search
+              size={15}
+              aria-hidden="true"
+              style={{
+                position: "absolute",
+                left: 12,
+                top: "50%",
+                transform: "translateY(-50%)",
+                color: "#94A3B8",
+                pointerEvents: "none",
+              }}
+            />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Cari nama atau email user…"
+              aria-label="Cari nama atau email user"
+              style={{
+                width: "100%",
+                height: 44,
+                boxSizing: "border-box",
+                padding: "0 12px 0 36px",
+                border: "1px solid #E2E8F0",
+                borderRadius: 10,
+                fontSize: 14,
+                color: "#0F172A",
+                background: "#FFFFFF",
+              }}
+            />
+          </div>
+        </div>
+
+        {/* Area tabel: menggeser mendatar bila layar lebih sempit dari min-width. */}
+        <div style={{ overflowX: "auto" }}>
+          <div style={{ minWidth: USER_MIN_W }} role="table" aria-label="Daftar user">
+            {/* Header kolom */}
+            <div
+              role="row"
+              style={{
+                display: "grid",
+                gridTemplateColumns: USER_COLS,
+                alignItems: "center",
+                height: 44,
+                background: "#F8FAFC",
+                borderBottom: "1px solid #EEF0F3",
+                padding: "0 20px",
+              }}
+            >
+              {/* Header Nama = tombol sorting: A–Z ↑ → Z–A ↓ → default ↕. */}
+              <span
+                role="columnheader"
+                aria-sort={sort === "asc" ? "ascending" : sort === "desc" ? "descending" : "none"}
+              >
+                <button
+                  type="button"
+                  onClick={cycleSort}
+                  title="Urutkan berdasarkan nama"
+                  style={{
+                    ...USER_COL_HEAD,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 4,
+                    padding: 0,
+                    border: "none",
+                    background: "transparent",
+                    cursor: "pointer",
+                  }}
+                >
+                  Nama
+                  <span aria-hidden="true" style={{ fontSize: 11 }}>
+                    {sortGlyph}
+                  </span>
+                </button>
+              </span>
+              <span role="columnheader" style={USER_COL_HEAD}>
+                Email
+              </span>
+              <span role="columnheader" style={USER_COL_HEAD}>
+                Role
+              </span>
+              <span role="columnheader" style={{ ...USER_COL_HEAD, textAlign: "right" }}>
+                Opsi
+              </span>
+            </div>
+
+            {visible.map((u) => (
+              <div
+                key={u.id}
+                role="row"
+                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#FAFAFB")}
+                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: USER_COLS,
+                  alignItems: "center",
+                  height: 60,
+                  padding: "0 20px",
+                  borderBottom: "1px solid #EEF0F3",
+                  background: "transparent",
+                  transition: "background-color 0.12s ease-out",
+                }}
+              >
+                {/* Nama: teks saja (tanpa avatar/inisial). */}
+                <span
+                  role="cell"
+                  title={u.name ?? u.email}
+                  style={{
+                    fontSize: 15,
+                    fontWeight: 600,
+                    color: "#0F172A",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                    paddingRight: 12,
+                  }}
+                >
+                  {u.name ?? "—"}
+                </span>
+                {/* Email: link mailto tanpa underline. */}
+                <span role="cell" style={{ minWidth: 0, paddingRight: 12 }}>
+                  <a
+                    href={`mailto:${u.email}`}
+                    title={u.email}
+                    style={{
+                      display: "block",
+                      fontSize: 14,
+                      color: "#475569",
+                      textDecoration: "none",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {u.email}
+                  </a>
+                </span>
+                {/* Role: teks biasa; user QA yang lead diberi penanda bintang. */}
+                <span role="cell" style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                  <span
+                    style={{ fontSize: 14, fontWeight: 500, color: "#0F172A", whiteSpace: "nowrap" }}
+                  >
+                    {roleLabel(u.role)}
+                  </span>
+                  {u.role === "QA" && u.isQaLead && (
                     <span
-                      style={{ display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 4,
+                        fontSize: 12,
+                        fontWeight: 600,
+                        color: "#B45309",
+                        whiteSpace: "nowrap",
+                      }}
                     >
-                      <RoleBadge label={roleLabel(u.role)} tone={u.role} />
-                      {u.isQaLead && <RoleBadge label="Lead QA" tone="QA" />}
+                      <Star size={12} aria-hidden="true" fill="currentColor" />
+                      Lead
                     </span>
-                  </td>
-                  <td style={{ ...td, textAlign: "right" }}>
-                    <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center" }}>
-                      <RowActionsMenu
-                        actions={[
-                          {
-                            label: "Edit",
-                            icon: <Pencil size={15} />,
-                            onClick: () => setModal({ mode: "edit", user: u }),
-                          },
-                          {
-                            label: "Hapus",
-                            icon: <Trash2 size={15} />,
-                            onClick: () => setDeleteTarget(u),
-                            destructive: true,
-                          },
-                        ]}
-                      />
-                    </div>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+                  )}
+                </span>
+                {/* Opsi: kebab 44×44. */}
+                <span role="cell" style={{ display: "flex", justifyContent: "flex-end" }}>
+                  <RowActionsMenu
+                    actions={[
+                      {
+                        label: "Edit",
+                        icon: <Pencil size={15} />,
+                        onClick: () => setModal({ mode: "edit", user: u }),
+                      },
+                      {
+                        label: "Hapus",
+                        icon: <Trash2 size={15} />,
+                        onClick: () => setDeleteTarget(u),
+                        destructive: true,
+                      },
+                    ]}
+                    ariaLabel={`Opsi untuk ${u.name ?? u.email}`}
+                    triggerClassName="kebab-slate"
+                    triggerStyle={{ width: 44, height: 44, padding: 0, borderRadius: 10 }}
+                  />
+                </span>
+              </div>
+            ))}
+          </div>
+
+          {/* Empty state — hasil filter/search kosong. */}
+          {visible.length === 0 && (
+            <p style={{ margin: 0, padding: 56, textAlign: "center", fontSize: 14, color: "#475569" }}>
+              Tidak ada user yang cocok dengan pencarian.
+            </p>
+          )}
+        </div>
+
+        {/* Footer tabel */}
+        <div style={{ padding: "14px 20px", background: "#FCFCFD", fontSize: 14, color: "#475569" }}>
+          Menampilkan {visible.length} dari {users.length} user
+        </div>
       </div>
 
       {/* Modal */}

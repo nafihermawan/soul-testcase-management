@@ -671,20 +671,6 @@ export function AttachmentsPanel({
                       <div style={{ fontSize: "0.66rem", color: "var(--text-muted)" }}>
                         {humanSize(att.size)}
                       </div>
-                      {video && openable && (
-                        <a
-                          href={att.url!}
-                          target="_blank"
-                          rel="noreferrer"
-                          style={{
-                            fontSize: "0.7rem",
-                            color: "#2563EB",
-                            textDecoration: "none",
-                          }}
-                        >
-                          Buka video
-                        </a>
-                      )}
                     </>
                   )}
                 </div>

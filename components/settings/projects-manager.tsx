@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ArrowRight, Pencil, Trash2, X } from "lucide-react";
+import { ArrowRight, Pencil, Search, Trash2, X } from "lucide-react";
 import type { HierarchyActionState } from "@/lib/actions/hierarchy";
 import { createProject, deleteProject, updateProject } from "@/lib/actions/hierarchy";
 import { useRefresh } from "@/lib/client/refresh-context";
@@ -39,40 +39,48 @@ const platformOptions: { value: "MOBILE" | "WEB" | "HARDWARE" | "API"; label: st
   { value: "API", label: "API" },
 ];
 
-/** Filter platform di toolbar header. */
-export type PlatformFilter = "ALL" | "MOBILE" | "WEB" | "HARDWARE" | "API";
+/** Lebar kolom tabel Projects (grid): Nama | Key | Platform | Suites | Opsi. */
+const PROJECT_COLS = "minmax(260px, 2.2fr) minmax(190px, 1.4fr) 150px 170px 64px";
 
-/** Divider inset antar baris (tidak mentok tepi kartu). */
-const insetRowDivider: React.CSSProperties = {
-  backgroundImage:
-    "linear-gradient(to right, transparent 0, transparent 16px, #F1F5F9 16px, #F1F5F9 calc(100% - 16px), transparent calc(100% - 16px))",
-  backgroundSize: "100% 1px",
-  backgroundPosition: "top left",
-  backgroundRepeat: "no-repeat",
-};
+/** Lebar minimum tabel — di bawah ini container yang menggeser mendatar. */
+const PROJECT_MIN_W = 880;
 
-/** Header tabel bersih: tanpa isian warna, hanya garis tipis pemisah. */
-const th: React.CSSProperties = {
-  position: "sticky",
-  top: 0,
-  zIndex: 10,
-  background: "#fff",
-  padding: "10px 14px",
-  fontSize: 11,
+/** Gaya seragam untuk header kolom. */
+const COL_HEAD: React.CSSProperties = {
+  fontSize: 12,
   fontWeight: 600,
-  color: "#94A3B8",
-  textAlign: "left",
+  textTransform: "uppercase",
+  letterSpacing: "0.05em",
+  color: "#64748B",
   whiteSpace: "nowrap",
-  borderBottom: "1px solid #E2E8F0",
 };
 
-const td: React.CSSProperties = {
-  padding: "10px 14px",
-  fontSize: 13,
-  color: "#475569",
-  whiteSpace: "nowrap",
-  verticalAlign: "middle",
+/**
+ * Tone badge platform (pill + dot). Tiga platform pertama sesuai spesifikasi;
+ * API tidak disebut di sana, jadi memakai tone netral agar tetap konsisten.
+ */
+const PLATFORM_TONE: Record<string, { bg: string; color: string; dot: string }> = {
+  WEB: { bg: "#EFF6FF", color: "#1D4ED8", dot: "#3B82F6" },
+  MOBILE: { bg: "#F5F3FF", color: "#6D28D9", dot: "#8B5CF6" },
+  HARDWARE: { bg: "#ECFDF5", color: "#047857", dot: "#10B981" },
+  API: { bg: "#F1F5F9", color: "#475569", dot: "#64748B" },
 };
+
+/** Font key project: JetBrains Mono bila tersedia, fallback ke mono sistem. */
+const KEY_FONT = '"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace';
+
+type PlatformTab = "ALL" | "WEB" | "MOBILE" | "HARDWARE";
+
+/** Urutan & label tab filter platform di toolbar. */
+const PLATFORM_TABS: { value: PlatformTab; label: string }[] = [
+  { value: "ALL", label: "Semua" },
+  { value: "WEB", label: "Web" },
+  { value: "MOBILE", label: "Mobile" },
+  { value: "HARDWARE", label: "Hardware" },
+];
+
+/** Siklus sort kolom Suites: default ↕ → desc ↓ → asc ↑. */
+type SuitesSort = "default" | "desc" | "asc";
 
 const fieldStyle: React.CSSProperties = {
   width: "100%",
@@ -358,16 +366,10 @@ function ProjectModal({
 
 export function ProjectsManager({
   projects,
-  query,
-  platformFilter,
   createOpen,
   onCreateHandled,
 }: {
   projects: Project[];
-  /** Pencarian dari toolbar di card header SettingsView. */
-  query: string;
-  /** Filter platform dari toolbar di card header SettingsView. */
-  platformFilter: PlatformFilter;
   /** Sinyal dari tombol "+ Tambah Project" di card header. */
   createOpen: boolean;
   onCreateHandled: () => void;
@@ -380,6 +382,12 @@ export function ProjectsManager({
   const [deletePending, setDeletePending] = useState(false);
   const { toast, showToast, dismissToast } = useToast();
 
+  /** Filter platform (segmented) + pencarian nama/key — keduanya di sisi klien. */
+  const [tab, setTab] = useState<PlatformTab>("ALL");
+  const [query, setQuery] = useState("");
+  /** Sort kolom Suites; `default` = urutan dari server (tidak diubah). */
+  const [sort, setSort] = useState<SuitesSort>("default");
+
   // Tombol tambah ada di card header → buka modal create lalu reset sinyal.
   useEffect(() => {
     if (!createOpen) return;
@@ -387,13 +395,35 @@ export function ProjectsManager({
     onCreateHandled();
   }, [createOpen, onCreateHandled]);
 
+  /** Jumlah project per platform — badge di segmented filter. */
+  const countOf = (value: PlatformTab) =>
+    value === "ALL" ? projects.length : projects.filter((p) => p.platform === value).length;
+
   // Pencarian (nama/key) + filter platform diterapkan di sisi klien.
   const needle = query.trim().toLowerCase();
   const filtered = projects.filter((p) => {
-    if (platformFilter !== "ALL" && p.platform !== platformFilter) return false;
+    if (tab !== "ALL" && p.platform !== tab) return false;
     if (!needle) return true;
     return `${p.name} ${p.code}`.toLowerCase().includes(needle);
   });
+
+  /** Urutan tampil: hasil filter/search, lalu diurutkan bila sort Suites aktif. */
+  const visible =
+    sort === "default"
+      ? filtered
+      : [...filtered].sort((a, b) =>
+          sort === "desc"
+            ? b._count.suites - a._count.suites
+            : a._count.suites - b._count.suites
+        );
+
+  /** Klik header Suites: default ↕ → desc ↓ → asc ↑ → default ↕. */
+  const cycleSort = () =>
+    setSort((prev) => (prev === "default" ? "desc" : prev === "desc" ? "asc" : "default"));
+  const sortGlyph = sort === "desc" ? "↓" : sort === "asc" ? "↑" : "↕";
+
+  /** Total suite dari baris yang sedang tampil (footer kanan). */
+  const suitesShown = visible.reduce((sum, p) => sum + p._count.suites, 0);
 
   const handleDelete = async (p: Project) => {
     setDeletePending(true);
@@ -408,112 +438,322 @@ export function ProjectsManager({
 
   return (
     <>
-      {/* Tabel — toolbar (search / filter / tombol tambah) ada di card header. */}
-      <div style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
-        {filtered.length === 0 ? (
-          <p
+      <div style={{ display: "flex", flexDirection: "column" }}>
+        {/* Toolbar — DI DALAM card tabel, di atas header kolom. */}
+        <div
+          style={{
+            padding: "16px 20px",
+            borderBottom: "1px solid #EEF0F3",
+            display: "flex",
+            flexWrap: "wrap",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            flexShrink: 0,
+          }}
+        >
+          {/* Segmented filter platform, tiap tab dengan badge jumlah project. */}
+          <div
+            role="tablist"
+            aria-label="Filter platform"
             style={{
-              color: "#94A3B8",
-              fontSize: 13,
-              padding: "2rem 12px",
-              textAlign: "center",
-              margin: 0,
+              display: "flex",
+              alignItems: "center",
+              gap: 2,
+              background: "#F1F5F9",
+              padding: 4,
+              borderRadius: 10,
             }}
           >
-            {projects.length === 0
-              ? "Belum ada project. Tambahkan project pertama untuk mulai menyusun suite & test case."
-              : "Tidak ada project yang cocok dengan pencarian / filter."}
-          </p>
-        ) : (
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr>
-                <th style={th}>Nama Project</th>
-                <th style={th}>Key</th>
-                <th style={th}>Platform</th>
-                <th style={th}>Suites</th>
-                <th style={{ ...th, textAlign: "right" }}>Opsi</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((p) => (
-                <tr
-                  key={p.id}
-                  style={{ ...insetRowDivider, transition: "background-color 0.15s ease" }}
-                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#F8FAFC")}
-                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
+            {PLATFORM_TABS.map((t) => {
+              const active = tab === t.value;
+              return (
+                <button
+                  key={t.value}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => setTab(t.value)}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    height: 32,
+                    padding: "0 10px",
+                    border: "none",
+                    borderRadius: 8,
+                    background: active ? "#FFFFFF" : "transparent",
+                    boxShadow: active ? "0 1px 2px rgba(15, 23, 42, 0.08)" : "none",
+                    color: active ? "#0F172A" : "#475569",
+                    fontWeight: active ? 600 : 500,
+                    fontSize: 13,
+                    cursor: "pointer",
+                    transition: "background-color 0.15s ease, color 0.15s ease",
+                  }}
                 >
-                  <td style={td}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: "#1E293B" }}>{p.name}</div>
-                    {p.description && (
-                      <div
+                  {t.label}
+                  <span
+                    style={{
+                      minWidth: 18,
+                      padding: "1px 6px",
+                      borderRadius: 999,
+                      fontSize: 11,
+                      fontWeight: 600,
+                      textAlign: "center",
+                      background: active ? "#FEF3C7" : "#E2E8F0",
+                      color: active ? "#92400E" : "#475569",
+                    }}
+                  >
+                    {countOf(t.value)}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Pencarian berdasarkan NAMA atau KEY project (case-insensitive). */}
+          <div style={{ position: "relative", width: 320, maxWidth: "100%" }}>
+            <Search
+              size={15}
+              aria-hidden="true"
+              style={{
+                position: "absolute",
+                left: 12,
+                top: "50%",
+                transform: "translateY(-50%)",
+                color: "#94A3B8",
+                pointerEvents: "none",
+              }}
+            />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Cari nama atau key project…"
+              aria-label="Cari nama atau key project"
+              style={{
+                width: "100%",
+                height: 44,
+                boxSizing: "border-box",
+                padding: "0 12px 0 36px",
+                border: "1px solid #E2E8F0",
+                borderRadius: 10,
+                fontSize: 14,
+                color: "#0F172A",
+                background: "#FFFFFF",
+              }}
+            />
+          </div>
+        </div>
+
+        {/* Area tabel: menggeser mendatar bila layar lebih sempit dari min-width. */}
+        <div style={{ overflowX: "auto" }}>
+          <div style={{ minWidth: PROJECT_MIN_W }} role="table" aria-label="Daftar project">
+            {/* Header kolom */}
+            <div
+              role="row"
+              style={{
+                display: "grid",
+                gridTemplateColumns: PROJECT_COLS,
+                alignItems: "center",
+                height: 44,
+                background: "#F8FAFC",
+                borderBottom: "1px solid #EEF0F3",
+                padding: "0 20px",
+              }}
+            >
+              <span role="columnheader" style={COL_HEAD}>
+                Nama Project
+              </span>
+              <span role="columnheader" style={COL_HEAD}>
+                Key
+              </span>
+              <span role="columnheader" style={COL_HEAD}>
+                Platform
+              </span>
+              {/* Header Suites = tombol sorting: desc ↓ → asc ↑ → default ↕. */}
+              <span
+                role="columnheader"
+                aria-sort={sort === "desc" ? "descending" : sort === "asc" ? "ascending" : "none"}
+              >
+                <button
+                  type="button"
+                  onClick={cycleSort}
+                  title="Urutkan berdasarkan jumlah suite"
+                  style={{
+                    ...COL_HEAD,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 4,
+                    padding: 0,
+                    border: "none",
+                    background: "transparent",
+                    cursor: "pointer",
+                  }}
+                >
+                  Suites
+                  <span aria-hidden="true" style={{ fontSize: 11 }}>
+                    {sortGlyph}
+                  </span>
+                </button>
+              </span>
+              <span role="columnheader" style={{ ...COL_HEAD, textAlign: "right" }}>
+                Opsi
+              </span>
+            </div>
+
+            {visible.map((p) => {
+              const tone = p.platform ? PLATFORM_TONE[p.platform] : null;
+              return (
+                <div
+                  key={p.id}
+                  role="row"
+                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#FAFAFB")}
+                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: PROJECT_COLS,
+                    alignItems: "center",
+                    height: 60,
+                    padding: "0 20px",
+                    borderBottom: "1px solid #EEF0F3",
+                    background: "transparent",
+                    transition: "background-color 0.12s ease-out",
+                  }}
+                >
+                  {/* Nama project: teks saja (tanpa avatar/inisial). */}
+                  <span
+                    role="cell"
+                    title={p.name}
+                    style={{
+                      fontSize: 15,
+                      fontWeight: 600,
+                      color: "#0F172A",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                      paddingRight: 12,
+                    }}
+                  >
+                    {p.name}
+                  </span>
+                  {/* Key: monospace polos, tanpa badge/background. */}
+                  <span
+                    role="cell"
+                    title={p.code}
+                    style={{
+                      fontFamily: KEY_FONT,
+                      fontSize: 14,
+                      color: "#334155",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                      paddingRight: 12,
+                    }}
+                  >
+                    {p.code}
+                  </span>
+                  {/* Platform: pill + dot. */}
+                  <span role="cell">
+                    {p.platform && tone ? (
+                      <span
                         style={{
-                          fontSize: 12,
-                          color: "#94A3B8",
-                          maxWidth: 320,
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 6,
+                          padding: "4px 10px",
+                          borderRadius: 999,
+                          background: tone.bg,
+                          color: tone.color,
+                          fontSize: 13,
+                          fontWeight: 500,
                           whiteSpace: "nowrap",
                         }}
                       >
-                        {p.description}
-                      </div>
-                    )}
-                  </td>
-                  <td style={td}>
-                    {/* Key = teks monospace polos (tanpa chip/pill) */}
-                    <span
-                      style={{
-                        fontFamily: "var(--font-mono, monospace)",
-                        fontSize: 12,
-                        color: "#475569",
-                      }}
-                    >
-                      {p.code}
-                    </span>
-                  </td>
-                  <td style={td}>
-                    {/* Platform = teks polos, tanpa badge berwarna */}
-                    {p.platform ? (
-                      <span style={{ fontSize: 12, fontWeight: 500, color: "#475569" }}>
+                        <span
+                          aria-hidden="true"
+                          style={{
+                            width: 6,
+                            height: 6,
+                            borderRadius: "50%",
+                            background: tone.dot,
+                            flexShrink: 0,
+                          }}
+                        />
                         {platformOptions.find((o) => o.value === p.platform)?.label ?? p.platform}
                       </span>
                     ) : (
-                      <span style={{ color: "#94A3B8" }}>—</span>
+                      <span style={{ fontSize: 13, color: "#94A3B8" }}>—</span>
                     )}
-                  </td>
-                  <td style={{ ...td, color: "#475569" }}>{p._count.suites} suite</td>
-                  <td style={{ ...td, textAlign: "right" }}>
-                    <div
-                      style={{ display: "flex", justifyContent: "flex-end", alignItems: "center" }}
-                    >
-                      <RowActionsMenu
-                        actions={[
-                          {
-                            label: "Buka Project",
-                            icon: <ArrowRight size={15} />,
-                            href: `/projects/${p.id}`,
-                          },
-                          {
-                            label: "Edit",
-                            icon: <Pencil size={15} />,
-                            onClick: () => setModal({ mode: "edit", project: p }),
-                          },
-                          {
-                            label: "Hapus",
-                            icon: <Trash2 size={15} />,
-                            onClick: () => setDeleteTarget(p),
-                            destructive: true,
-                          },
-                        ]}
-                      />
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+                  </span>
+                  {/* Suites: angka bold + kata "suite", atau ajakan italic. */}
+                  <span role="cell" style={{ fontSize: 13, color: "#475569" }}>
+                    {p._count.suites > 0 ? (
+                      <>
+                        <span style={{ fontWeight: 600, color: "#0F172A" }}>{p._count.suites}</span>{" "}
+                        suite
+                      </>
+                    ) : (
+                      <span style={{ fontStyle: "italic", color: "#64748B" }}>Belum ada suite</span>
+                    )}
+                  </span>
+                  {/* Opsi: kebab 44×44. */}
+                  <span role="cell" style={{ display: "flex", justifyContent: "flex-end" }}>
+                    <RowActionsMenu
+                      actions={[
+                        {
+                          label: "Buka Project",
+                          icon: <ArrowRight size={15} />,
+                          href: `/projects/${p.id}`,
+                        },
+                        {
+                          label: "Edit",
+                          icon: <Pencil size={15} />,
+                          onClick: () => setModal({ mode: "edit", project: p }),
+                        },
+                        {
+                          label: "Hapus",
+                          icon: <Trash2 size={15} />,
+                          onClick: () => setDeleteTarget(p),
+                          destructive: true,
+                        },
+                      ]}
+                      ariaLabel={`Opsi untuk ${p.name}`}
+                      triggerClassName="kebab-slate"
+                      triggerStyle={{ width: 44, height: 44, padding: 0, borderRadius: 10 }}
+                    />
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Empty state — hasil filter/search kosong. */}
+          {visible.length === 0 && (
+            <p style={{ margin: 0, padding: 56, textAlign: "center", fontSize: 14, color: "#475569" }}>
+              Tidak ada project yang cocok dengan pencarian.
+            </p>
+          )}
+        </div>
+
+        {/* Footer tabel */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            padding: "14px 20px",
+            background: "#FCFCFD",
+            fontSize: 14,
+            color: "#475569",
+            flexShrink: 0,
+          }}
+        >
+          <span>
+            Menampilkan {visible.length} dari {projects.length} project
+          </span>
+          <span>Total {suitesShown} suite</span>
+        </div>
       </div>
 
       {/* Modal */}

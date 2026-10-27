@@ -91,9 +91,10 @@ export async function GET(request: Request) {
     return new NextResponse(pdf, {
       headers: {
         "content-type": "application/pdf",
-        // `inline` supaya tab baru dari tombol Export PDF langsung menampilkan
-        // dokumen (viewer PDF punya tombol simpan sendiri).
-        "content-disposition": `inline; filename="${bugPdfFileName(data)}"`,
+        // `attachment` (bukan `inline`) = browser LANGSUNG mengunduh file,
+        // tidak membuka tab/viewer baru. Nama file di sini satu-satunya sumber;
+        // klien memakai nama yang sama dari header ini.
+        "content-disposition": `attachment; filename="${bugPdfFileName(data)}"`,
         "cache-control": "no-store",
       },
     });

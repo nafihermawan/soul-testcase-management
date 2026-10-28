@@ -16,6 +16,16 @@ export { MAX_ATTACHMENT_BYTES, isAllowedMime };
 const GET_EXPIRES_SECONDS = 60 * 60;
 /** Presigned PUT singkat: hanya untuk satu kali upload. */
 const PUT_EXPIRES_SECONDS = 10 * 60;
+/**
+ * Presigned GET untuk link evidence DI DALAM DOKUMEN PDF (QA Bug Report).
+ *
+ * PDF-nya dikirim ke pihak luar yang tidak punya akun Soul TCM, jadi link-nya
+ * harus tetap hidup lama — bukan 1 jam seperti link di UI. Dipakai batas
+ * MAKSIMUM yang diizinkan SigV4: 7 hari (604800 detik); lewat dari itu AWS/R2
+ * menolak permintaan presign-nya, jadi "30 hari" tidak bisa dicapai dengan
+ * presigned URL (butuh bucket publik atau proxy ber-token di aplikasi).
+ */
+export const PDF_EVIDENCE_EXPIRES_SECONDS = 60 * 60 * 24 * 7;
 
 type R2Config = {
   accountId: string;
@@ -101,24 +111,34 @@ export async function presignPutUrl(storageKey: string, mimeType: string): Promi
   );
 }
 
-/** URL sementara untuk menampilkan file dari bucket private. */
-export async function presignGetUrl(storageKey: string): Promise<string> {
+/**
+ * URL sementara untuk menampilkan file dari bucket private.
+ * `expiresInSeconds` bisa dinaikkan untuk link yang ikut keluar aplikasi
+ * (lihat `PDF_EVIDENCE_EXPIRES_SECONDS`).
+ */
+export async function presignGetUrl(
+  storageKey: string,
+  expiresInSeconds: number = GET_EXPIRES_SECONDS
+): Promise<string> {
   const { client, bucket } = getClient();
   return getSignedUrl(
     client,
     new GetObjectCommand({ Bucket: bucket, Key: storageKey }),
-    { expiresIn: GET_EXPIRES_SECONDS }
+    { expiresIn: expiresInSeconds }
   );
 }
 
 /** Presign banyak sekaligus; key yang gagal di-skip (tidak mematikan halaman). */
-export async function presignGetUrls(keys: string[]): Promise<Map<string, string>> {
+export async function presignGetUrls(
+  keys: string[],
+  expiresInSeconds: number = GET_EXPIRES_SECONDS
+): Promise<Map<string, string>> {
   const out = new Map<string, string>();
   if (!isStorageConfigured()) return out;
   await Promise.all(
     keys.map(async (k) => {
       try {
-        out.set(k, await presignGetUrl(k));
+        out.set(k, await presignGetUrl(k, expiresInSeconds));
       } catch {
         // abaikan — file mungkin sudah tidak ada
       }

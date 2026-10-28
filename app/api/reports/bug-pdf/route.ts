@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { apiSession, json400, json401, json404, json500 } from "@/lib/api-auth";
 import { toAttachmentItems } from "@/lib/attachments";
+import { PDF_EVIDENCE_EXPIRES_SECONDS, presignGetUrls } from "@/lib/storage/r2";
 import { entityCode } from "@/lib/format";
 import { bugPdfFileName, renderBugPdf, type BugPdfData } from "@/lib/bug-pdf";
 
@@ -50,9 +51,21 @@ export async function GET(request: Request) {
     });
     if (!bug) return json404("Bug tidak ditemukan.");
 
-    // Attachment di-presign di server (bucket private) → URL inilah yang dipakai
-    // dokumen untuk hyperlink DAN untuk diambil bytenya oleh server ini sendiri.
-    const attachments = await toAttachmentItems(bug.attachments);
+    /**
+     * Attachment di-presign di server (bucket private) → URL inilah yang dipakai
+     * dokumen untuk hyperlink DAN untuk diambil bytenya oleh server ini sendiri.
+     *
+     * Presign-nya SENGAJA memakai TTL panjang (`PDF_EVIDENCE_EXPIRES_SECONDS`,
+     * 7 hari) dan bukan default 1 jam milik UI: PDF ini dibuka di luar aplikasi
+     * oleh orang yang tidak login, jadi link 1 jam akan mati sebelum sempat
+     * diklik — persis keluhan "link evidence tidak bisa dibuka pihak luar".
+     * URL-nya publik (tidak butuh akun), hanya bergantung pada masa berlaku.
+     */
+    const evidenceUrls = await presignGetUrls(
+      bug.attachments.map((a) => a.storageKey),
+      PDF_EVIDENCE_EXPIRES_SECONDS
+    );
+    const attachments = await toAttachmentItems(bug.attachments, evidenceUrls);
 
     const data: BugPdfData = {
       bugCode: entityCode("BUG", bug.id),

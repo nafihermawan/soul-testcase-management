@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { REPORT_PDF_READY } from "./report-pdf-message";
+import { REPORT_PDF_READY, type ReportPdfReadyMessage } from "./report-pdf-message";
+import { downloadPdfBlob } from "./download-pdf-blob";
 
 /**
  * Unduh PDF report TANPA meninggalkan halaman (dipakai tombol Export Report di
@@ -10,20 +11,26 @@ import { REPORT_PDF_READY } from "./report-pdf-message";
  * Markup laporan formal hanya ada di route `/test-runs/<id>/report`, jadi route
  * itu dimuat di iframe tak terlihat (tetap dirender — hanya digeser keluar
  * layar — supaya html2canvas bisa mengukurnya). `ReportAutoDownload` di sana
- * membuat PDF lalu mengirim `REPORT_PDF_READY`; spinner berhenti tepat saat
- * unduhan dimulai.
+ * membangun PDF-nya, lalu mengirim Blob-nya ke sini; unduhan dipicu dari
+ * dokumen ini (halaman yang dilihat pengguna), bukan dari dalam iframe — kalau
+ * dipicu di iframe, sebagian browser mengabaikan atribut `download` dan membuka
+ * PDF-nya di tab baru.
  *
  * @param onError dipanggil bila pembuatan PDF gagal / melewati batas waktu.
+ * @param onDownloaded dipanggil tepat saat unduhan dipicu — dipakai pemanggil
+ *   untuk menampilkan konfirmasi singkat ("Report terunduh").
  */
-export function useReportPdfDownload(onError?: () => void) {
+export function useReportPdfDownload(onError?: () => void, onDownloaded?: () => void) {
   const [downloading, setDownloading] = useState(false);
   const frameRef = useRef<HTMLIFrameElement | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Callback disimpan di ref supaya listener pesan cukup dipasang sekali.
   const onErrorRef = useRef(onError);
+  const onDownloadedRef = useRef(onDownloaded);
   useEffect(() => {
     onErrorRef.current = onError;
-  }, [onError]);
+    onDownloadedRef.current = onDownloaded;
+  }, [onError, onDownloaded]);
 
   const startPdfDownload = useCallback((runId: string) => {
     // Satu proses dalam satu waktu.
@@ -58,20 +65,27 @@ export function useReportPdfDownload(onError?: () => void) {
       if (e.origin !== window.location.origin) return;
       const frame = frameRef.current;
       if (!frame || e.source !== frame.contentWindow) return;
-      const data = e.data as { type?: string; ok?: boolean } | null;
+      const data = e.data as ReportPdfReadyMessage | null;
       if (data?.type !== REPORT_PDF_READY) return;
 
       if (timerRef.current) {
         clearTimeout(timerRef.current);
         timerRef.current = null;
       }
-      // Spinner berhenti tepat saat unduhan dimulai; iframe baru dilepas
-      // sedikit belakangan supaya proses unduhan tidak ikut terputus.
       setDownloading(false);
       frameRef.current = null;
-      window.setTimeout(() => frame.remove(), 1500);
+      // Blob-nya sudah diterima di dokumen ini, jadi iframe boleh langsung
+      // dilepas — unduhan tidak lagi bergantung padanya.
+      frame.remove();
 
-      if (!data.ok) onErrorRef.current?.();
+      if (data.ok && data.blob) {
+        // Unduhan dipicu di dokumen yang dilihat pengguna (bukan di iframe),
+        // supaya PDF-nya benar-benar ter-download tanpa membuka tab baru.
+        downloadPdfBlob(data.blob, data.fileName ?? "test-run-report");
+        onDownloadedRef.current?.();
+      } else if (!data.ok) {
+        onErrorRef.current?.();
+      }
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);

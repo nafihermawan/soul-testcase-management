@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRefresh } from "@/lib/client/refresh-context";
-import { Check, ChevronDown, Cpu, ExternalLink, FileDown, FolderOpen, Monitor, Pencil, Server, Smartphone } from "lucide-react";
+import { Check, ChevronDown, Cpu, Download, ExternalLink, FolderOpen, Monitor, Pencil, Server, Smartphone } from "lucide-react";
 import { completeRun, completeRunWithSkip, deleteRun, updateRunResult } from "@/lib/actions/test-runs";
 import { createBug, updateBug, updateBugStatus } from "@/lib/actions/automation-bugs";
 import { Spinner, Toast, useToast } from "@/components/ui/feedback";
@@ -142,11 +142,36 @@ export function RunExecutor({
    * unduh PDF laporan run ini, tanpa dropdown/modal pilihan format.
    */
   const { toast, showToast, dismissToast } = useToast();
-  const pdfError = useCallback(
-    () => showToast("Gagal membuat PDF. Coba lagi.", "error"),
-    [showToast]
+  /**
+   * State tombol Export Report: idle → loading → sukses (~2 detik) → idle.
+   * Diturunkan dari sinyal hook (bukan dari lama prosesnya) supaya label yang
+   * tampil mencerminkan hasil sebenarnya.
+   */
+  const [exportState, setExportState] = useState<"idle" | "loading" | "done">("idle");
+  const exportResetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pdfError = useCallback(() => {
+    setExportState("idle");
+    showToast("Gagal membuat PDF. Coba lagi.", "error");
+  }, [showToast]);
+  const pdfDownloaded = useCallback(() => {
+    setExportState("done");
+    if (exportResetTimer.current) clearTimeout(exportResetTimer.current);
+    exportResetTimer.current = setTimeout(() => setExportState("idle"), 2000);
+  }, []);
+  const { startPdfDownload } = useReportPdfDownload(pdfError, pdfDownloaded);
+  useEffect(
+    () => () => {
+      if (exportResetTimer.current) clearTimeout(exportResetTimer.current);
+    },
+    []
   );
-  const { downloading: pdfDownloading, startPdfDownload } = useReportPdfDownload(pdfError);
+
+  const handleExportReport = () => {
+    // Disabled saja tidak cukup — klik ganda tetap harus dicegah di level state.
+    if (exportState === "loading") return;
+    setExportState("loading");
+    startPdfDownload(runId);
+  };
 
   /**
    * Patch satu hasil run di SEMUA cermin lokal sekaligus: flat list (`items`),
@@ -452,7 +477,9 @@ export function RunExecutor({
                 {completing ? "Menyelesaikan..." : "Complete Run"}
               </button>
             ) : (
-              <>
+              /* Status run selesai + tombol Export Report: satu baris, dipisah
+                  divider vertikal 1×24 supaya keduanya sejajar tengah. */
+              <div style={{ display: "flex", alignItems: "center", gap: 16, flexShrink: 0 }}>
                 <span
                   style={{
                     display: "inline-flex",
@@ -470,30 +497,39 @@ export function RunExecutor({
                   />
                   Run Completed
                 </span>
-                {/* Tombol aksi tunggal: sekali klik langsung generate & unduh
-                    PDF laporan (tanpa dropdown / modal pilihan format). */}
+                <span
+                  aria-hidden="true"
+                  style={{ width: 1, height: 24, background: "#E2E8F0", flexShrink: 0 }}
+                />
+                {/* Tombol aksi TUNGGAL: sekali klik langsung generate & unduh PDF
+                    laporan (tanpa dropdown / modal pilihan format). Tampilan
+                    dasar, hover, dan focus-visible ada di `.export-report-btn`
+                    (globals.css) — inline style tidak bisa menyatakan
+                    pseudo-class, dan nilai dasar inline akan mematikan hover. */}
                 <button
                   type="button"
-                  onClick={() => startPdfDownload(runId)}
-                  disabled={pdfDownloading}
-                  aria-label="Export Report (unduh PDF)"
-                  style={{ ...BTN_SECONDARY, cursor: pdfDownloading ? "wait" : "pointer" }}
-                  onMouseEnter={(e) => {
-                    if (!pdfDownloading) e.currentTarget.style.background = "#F8FAFC";
-                  }}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = "#fff")}
+                  className="btn-radius-10 export-report-btn"
+                  onClick={handleExportReport}
+                  disabled={exportState === "loading"}
                 >
-                  {pdfDownloading ? (
-                    <>
-                      <Spinner size={14} /> Menyiapkan PDF…
-                    </>
+                  {exportState === "loading" ? (
+                    <Spinner size={16} />
+                  ) : exportState === "done" ? (
+                    <Check size={18} strokeWidth={2.4} aria-hidden="true" style={{ color: "#15803D" }} />
                   ) : (
-                    <>
-                      <FileDown size={14} aria-hidden="true" /> Export Report
-                    </>
+                    <Download size={18} aria-hidden="true" />
                   )}
+                  {/* Live region tetap berada di DOM agar tiap perubahan state
+                      diumumkan screen reader. */}
+                  <span aria-live="polite">
+                    {exportState === "loading"
+                      ? "Mengekspor…"
+                      : exportState === "done"
+                        ? "Report terunduh"
+                        : "Export Report"}
+                  </span>
                 </button>
-              </>
+              </div>
             )}
           </div>
         </div>

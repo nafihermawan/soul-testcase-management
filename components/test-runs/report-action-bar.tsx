@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ArrowLeft, FileDown, Printer } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Spinner } from "@/components/ui/feedback";
+import { downloadPdfBlob } from "./download-pdf-blob";
 
 /**
  * Tinggi minimum satu potongan halaman (px CSS). Dipakai agar garis potong
@@ -12,17 +13,20 @@ import { Spinner } from "@/components/ui/feedback";
 const MIN_SLICE_CSS = 32;
 
 /**
- * Tangkap elemen .report-container & simpan sebagai PDF via jsPDF + html2canvas.
+ * Bangun PDF laporan dari elemen .report-container (jsPDF + html2canvas) dan
+ * kembalikan sebagai Blob — TANPA mengunduh apa pun.
  *
- * Diekspor karena dipakai juga oleh `ReportAutoDownload` (unduhan langsung dari
- * halaman Test Run lewat `?download=pdf`).
+ * Sengaja dipisah dari proses unduhan: pemanggil yang memicu unduhannya, supaya
+ * unduhan selalu berasal dari dokumen yang benar-benar dilihat pengguna. Ini
+ * yang mencegah PDF terbuka di tab baru saat prosesnya berjalan di dalam iframe
+ * tak terlihat (lihat `downloadPdfBlob`).
  *
  * Pemotongan per halaman sengaja dibuat sadar-batas: elemen yang ditandai
  * `data-pdf-avoid-break` (kartu TC, tabel ringkasan, metadata, bug, catatan)
  * tidak boleh terbelah dua halaman. Tanpa ini, irisan canvas tetap memotong
  * kartu di tengah karena html2canvas menghasilkan SATU gambar panjang.
  */
-export async function downloadReportPdf(fileName: string): Promise<void> {
+export async function buildReportPdfBlob(): Promise<Blob> {
   const [{ jsPDF }, { default: html2canvas }] = await Promise.all([
     import("jspdf"),
     import("html2canvas"),
@@ -124,7 +128,10 @@ export async function downloadReportPdf(fileName: string): Promise<void> {
     pdf.text(`Page ${page} of ${totalPages}`, pageW - margin, pageH - 4, { align: "right" });
   }
 
-  pdf.save(`${fileName || "test-run-report"}.pdf`);
+  // Kembalikan sebagai Blob; unduhannya dipicu pemanggil lewat `downloadPdfBlob`
+  // dari dokumen yang dilihat pengguna. `pdf.save()` tidak dipakai karena masih
+  // membawa fallback popup (`open("", "_blank")`) bawaan jsPDF.
+  return pdf.output("blob");
 }
 
 export function ReportActionBar({
@@ -141,7 +148,8 @@ export function ReportActionBar({
     if (downloading) return;
     setDownloading(true);
     try {
-      await downloadReportPdf(fileName ?? "test-run-report");
+      const blob = await buildReportPdfBlob();
+      downloadPdfBlob(blob, fileName ?? "test-run-report");
     } catch (err) {
       console.error("Gagal membuat PDF:", err);
       alert("Gagal membuat PDF. Coba gunakan Print > Save as PDF.");

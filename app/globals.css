@@ -231,6 +231,58 @@ button,
   text-decoration: underline;
 }
 
+/* ---------------- Tombol Export Report (header detail run) ----------------
+   Hover & :focus-visible tidak bisa dinyatakan sebagai inline style, jadi
+   seluruh tampilan dasarnya ikut ditaruh di sini — kalau nilai dasarnya inline,
+   ia akan selalu menang atas aturan :hover di bawah dan hover-nya mati.
+   Radius 10px diambil dari `.btn-radius-10` (aturan global `button` memaksa 3px). */
+.export-report-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 16px 0 14px;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease, color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+/* Ikon netral slate — warnanya bukan warna teks, jadi diatur terpisah. */
+.export-report-btn svg {
+  color: #475569;
+  transition: color 150ms ease;
+}
+
+/* Hover kuning sistem; TIDAK aktif saat tombol disabled (state loading). */
+.export-report-btn:hover:not(:disabled) {
+  background: #fffbeb;
+  border-color: #f59e0b;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.15);
+  color: #92400e;
+}
+
+.export-report-btn:hover:not(:disabled) svg {
+  color: #b45309;
+}
+
+/* Fokus keyboard saja; klik mouse tidak meninggalkan outline. */
+.export-report-btn:focus-visible {
+  outline: 2px solid #f59e0b;
+  outline-offset: 2px;
+}
+
+.export-report-btn:disabled {
+  cursor: wait;
+}
+
 /* Spinner modal progress Import Test Case — hormati prefers-reduced-motion. */
 .import-spinner {
   animation: spin 0.9s linear infinite;

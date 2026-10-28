@@ -12,31 +12,39 @@
  * app, yang justru berisiko memblokir resource cross-origin (presigned R2).
  *
  * Tiga hal yang menentukan kecepatan pipeline ini:
- *  1. PASS-THROUGH. MP4/H.264 di bawah `PASSTHROUGH_MAX_BYTES` TIDAK di-encode
- *     sama sekali — file seperti ini sudah kecil dan sudah bisa diputar browser,
- *     jadi encode ulang hanya membuang waktu (inilah penyebab "13 MB tapi lama").
- *  2. PRESET `ultrafast` — paling cepat dari preset yang diizinkan spesifikasi.
+ *  1. PASS-THROUGH. File yang containernya sudah ramah-browser (MP4/H.264 atau
+ *     WebM) di bawah `PASSTHROUGH_MAX_BYTES` TIDAK di-encode sama sekali — file
+ *     seperti ini sudah kecil dan sudah bisa diputar browser, jadi encode ulang
+ *     hanya membuang waktu (inilah penyebab "file kecil tapi lama").
+ *  2. PRESET `ultrafast` + fps dibatasi 30 — preset tercepat yang diizinkan
+ *     spesifikasi, dan separuh frame untuk rekaman layar 60 fps.
  *  3. ANTREAN satu-lintasan. Instance ffmpeg.wasm itu singleton dan MEMFS-nya
  *     dipakai bersama, jadi dua kompresi yang jalan bersamaan akan saling
  *     menimpa `input.*`/`output.mp4`.
  *
  * Proses encoding berjalan di Web Worker milik ffmpeg.wasm, jadi thread UI tidak
  * diblokir; progresnya diteruskan ke UI lewat `onProgress`.
+ *
+ * CATATAN soal `-threads 0`: core yang dipakai di sini adalah build
+ * SINGLE-THREAD (bukan `core-mt`), jadi jumlah thread-nya tetap 1 — flag itu
+ * tidak memberi percepatan apa pun. Multithreading sungguhan hanya mungkin
+ * dengan `@ffmpeg/core-mt`, yang mewajibkan SharedArrayBuffer dan karenanya
+ * header COOP/COEP di seluruh app (lihat alasan penolakannya di bawah).
  */
 
 import type { FFmpeg } from "@ffmpeg/ffmpeg";
 
 /**
- * Batas kotak keluaran: SISI TERPANJANG ≤ 1280 — artinya 720p untuk video
- * 16:9 dan 720×1280 untuk video portrait. Video yang lebih kecil dibiarkan
- * apa adanya (tidak pernah di-upscale).
+ * Batas keluaran: TINGGI maksimum 720 px (720p), dan video yang lebih kecil
+ * TIDAK diperbesar.
  *
- * Sudah diuji langsung ke core 0.12.10 (ffmpeg 5.1.4) yang sama dengan yang
- * dipakai browser: 1920×1080 → 1280×720, 1080×1920 → 720×1280,
- * 1440×1080 → 1280×960.
+ * Sengaja `min(720,ih)` dan bukan `scale=-2:720` yang literal: bentuk literal
+ * itu MEMAKSA tinggi 720 ke atas maupun ke bawah, jadi rekaman 480p/360p malah
+ * diperbesar — file lebih besar dan encode lebih lambat, kebalikan dari tujuan.
  */
-const MAX_W = 1280;
-const MAX_H = 1280;
+const MAX_OUTPUT_HEIGHT = 720;
+/** Framerate keluaran dibatasi 30 fps — rekaman layar QA tidak butuh lebih. */
+const MAX_FPS = "30";
 /** CRF 28 (batas atas rentang 24–28): masih jelas untuk evidence, ukuran paling kecil. */
 const CRF = "28";
 /**
@@ -47,14 +55,21 @@ const PRESET = "ultrafast";
 const AUDIO_BITRATE = "96k";
 
 /**
- * Ambang pass-through (15 MB). Di bawah ambang ini file MP4/H.264 dianggap
- * sudah "cukup kecil" dan dilewati. Angka ini sejalan dengan batas upload
- * bukti QA sehari-hari (video 10–20 detik hasil rekaman HP).
+ * Ambang pass-through (20 MB). Di bawah ambang ini file yang containernya sudah
+ * ramah-browser (MP4/H.264 atau WebM) dilewati tanpa encode ulang sama sekali.
  */
-const PASSTHROUGH_MAX_BYTES = 15 * 1024 * 1024;
+const PASSTHROUGH_MAX_BYTES = 20 * 1024 * 1024;
 
 /** Fourcc sample entry H.264 di dalam `stsd`. */
 const H264_CODECS = ["avc1", "avc3"];
+
+/**
+ * Magic EBML — 4 byte pertama setiap WebM/Matroska. Container WebM hanya boleh
+ * berisi VP8/VP9/AV1 + Opus/Vorbis, semuanya bisa diputar browser, jadi file
+ * WebM tidak perlu di-encode ulang. Ini format rekaman layar QA yang paling
+ * sering masuk, jadi jalur inilah yang paling banyak menghemat waktu.
+ */
+const EBML_MAGIC = [0x1a, 0x45, 0xdf, 0xa3];
 
 /**
  * Core ffmpeg.wasm dari CDN (di-cache `max-age=31536000` oleh browser). Salah
@@ -64,17 +79,10 @@ const H264_CODECS = ["avc1", "avc3"];
 const CORE_BASE = "https://unpkg.com/@ffmpeg/core@0.12.10/dist/umd";
 
 /**
- * Ekspresi scale utama. `force_divisible_by=2` penting: H.264 + `yuv420p`
- * menolak dimensi ganjil, sedangkan pembulatan aspect ratio bisa
- * menghasilkannya (mis. 719 px).
+ * Ekspresi scale: tinggi dibatasi 720 px, lebar mengikuti (`-2` = otomatis dan
+ * selalu genap — H.264 + `yuv420p` menolak dimensi ganjil).
  */
-const SCALE_BOX = `scale=w='min(${MAX_W},iw)':h='min(${MAX_H},ih)':force_original_aspect_ratio=decrease:force_divisible_by=2`;
-
-/**
- * Cadangan: ekspresi yang sama TANPA `force_divisible_by`, dipakai kalau build
- * core menolak opsi tersebut. Hasilnya sudah diuji identik dengan yang utama.
- */
-const SCALE_FALLBACK = `scale=w='min(${MAX_W},iw)':h='min(${MAX_H},ih)':force_original_aspect_ratio=decrease`;
+const SCALE_BOX = `scale=w=-2:h='min(${MAX_OUTPUT_HEIGHT},ih)'`;
 
 export type VideoCompressResult = {
   /** File yang siap diunggah — hasil kompresi, atau file ASLI bila dilewati. */
@@ -136,6 +144,14 @@ function ffmpegArgs(input: string, scale: string): string[] {
     PRESET,
     "-crf",
     CRF,
+    // Batasi fps keluaran: rekaman layar 60 fps jadi separuh frame = separuh kerja.
+    "-r",
+    MAX_FPS,
+    // Minta ffmpeg memakai seluruh core yang terlihat. Di build WASM
+    // single-thread ini thread-nya tetap 1 (lihat catatan modul), jadi flag ini
+    // tidak memperlambat dan tidak error — hanya belum memberi apa-apa di sini.
+    "-threads",
+    "0",
     "-pix_fmt",
     "yuv420p",
     "-vf",
@@ -217,6 +233,17 @@ export function probeMp4VideoCodec(bytes: Uint8Array): string | null {
   return null;
 }
 
+/**
+ * File WebM/Matroska? Dicek dari magic EBML-nya, bukan dari ekstensi atau MIME
+ * (keduanya mudah salah dan bisa dipalsukan). Container WebM tidak mungkin
+ * berisi codec yang tak bisa diputar browser, jadi cukup container-nya saja.
+ *
+ * Diekspor supaya bisa diuji langsung.
+ */
+export function isWebmContainer(bytes: Uint8Array): boolean {
+  return EBML_MAGIC.every((b, i) => bytes[i] === b);
+}
+
 /* ------------------------------------------------------------------ *
  * Antrean satu-lintasan                                               *
  * ------------------------------------------------------------------ */
@@ -241,7 +268,7 @@ function enqueue<T>(job: () => Promise<T>): Promise<T> {
  * Pipeline                                                            *
  * ------------------------------------------------------------------ */
 
-/** Isi ffmpeg: tulis input, encode (dengan filter cadangan), baca hasil. */
+/** Isi ffmpeg: tulis input, encode, baca hasil, bersihkan MEMFS. */
 async function encodeVideo(
   file: File,
   bytes: Uint8Array,
@@ -262,28 +289,18 @@ async function encodeVideo(
   };
   ffmpeg.on("progress", handleProgress);
 
-  /** Satu percobaan encoding; `false` berarti gagal (exception dari core). */
-  const run = async (scale: string): Promise<boolean> => {
-    try {
-      await ffmpeg.exec(ffmpegArgs(input, scale));
-      return true;
-    } catch (error) {
-      console.warn("ffmpeg gagal dengan filter", scale, error);
-      return false;
-    }
-  };
-
   try {
     const tEncode = performance.now();
-    let ok = await run(SCALE_BOX);
-    if (!ok) {
-      // Bersihkan output parsial sebelum mencoba dengan filter cadangan.
-      await ffmpeg.deleteFile("output.mp4").catch(() => {});
-      ok = await run(SCALE_FALLBACK);
+    let ok = true;
+    try {
+      await ffmpeg.exec(ffmpegArgs(input, SCALE_BOX));
+    } catch (error) {
+      ok = false;
+      console.warn("ffmpeg gagal:", error);
     }
     const encodeMs = Math.round(performance.now() - tEncode);
     if (!ok) {
-      // Dua-duanya gagal: bebaskan MEMFS lalu unggah file aslinya.
+      // Encode gagal: bebaskan MEMFS lalu unggah file aslinya.
       await ffmpeg.deleteFile(input).catch(() => {});
       await ffmpeg.deleteFile("output.mp4").catch(() => {});
       console.warn(`[video] encode gagal setelah ${encodeMs} ms — file asli diunggah`);
@@ -342,29 +359,40 @@ export async function compressVideoFile(
   const asIs: VideoCompressResult = { file, compressed: false };
   if (!file.type.startsWith("video/")) return asIs;
 
-  // Diagnostik durasi total pipeline (dipakai untuk membandingkan sebelum/
-  // sesudah optimasi: pass-through vs encode).
+  // Diagnostik performa: stempel waktu start & end (ISO) + total detik, supaya
+  // sebelum vs sesudah optimasi bisa dibandingkan langsung dari console.
+  const startedAt = new Date();
   console.time("video-compression");
   console.info(
-    `[video] mulai: ${file.name} — ${(file.size / 1048576).toFixed(1)} MB (${file.type || "tipe tak dikenal"})`
+    `[video] MULAI ${startedAt.toISOString()} — ${file.name}, ${(file.size / 1048576).toFixed(
+      1
+    )} MB (${file.type || "tipe tak dikenal"})`
   );
 
   try {
     // Dibaca sekali: byte ini dipakai probe container DAN (kalau perlu) MEMFS.
     const bytes = new Uint8Array(await file.arrayBuffer());
 
-    // 3) Pass-through: MP4/H.264 yang sudah kecil tidak di-encode sama sekali.
+    // 3) Pass-through: container yang sudah ramah-browser dan kecil dilewati.
     if (file.size < PASSTHROUGH_MAX_BYTES) {
       const codec = probeMp4VideoCodec(bytes);
-      if (codec && H264_CODECS.includes(codec)) {
+      const alreadyWebFriendly =
+        codec && H264_CODECS.includes(codec)
+          ? `MP4/${codec}`
+          : isWebmContainer(bytes)
+            ? "WebM"
+            : null;
+      if (alreadyWebFriendly) {
         console.info(
-          `[video] DILEWATI (pass-through): container MP4/${codec} dan ${(
-            file.size / 1048576
-          ).toFixed(1)} MB < ${PASSTHROUGH_MAX_BYTES / 1048576} MB`
+          `[video] DILEWATI (pass-through): ${alreadyWebFriendly}, ${(file.size / 1048576).toFixed(
+            1
+          )} MB < ${PASSTHROUGH_MAX_BYTES / 1048576} MB`
         );
         return asIs;
       }
-      console.info(`[video] perlu di-encode: codec terdeteksi ${codec ?? "tidak diketahui"}`);
+      console.info(
+        `[video] perlu di-encode: codec ${codec ?? "tidak terdeteksi"}, container bukan WebM`
+      );
     } else {
       console.info(
         `[video] perlu di-encode: ${(file.size / 1048576).toFixed(1)} MB ≥ ambang pass-through ${
@@ -379,6 +407,13 @@ export async function compressVideoFile(
     console.warn("Kompresi video dilewati (ffmpeg.wasm tidak siap):", error);
     return asIs;
   } finally {
+    const endedAt = new Date();
     console.timeEnd("video-compression");
+    console.info(
+      `[video] SELESAI ${endedAt.toISOString()} — total ${(
+        (endedAt.getTime() - startedAt.getTime()) /
+        1000
+      ).toFixed(2)} s`
+    );
   }
 }

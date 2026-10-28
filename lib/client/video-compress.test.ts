@@ -96,6 +96,13 @@ function videoFile(bytes: Uint8Array, name = "bukti.mp4"): File {
   return new File([bytes as Uint8Array<ArrayBuffer>], name, { type: "video/mp4" });
 }
 
+/** File WebM sintetis: magic EBML + padding (isi stream tidak dibaca probe). */
+function webm(padBytes: number): Uint8Array {
+  const out = new Uint8Array(4 + padBytes);
+  out.set([0x1a, 0x45, 0xdf, 0xa3]);
+  return out;
+}
+
 async function loadModule() {
   return await import("./video-compress");
 }
@@ -131,6 +138,13 @@ describe("probeMp4VideoCodec", () => {
     expect(probeMp4VideoCodec(mp4("av01", 64))).toBe("av01");
   });
 
+  it("mengenali container WebM dari magic EBML-nya", async () => {
+    const { isWebmContainer } = await loadModule();
+    expect(isWebmContainer(webm(32))).toBe(true);
+    expect(isWebmContainer(mp4("avc1", 32))).toBe(false);
+    expect(isWebmContainer(new Uint8Array(4))).toBe(false);
+  });
+
   it("mengembalikan null untuk non-MP4 / data rusak / terlalu pendek", async () => {
     const { probeMp4VideoCodec } = await loadModule();
     expect(
@@ -154,7 +168,20 @@ describe("compressVideoFile", () => {
     expect(h.calls).toEqual([]); // core tidak pernah dimuat, tidak ada exec
   });
 
-  it("file non-H.264 tetap di-encode dengan preset/CRF/scale yang dioptimalkan", async () => {
+  it("PASS-THROUGH: WebM di bawah ambang juga dilewati (format rekaman layar QA)", async () => {
+    const { compressVideoFile } = await loadModule();
+    const file = new File([webm(2_000_000) as Uint8Array<ArrayBuffer>], "screencast.webm", {
+      type: "video/webm",
+    });
+
+    const result = await compressVideoFile(file);
+
+    expect(result.compressed).toBe(false);
+    expect(result.file).toBe(file);
+    expect(h.calls).toEqual([]);
+  });
+
+  it("file non-H.264 di-encode dengan preset/CRF/fps/scale yang dioptimalkan", async () => {
     const { compressVideoFile } = await loadModule();
     const file = videoFile(mp4("hvc1", 1_000_000)); // input jauh lebih besar dari output stub
 
@@ -162,15 +189,25 @@ describe("compressVideoFile", () => {
 
     expect(result.compressed).toBe(true);
     expect(result.file.name).toBe("bukti.mp4");
-    expect(h.lastExec).toContain("-preset");
-    expect(h.lastExec[h.lastExec.indexOf("-preset") + 1]).toBe("ultrafast");
-    expect(h.lastExec[h.lastExec.indexOf("-crf") + 1]).toBe("28");
-    const vf = h.lastExec[h.lastExec.indexOf("-vf") + 1];
-    expect(vf).toContain("min(1280,iw)");
-    expect(vf).toContain("force_divisible_by=2");
+    const argOf = (flag: string) => h.lastExec[h.lastExec.indexOf(flag) + 1];
+    expect(argOf("-preset")).toBe("ultrafast");
+    expect(argOf("-crf")).toBe("28");
+    expect(argOf("-r")).toBe("30");
+    expect(argOf("-threads")).toBe("0");
+    expect(argOf("-vf")).toBe("scale=w=-2:h='min(720,ih)'");
     // MEMFS dibersihkan setelah selesai.
     expect(h.calls).toContain("delete:input.mp4");
     expect(h.calls).toContain("delete:output.mp4");
+  });
+
+  it("file ≥ 20 MB tetap di-encode walau sudah MP4/H.264", async () => {
+    const { compressVideoFile } = await loadModule();
+    const file = videoFile(mp4("avc1", 21 * 1024 * 1024));
+
+    const result = await compressVideoFile(file);
+
+    expect(result.compressed).toBe(true); // output stub 3 byte < input
+    expect(h.calls).toContain("exec");
   });
 
   it("dua kompresi bersamaan dijalankan BERURUTAN (tidak saling menimpa MEMFS)", async () => {

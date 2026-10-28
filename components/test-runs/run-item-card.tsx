@@ -28,20 +28,25 @@ export function RunItemCard({
   const showActualResult =
     (item.status === "FAIL" || item.status === "BLOCKED") && !!item.actualResult;
   /** Tautan "Buat Bug" muncul saat FAIL, belum ada bug, run masih aktif. */
-  const canCreateBug = attachedBugs.length === 0 && item.status === "FAIL" && !isCompleted && canEdit;
+  const canCreateBug =
+    attachedBugs.length === 0 && item.status === "FAIL" && !isCompleted && canEdit;
 
-  /** Link bug polos (ikon + ID) — tanpa underline, hover menggelap. */
+  /**
+   * Satu item bug: ikon + ID polos (tanpa pill/background), monospace 500 merah.
+   * Underline-nya saat hover ada di `.tc-bug-link` (globals.css) karena itu
+   * pseudo-class yang tidak bisa dinyatakan inline.
+   */
   const bugLinkStyle: React.CSSProperties = {
     display: "inline-flex",
     alignItems: "center",
-    gap: 6,
+    gap: 4,
     padding: 0,
     border: "none",
     background: "transparent",
     color: "#B91C1C",
     fontFamily: FONT_MONO,
-    fontSize: 12,
-    fontWeight: 600,
+    fontSize: 13,
+    fontWeight: 500,
     cursor: "pointer",
     whiteSpace: "nowrap",
   };
@@ -52,6 +57,7 @@ export function RunItemCard({
         <button
           key={b.id}
           type="button"
+          className="tc-bug-link"
           title="Buka detail bug"
           aria-label={`Buka bug ${entityCode("BUG", b.id)}`}
           onClick={(e) => {
@@ -59,8 +65,6 @@ export function RunItemCard({
             onOpenBugDetail(b.id);
           }}
           style={bugLinkStyle}
-          onMouseEnter={(e) => (e.currentTarget.style.color = "#7F1D1D")}
-          onMouseLeave={(e) => (e.currentTarget.style.color = "#B91C1C")}
         >
           <Bug size={14} aria-hidden="true" /> {entityCode("BUG", b.id)}
         </button>
@@ -68,49 +72,55 @@ export function RunItemCard({
       {canCreateBug && (
         <button
           type="button"
+          className="tc-bug-link"
           title="Buat bug dari hasil eksekusi ini"
           onClick={(e) => {
             e.stopPropagation();
             onOpenBug();
           }}
           style={bugLinkStyle}
-          onMouseEnter={(e) => (e.currentTarget.style.color = "#7F1D1D")}
-          onMouseLeave={(e) => (e.currentTarget.style.color = "#B91C1C")}
         >
           <Bug size={14} aria-hidden="true" /> Buat Bug
         </button>
       )}
     </>
   );
+
+  /** Baris meta hanya dirender kalau ada bug, attachment, atau aksi Buat Bug. */
+  const hasMeta = attachedBugs.length > 0 || evidenceCount > 0 || canCreateBug;
+
   return (
     /* Indent 58px = sejajar awal teks nama sub-folder (30 + chevron 16 + gap 12). */
     <div style={{ paddingLeft: 58 }}>
       <div
         onClick={onOpenDetail}
-        onMouseEnter={(e) => (e.currentTarget.style.background = "#F8FAFC")}
+        onMouseEnter={(e) => (e.currentTarget.style.background = "#FAFAFB")}
         onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
         style={{
-          // Border bawah ikut mulai dari posisi indent, bukan dari tepi card.
+          // Bug & attachment adalah BAGIAN dari baris ini, jadi garis pemisah
+          // selalu di bawah satu kesatuan baris — dan ikut mulai dari indent.
+          padding: "14px 8px",
           borderBottom: "1px solid #EEF0F3",
           background: "transparent",
           cursor: "pointer",
           transition: "background-color 150ms ease",
         }}
       >
-        {/* Grid: 170px (ID) | 1fr (judul) | 120px (status) */}
+        {/* Grid: 210px (ID) | 1fr (konten) | 120px (status) */}
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "170px minmax(0, 1fr) 120px",
-            alignItems: "center",
+            gridTemplateColumns: "210px minmax(0, 1fr) 120px",
+            alignItems: "start",
             gap: 16,
-            minHeight: 52,
           }}
         >
           <span
+            title={item.testCase?.tcId ?? undefined}
             style={{
               fontFamily: FONT_MONO,
               fontSize: 13,
+              lineHeight: "22px",
               color: "#64748B",
               whiteSpace: "nowrap",
               overflow: "hidden",
@@ -120,12 +130,13 @@ export function RunItemCard({
             {item.testCase?.tcId ?? "—"}
           </span>
 
-          {/* Judul + penanda lampiran tinggal di satu sel agar grid tetap 3 kolom. */}
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+          {/* Konten: judul di baris 1, meta bug/attachment di baris 2. */}
+          <div style={{ minWidth: 0, display: "flex", flexDirection: "column" }}>
             <span
               title={item.titleSnapshot}
               style={{
                 fontSize: 15,
+                lineHeight: "22px",
                 color: "#0F172A",
                 overflow: "hidden",
                 textOverflow: "ellipsis",
@@ -135,34 +146,34 @@ export function RunItemCard({
               {item.titleSnapshot}
             </span>
 
-            {evidenceCount > 0 && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onOpenDetail();
-                }}
-                title={`${evidenceCount} lampiran`}
-                aria-label={`${evidenceCount} lampiran`}
+            {hasMeta && (
+              <div
                 style={{
-                  display: "inline-flex",
+                  display: "flex",
+                  flexWrap: "wrap",
                   alignItems: "center",
-                  gap: 3,
-                  padding: 0,
-                  border: "none",
-                  background: "transparent",
-                  color: "#64748B",
-                  fontSize: 12,
-                  fontWeight: 500,
-                  cursor: "pointer",
-                  flexShrink: 0,
+                  gap: 16,
+                  marginTop: 6,
+                  fontSize: 13,
                 }}
               >
-                <Paperclip size={14} aria-hidden="true" />
-                {evidenceCount}
-              </button>
+                {renderBugLinks()}
+                {evidenceCount > 0 && (
+                  <span
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 4,
+                      color: "#64748B",
+                    }}
+                  >
+                    <Paperclip size={14} aria-hidden="true" />
+                    {evidenceCount} {evidenceCount === 1 ? "attachment" : "attachments"}
+                  </span>
+                )}
+              </div>
             )}
-          </span>
+          </div>
 
           <span
             style={{
@@ -172,52 +183,48 @@ export function RunItemCard({
               gap: 7,
               fontSize: 14,
               fontWeight: 600,
+              lineHeight: "22px",
               color: st.text,
               whiteSpace: "nowrap",
             }}
           >
             <span
               aria-hidden="true"
-              style={{ width: 8, height: 8, borderRadius: "50%", background: st.dot, flexShrink: 0 }}
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: "50%",
+                background: st.dot,
+                flexShrink: 0,
+              }}
             />
             {st.label}
           </span>
         </div>
 
-      {/* Box Actual Result — hanya saat Failed/Blocked; tepi kiri rata dengan judul. */}
-      {showActualResult && (
-        <div
-          style={{
-            margin: "2px 0 12px 186px",
-            padding: "10px 14px",
-            background: "#FFFBFB",
-            border: "1px solid #FBE1E1",
-            borderRadius: 10,
-            display: "flex",
-            alignItems: "flex-start",
-            gap: 16,
-          }}
-        >
-          <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
+        {/* Box Actual Result — hanya saat Failed/Blocked; tepi kiri rata dengan
+            kolom judul (210px + gap 16). Link bug-nya kini di baris meta. */}
+        {showActualResult && (
+          <div
+            style={{
+              margin: "8px 0 0 226px",
+              padding: "10px 14px",
+              background: "#FFFBFB",
+              border: "1px solid #FBE1E1",
+              borderRadius: 10,
+              display: "flex",
+              flexDirection: "column",
+              gap: 3,
+            }}
+          >
             <span style={{ fontSize: 12, fontWeight: 600, color: "#991B1B" }}>Actual Result</span>
-            <span style={{ fontSize: 13, lineHeight: 1.55, color: "#334155", whiteSpace: "pre-wrap" }}>
+            <span
+              style={{ fontSize: 13, lineHeight: 1.55, color: "#334155", whiteSpace: "pre-wrap" }}
+            >
               {item.actualResult}
             </span>
           </div>
-          {(attachedBugs.length > 0 || canCreateBug) && (
-            <div style={{ flexShrink: 0, display: "flex", flexDirection: "column", gap: 6 }}>
-              {renderBugLinks()}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Kalau box Actual Result tidak tampil, link bug tetap muncul. */}
-      {!showActualResult && (attachedBugs.length > 0 || canCreateBug) && (
-        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginTop: 8 }}>
-          {renderBugLinks()}
-        </div>
-      )}
+        )}
       </div>
     </div>
   );

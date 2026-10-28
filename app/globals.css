@@ -310,6 +310,13 @@ button,
   outline: 2px solid #f59e0b;
 }
 
+/* ---------------- Baris test case di daftar run ----------------------------
+   Link bug pada baris meta: polos (tanpa pill), underline saat hover. Hover
+   tidak bisa dinyatakan sebagai inline style, jadi aturannya di sini. */
+.tc-bug-link:hover {
+  text-decoration: underline;
+}
+
 /* Spinner modal progress Import Test Case — hormati prefers-reduced-motion. */
 .import-spinner {
   animation: spin 0.9s linear infinite;

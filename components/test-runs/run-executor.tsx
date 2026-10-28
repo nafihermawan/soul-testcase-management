@@ -419,8 +419,15 @@ export function RunExecutor({
         background: "#fff",
         border: "1px solid #E5E7EB",
         borderRadius: 16,
-        // Tinggi card mengikuti isi — tidak ada lagi `flex: 1` + area scroll
-        // sendiri, jadi tidak ada ruang kosong besar di bawah daftar suite.
+        /**
+         * Card TIDAK boleh menyusut saat suite di-collapse atau isinya sedikit.
+         * Diberi lantai setinggi viewport dikurangi padding atas+bawah halaman
+         * (24 + 24) — menggantikan aturan lama "tinggi mengikuti isi". Kalau
+         * isinya lebih panjang dari layar, `min-height` tidak membatasi, jadi
+         * card tetap memanjang mengikuti konten.
+         */
+        boxSizing: "border-box",
+        minHeight: "calc(100vh - 48px)",
         padding: "28px 32px 20px",
       }}
     >

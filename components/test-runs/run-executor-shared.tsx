@@ -92,10 +92,11 @@ export const statusPillStyle = (badge: {
 
 /** Warna status pada BARIS test case: dot + teks (tanpa pill). */
 export const ROW_STATUS: Record<RunResultItem["status"], { label: string; dot: string; text: string }> = {
-  PASS: { label: "Passed", dot: "#15803D", text: "#15803D" },
+  PASS: { label: "Passed", dot: "#16A34A", text: "#15803D" },
   FAIL: { label: "Failed", dot: "#DC2626", text: "#B91C1C" },
+  // Blocked tidak disebut di spesifikasi baris TC; warna lamanya dipertahankan.
   BLOCKED: { label: "Blocked", dot: "#D97706", text: "#B45309" },
-  SKIPPED: { label: "Skipped", dot: "#7E22CE", text: "#7E22CE" },
+  SKIPPED: { label: "Skipped", dot: "#A855F7", text: "#7E22CE" },
   NOT_RUN: { label: "Untested", dot: "#CBD5E1", text: "#64748B" },
 };
 
@@ -150,22 +151,25 @@ export const BTN_PRIMARY: React.CSSProperties = {
   whiteSpace: "nowrap",
 };
 
-/** Kotak 8×8 penanda status pada ringkasan header. */
+/** Kotak 10×10 (radius 3) penanda status pada ringkasan header. */
 export function Sq({ color }: { color: string }) {
   return (
     <span
       aria-hidden="true"
-      style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: color, flexShrink: 0 }}
+      style={{ display: "inline-block", width: 10, height: 10, borderRadius: 3, background: color, flexShrink: 0 }}
     />
   );
 }
 
-/** Pemisah vertikal 1×14 pada baris ringkasan. */
-export function VSep() {
+/**
+ * Pemisah vertikal 1px #E2E8F0. Tingginya bisa diatur — 14px untuk baris
+ * ringkasan, 16px untuk header suite, 24px untuk baris judul run.
+ */
+export function VSep({ height = 14 }: { height?: number }) {
   return (
     <span
       aria-hidden="true"
-      style={{ display: "inline-block", width: 1, height: 14, background: "#E2E8F0", flexShrink: 0 }}
+      style={{ display: "inline-block", width: 1, height, background: "#E2E8F0", flexShrink: 0 }}
     />
   );
 }

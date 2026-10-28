@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRefresh } from "@/lib/client/refresh-context";
-import { Check, ChevronDown, Cpu, Download, ExternalLink, FolderOpen, Monitor, Pencil, Server, Smartphone } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Download, ExternalLink, Pencil } from "lucide-react";
 import { completeRun, completeRunWithSkip, deleteRun, updateRunResult } from "@/lib/actions/test-runs";
 import { createBug, updateBug, updateBugStatus } from "@/lib/actions/automation-bugs";
 import { Spinner, Toast, useToast } from "@/components/ui/feedback";
@@ -255,6 +255,7 @@ export function RunExecutor({
 
   const passed = items.filter((i) => i.status === "PASS").length;
   const failed = items.filter((i) => i.status === "FAIL").length;
+  const skipped = items.filter((i) => i.status === "SKIPPED").length;
   const untested = items.filter((i) => i.status === "NOT_RUN").length;
 
   // Run ID deterministik dari runId: sp{02}-YYYYMMDD-XXXX
@@ -281,20 +282,6 @@ export function RunExecutor({
           .filter(Boolean)
           .join(", ")
       : "—";
-
-  /**
-   * Ikon per platform — label platform tidak boleh memakai ikon yang salah
-   * (ikon HP untuk suite Hardware, dsb). Nilai CSV multi-platform (mis.
-   * "WEB,MOBILE") memakai ikon platform PERTAMANYA.
-   */
-  const PLATFORM_ICONS: Record<string, typeof Smartphone> = {
-    WEB: Monitor,
-    MOBILE: Smartphone,
-    HARDWARE: Cpu,
-    API: Server,
-  };
-  const platformIcon = (v: string | null | undefined): typeof Smartphone =>
-    PLATFORM_ICONS[(v ?? "").split(",")[0].trim().toUpperCase()] ?? Smartphone;
 
   // Stats per project
   const projectStats = groups.map((p) => {
@@ -394,13 +381,11 @@ export function RunExecutor({
         fontFamily: FONT_SANS,
         color: "#0F172A",
         background: "#fff",
-        border: "1px solid #E3E7EE",
-        borderRadius: 18,
-        overflow: "hidden",
-        flex: 1,
-        minHeight: 0,
-        display: "flex",
-        flexDirection: "column",
+        border: "1px solid #E5E7EB",
+        borderRadius: 16,
+        // Tinggi card mengikuti isi — tidak ada lagi `flex: 1` + area scroll
+        // sendiri, jadi tidak ada ruang kosong besar di bawah daftar suite.
+        padding: "28px 32px 20px",
       }}
     >
       {/* Modal Edit Run — setelah simpan, data run di halaman ini disegarkan
@@ -420,8 +405,8 @@ export function RunExecutor({
         />
       )}
 
-      {/* Header — padding 22px, baris demi baris gap 16px. */}
-      <div style={{ padding: 22, display: "flex", flexDirection: "column", gap: 16, flexShrink: 0 }}>
+      {/* Header — jarak antar baris 16px; padding card dipegang root. */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         {/* Row 1: judul | aksi. Tata letaknya di `.run-header-row` (menumpuk di
             layar sempit, satu baris dari 640px). Judul memakai `flex: 1` +
             `minWidth: 0` supaya judul panjang MEMBUNGKUS di sisinya sendiri dan
@@ -432,8 +417,8 @@ export function RunExecutor({
             style={{
               flex: "1 1 0",
               minWidth: 0,
-              fontSize: 24,
-              fontWeight: 600,
+              fontSize: 26,
+              fontWeight: 700,
               letterSpacing: "-0.02em",
               color: "#0F172A",
               margin: 0,
@@ -485,7 +470,7 @@ export function RunExecutor({
                     display: "inline-flex",
                     alignItems: "center",
                     gap: 7,
-                    fontSize: 13,
+                    fontSize: 14,
                     fontWeight: 600,
                     color: "#15803D",
                     whiteSpace: "nowrap",
@@ -493,14 +478,11 @@ export function RunExecutor({
                 >
                   <span
                     aria-hidden="true"
-                    style={{ width: 7, height: 7, borderRadius: "50%", background: "#15803D", flexShrink: 0 }}
+                    style={{ width: 8, height: 8, borderRadius: "50%", background: "#16A34A", flexShrink: 0 }}
                   />
                   Run Completed
                 </span>
-                <span
-                  aria-hidden="true"
-                  style={{ width: 1, height: 24, background: "#E2E8F0", flexShrink: 0 }}
-                />
+                <VSep height={24} />
                 {/* Tombol aksi TUNGGAL: sekali klik langsung generate & unduh PDF
                     laporan (tanpa dropdown / modal pilihan format). Tampilan
                     dasar, hover, dan focus-visible ada di `.export-report-btn`
@@ -534,21 +516,37 @@ export function RunExecutor({
           </div>
         </div>
 
-        {/* Row 2: ringkasan hasil | toggle Detail */}
-        <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+        {/* Row 2: ringkasan hasil | toggle Detail. Border-bottom baris inilah
+            yang memisahkan ringkasan dari daftar suite (divider inset lama
+            dihapus karena jadi ganda). */}
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 12,
+            paddingBottom: 20,
+            borderBottom: "1px solid #E5E7EB",
+          }}
+        >
           <div style={{ display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap", fontSize: 13, color: "#475569" }}>
             <span>
               Total <MNum color="#0F172A">{items.length}</MNum> TC
             </span>
             <VSep />
             <span style={{ display: "inline-flex", alignItems: "center", gap: 7 }}>
-              <Sq color="#15803D" /> Passed <MNum color="#15803D">{passed}</MNum>
+              <Sq color="#16A34A" /> Passed <MNum color="#15803D">{passed}</MNum>
             </span>
             <span style={{ display: "inline-flex", alignItems: "center", gap: 7 }}>
               <Sq color="#DC2626" /> Failed <MNum color="#B91C1C">{failed}</MNum>
             </span>
+            {/* Skipped ikut tampil supaya jumlah seluruh status selalu = Total. */}
             <span style={{ display: "inline-flex", alignItems: "center", gap: 7 }}>
-              <Sq color="#CBD5E1" /> Untested <MNum color="#334155">{untested}</MNum>
+              <Sq color="#A855F7" /> Skipped <MNum color="#7E22CE">{skipped}</MNum>
+            </span>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 7 }}>
+              <Sq color="#CBD5E1" /> Untested <MNum color="#0F172A">{untested}</MNum>
             </span>
           </div>
 
@@ -732,21 +730,10 @@ export function RunExecutor({
       </div>
     </div>
 
-      {/* Inset divider (bukan full width). */}
-      <div style={{ margin: "0 22px", height: 1, background: "#E8ECF1", flexShrink: 0 }} />
-
-      {/* Daftar suite — mengisi sisa tinggi card & scroll sendiri. */}
-      <div
-        style={{
-          flex: 1,
-          minHeight: 0,
-          overflowY: "auto",
-          display: "flex",
-          flexDirection: "column",
-          gap: 14,
-          padding: "20px 22px 24px",
-        }}
-      >
+      {/* Daftar suite — TANPA card: tiap suite satu section ber-border-bottom,
+          dan tingginya mengikuti isi. Scroll ditangani area konten aplikasi
+          (`.app-main`), jadi tidak ada lagi area scroll di dalam card. */}
+      <div>
       {suiteStats.length === 0 && (
         <div style={{ padding: "1.5rem", textAlign: "center", color: "var(--text-muted)", fontSize: "0.9rem" }}>
           Belum ada test case dalam run ini.
@@ -754,61 +741,40 @@ export function RunExecutor({
       )}
       {suiteStats.map((s) => {
         const open = openSuites[s.key] ?? true;
-        const PlatformIcon = platformIcon(s.platform);
         return (
-          <div
-            key={s.key}
-            style={{
-              border: "1px solid #E3E7EE",
-              borderRadius: 14,
-              overflow: "hidden",
-              // 8px ruang kosong di dasar box.
-              paddingBottom: 8,
-            }}
-          >
-            {/* Suite header */}
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                gap: 12,
-                padding: "8px 12px 8px 10px",
-                background: "#F8FAFC",
-                borderBottom: `1px solid ${open ? "#EEF1F5" : "transparent"}`,
-                transition: "border-color 300ms ease-in-out",
-              }}
+          /* Satu suite = satu section ber-border-bottom (tanpa card/abu/radius). */
+          <div key={s.key} style={{ borderBottom: "1px solid #E5E7EB" }}>
+            {/* Header suite: SELURUH baris adalah tombol expand/collapse.
+                Hover & focus-visible-nya ada di `.suite-row-btn` (globals.css). */}
+            <button
+              type="button"
+              className="btn-radius-10 suite-row-btn"
+              onClick={() => setOpenSuites((prev) => ({ ...prev, [s.key]: !open }))}
+              aria-expanded={open}
             >
-              <button
-                type="button"
-                onClick={() => setOpenSuites((prev) => ({ ...prev, [s.key]: !open }))}
-                aria-expanded={open}
+              <span
                 style={{
                   display: "inline-flex",
                   alignItems: "center",
-                  gap: 10,
-                  minHeight: 44,
-                  padding: 0,
-                  border: "none",
-                  background: "transparent",
-                  cursor: "pointer",
-                  textAlign: "left",
+                  gap: 12,
                   minWidth: 0,
+                  overflow: "hidden",
                 }}
               >
-                <ChevronDown
-                  size={16}
+                <ChevronRight
+                  size={18}
                   aria-hidden="true"
                   style={{
-                    color: "#64748B",
+                    color: "#475569",
                     flexShrink: 0,
-                    transform: open ? "rotate(180deg)" : "rotate(0deg)",
-                    transition: "transform 300ms ease-in-out",
+                    // Tertutup: panah ke kanan. Terbuka: berputar 90° jadi ↓.
+                    transform: open ? "rotate(90deg)" : "rotate(0deg)",
+                    transition: "transform 150ms ease",
                   }}
                 />
                 <span
                   style={{
-                    fontSize: 16,
+                    fontSize: 18,
                     fontWeight: 600,
                     color: "#0F172A",
                     // Nama suite boleh menyusut (ellipsis) agar metadata di
@@ -820,29 +786,23 @@ export function RunExecutor({
                 >
                   {s.name}
                 </span>
-              </button>
+              </span>
 
-              {/* Kanan: metadata project → badge platform → jumlah TC.
-                  `gap: 12` = `gap-3`; VSep memisahkan tiap kelompok supaya
-                  teks project dan badge platform tidak menempel. */}
-              <div
+              {/* Kanan: Project | Platform | {n} TC, dipisah divider 1×16. */}
+              <span
                 style={{
-                  display: "flex",
+                  display: "inline-flex",
                   alignItems: "center",
-                  gap: 12,
-                  paddingRight: 6,
-                  fontSize: 13,
-                  color: "#475569",
+                  gap: 14,
                   flexShrink: 0,
+                  fontSize: 14,
+                  color: "#475569",
                 }}
               >
-                {/* Nama project — dipindah dari sisi judul suite. */}
                 <span
                   title={s.projectName}
                   style={{
                     maxWidth: 200,
-                    fontSize: 13,
-                    color: "#64748B",
                     whiteSpace: "nowrap",
                     overflow: "hidden",
                     textOverflow: "ellipsis",
@@ -850,18 +810,14 @@ export function RunExecutor({
                 >
                   {s.projectName}
                 </span>
-                <VSep />
-                {s.platform && (
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}>
-                    <PlatformIcon size={14} aria-hidden="true" /> {platformLabel(s.platform)}
-                  </span>
-                )}
-                {s.platform && <VSep />}
+                {s.platform && <VSep height={16} />}
+                {s.platform && <span style={{ whiteSpace: "nowrap" }}>{platformLabel(s.platform)}</span>}
+                <VSep height={16} />
                 <span style={{ whiteSpace: "nowrap" }}>
                   <MNum color="#0F172A">{s.items.length}</MNum> TC
                 </span>
-              </div>
-            </div>
+              </span>
+            </button>
 
             {/* Body Suite: Section-section DI DALAM suite ini. Aksen border kiri
                 + margin bertingkat menegaskan bahwa Section milik suite di
@@ -880,13 +836,14 @@ export function RunExecutor({
                     const secOpen = !collapsedSections[sec.key];
                     return (
                       <div key={sec.key}>
-                        {/* Header Section — tanpa background; toggle via tombol chevron. */}
+                        {/* Header sub-folder — indent 30px, chevron 16px + nama
+                            15px/600, padding vertikal 12px. */}
                         <div
                           style={{
                             display: "flex",
                             alignItems: "center",
-                            gap: 10,
-                            padding: "14px 18px 8px",
+                            gap: 12,
+                            padding: "12px 0 12px 30px",
                           }}
                         >
                           <button
@@ -895,8 +852,8 @@ export function RunExecutor({
                             aria-expanded={secOpen}
                             aria-label={`${sec.name} — ${sec.items.length} test case`}
                             style={{
-                              width: 24,
-                              height: 24,
+                              width: 16,
+                              height: 16,
                               display: "inline-flex",
                               alignItems: "center",
                               justifyContent: "center",
@@ -907,18 +864,17 @@ export function RunExecutor({
                               flexShrink: 0,
                             }}
                           >
-                            <ChevronDown
-                              size={14}
+                            <ChevronRight
+                              size={16}
                               aria-hidden="true"
                               style={{
-                                color: "#94A3B8",
-                                transform: secOpen ? "rotate(0deg)" : "rotate(-90deg)",
-                                transition: "transform 200ms ease-in-out",
+                                color: "#475569",
+                                transform: secOpen ? "rotate(90deg)" : "rotate(0deg)",
+                                transition: "transform 150ms ease",
                               }}
                             />
                           </button>
-                          <FolderOpen size={15} aria-hidden="true" style={{ color: "#64748B", flexShrink: 0 }} />
-                          <span style={{ fontSize: 13, fontWeight: 600, color: "#334155" }}>{sec.name}</span>
+                          <span style={{ fontSize: 15, fontWeight: 600, color: "#334155" }}>{sec.name}</span>
                         </div>
 
                         {/* Isi Section — juga pakai grid-rows agar animasinya

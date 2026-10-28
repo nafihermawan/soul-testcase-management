@@ -283,6 +283,33 @@ button,
   cursor: wait;
 }
 
+/* ---------------- Header suite di daftar run (halaman detail run) ----------------
+   Seluruh baris header suite adalah tombol, jadi hover & focus-visible-nya di
+   sini. Latar dasarnya sengaja TIDAK inline: inline style akan menang atas
+   aturan :hover di bawah dan hover-nya mati. Radius 10px dari `.btn-radius-10`. */
+.suite-row-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-height: 68px;
+  padding: 12px 12px 12px 4px;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: background 150ms ease;
+}
+
+.suite-row-btn:hover {
+  background: #fafafb;
+}
+
+.suite-row-btn:focus-visible {
+  outline: 2px solid #f59e0b;
+}
+
 /* Spinner modal progress Import Test Case — hormati prefers-reduced-motion. */
 .import-spinner {
   animation: spin 0.9s linear infinite;

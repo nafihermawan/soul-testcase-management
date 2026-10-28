@@ -83,107 +83,112 @@ export function RunItemCard({
     </>
   );
   return (
-    <div
-      onClick={onOpenDetail}
-      onMouseEnter={(e) => (e.currentTarget.style.background = "#F8FAFC")}
-      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-      style={{
-        margin: "0 18px 0 52px",
-        padding: "12px 0",
-        borderBottom: "1px solid #F1F4F8",
-        background: "transparent",
-        cursor: "pointer",
-        transition: "background-color 0.15s ease",
-      }}
-    >
-      {/* Satu baris: TC ID · judul · lampiran · status */}
-      <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-        <span
+    /* Indent 58px = sejajar awal teks nama sub-folder (30 + chevron 16 + gap 12). */
+    <div style={{ paddingLeft: 58 }}>
+      <div
+        onClick={onOpenDetail}
+        onMouseEnter={(e) => (e.currentTarget.style.background = "#F8FAFC")}
+        onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+        style={{
+          // Border bawah ikut mulai dari posisi indent, bukan dari tepi card.
+          borderBottom: "1px solid #EEF0F3",
+          background: "transparent",
+          cursor: "pointer",
+          transition: "background-color 150ms ease",
+        }}
+      >
+        {/* Grid: 170px (ID) | 1fr (judul) | 120px (status) */}
+        <div
           style={{
-            width: 118,
-            flexShrink: 0,
-            fontFamily: FONT_MONO,
-            fontSize: 12,
-            fontWeight: 500,
-            color: "#64748B",
-            whiteSpace: "nowrap",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-          }}
-        >
-          {item.testCase?.tcId ?? "—"}
-        </span>
-
-        <span
-          title={item.titleSnapshot}
-          style={{
-            flex: 1,
-            minWidth: 0,
-            fontSize: 14,
-            fontWeight: 500,
-            color: "#0F172A",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {item.titleSnapshot}
-        </span>
-
-        {evidenceCount > 0 && (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onOpenDetail();
-            }}
-            title={`${evidenceCount} lampiran`}
-            aria-label={`${evidenceCount} lampiran`}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 3,
-              padding: 0,
-              border: "none",
-              background: "transparent",
-              color: "#64748B",
-              fontSize: 12,
-              fontWeight: 500,
-              cursor: "pointer",
-              flexShrink: 0,
-            }}
-          >
-            <Paperclip size={14} aria-hidden="true" />
-            {evidenceCount}
-          </button>
-        )}
-
-        <span
-          style={{
-            width: 96,
-            flexShrink: 0,
-            display: "inline-flex",
+            display: "grid",
+            gridTemplateColumns: "170px minmax(0, 1fr) 120px",
             alignItems: "center",
-            gap: 7,
-            fontSize: 13,
-            fontWeight: 600,
-            color: st.text,
-            whiteSpace: "nowrap",
+            gap: 16,
+            minHeight: 52,
           }}
         >
           <span
-            aria-hidden="true"
-            style={{ width: 7, height: 7, borderRadius: "50%", background: st.dot, flexShrink: 0 }}
-          />
-          {st.label}
-        </span>
-      </div>
+            style={{
+              fontFamily: FONT_MONO,
+              fontSize: 13,
+              color: "#64748B",
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+            }}
+          >
+            {item.testCase?.tcId ?? "—"}
+          </span>
+
+          {/* Judul + penanda lampiran tinggal di satu sel agar grid tetap 3 kolom. */}
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+            <span
+              title={item.titleSnapshot}
+              style={{
+                fontSize: 15,
+                color: "#0F172A",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {item.titleSnapshot}
+            </span>
+
+            {evidenceCount > 0 && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenDetail();
+                }}
+                title={`${evidenceCount} lampiran`}
+                aria-label={`${evidenceCount} lampiran`}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 3,
+                  padding: 0,
+                  border: "none",
+                  background: "transparent",
+                  color: "#64748B",
+                  fontSize: 12,
+                  fontWeight: 500,
+                  cursor: "pointer",
+                  flexShrink: 0,
+                }}
+              >
+                <Paperclip size={14} aria-hidden="true" />
+                {evidenceCount}
+              </button>
+            )}
+          </span>
+
+          <span
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "flex-end",
+              gap: 7,
+              fontSize: 14,
+              fontWeight: 600,
+              color: st.text,
+              whiteSpace: "nowrap",
+            }}
+          >
+            <span
+              aria-hidden="true"
+              style={{ width: 8, height: 8, borderRadius: "50%", background: st.dot, flexShrink: 0 }}
+            />
+            {st.label}
+          </span>
+        </div>
 
       {/* Box Actual Result — hanya saat Failed/Blocked; tepi kiri rata dengan judul. */}
       {showActualResult && (
         <div
           style={{
-            margin: "10px 0 2px 132px",
+            margin: "2px 0 12px 186px",
             padding: "10px 14px",
             background: "#FFFBFB",
             border: "1px solid #FBE1E1",
@@ -213,6 +218,7 @@ export function RunItemCard({
           {renderBugLinks()}
         </div>
       )}
+      </div>
     </div>
   );
 }

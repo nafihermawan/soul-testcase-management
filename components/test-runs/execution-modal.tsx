@@ -2,11 +2,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Bug, Check, ChevronDown, Copy, Lock, Pencil, Plus, X } from "lucide-react";
-import { updateBugStatus } from "@/lib/actions/automation-bugs";
-import { Toast, useToast } from "@/components/ui/feedback";
+import { Bug, Check, ChevronDown, Copy, Lock, Pencil, Plus, Unlink, X } from "lucide-react";
+import { detachBugFromRun, updateBugStatus } from "@/lib/actions/automation-bugs";
+import { Spinner, Toast, useToast } from "@/components/ui/feedback";
 import { entityCode, formatCase } from "@/lib/format";
-import { SKIP_REASON_OPTIONS, SKIP_REASON_OTHER } from "@/lib/qa-metrics";
+import { SKIP_REASON_OPTIONS, SKIP_REASON_OTHER, isActiveBugStatus } from "@/lib/qa-metrics";
 import {
   AttachmentsPanel,
   type AttachmentsPanelHandle,
@@ -72,7 +72,8 @@ export function ExecutionModal({
   environment,
   onClose,
   onOpenBugDetail,
-  onAutoPass,
+  onResultStatusChange,
+  onBugsResolved,
   onAttachmentsChange,
   bugPatch,
   onSave,
@@ -85,10 +86,16 @@ export function ExecutionModal({
   /** Buka Bug Detail Modal dari daftar riwayat bug TC ini. */
   onOpenBugDetail?: (bugId: string) => void;
   /**
-   * Bug ditutup dari Bug History → hasil eksekusi ini otomatis PASS. Parent
-   * memakai ini untuk ikut memperbarui kartu/daftar lokalnya tanpa refetch.
+   * Status hasil eksekusi berubah karena aksi bug (mis. bug di-Close → PASS,
+   * bug dibuka lagi → FAIL). Parent memakai ini untuk memperbarui kartu/daftar
+   * lokalnya tanpa refetch.
    */
-  onAutoPass?: () => void;
+  onResultStatusChange?: (status: RunResultItem["status"]) => void;
+  /**
+   * Bug terkait diselesaikan dari dialog konflik status (ditutup atau dilepas
+   * dari run) — parent mencerminkan perubahan itu di daftar lokalnya.
+   */
+  onBugsResolved?: (bugIds: string[], choice: "close" | "detach") => void;
   /** Teruskan daftar attachment terbaru ke parent (update in-place, tanpa refetch). */
   onAttachmentsChange?: (list: AttachmentItem[]) => void;
   /** Patch bug hasil Edit Bug dari parent — dipakai untuk update `linkedBugs` in-place. */
@@ -201,6 +208,9 @@ export function ExecutionModal({
   // Toast + guard khusus modal ini (ubah status bug langsung dari Bug History).
   const { toast, showToast, dismissToast } = useToast();
   const [statusPendingId, setStatusPendingId] = useState<string | null>(null);
+  /** Dialog konflik: status diubah ke non-Fail padahal masih ada bug aktif. */
+  const [bugConflictOpen, setBugConflictOpen] = useState(false);
+  const [resolving, setResolving] = useState<"close" | "detach" | null>(null);
 
   /**
    * Ubah status bug langsung dari badge di Bug History. Daftarnya dicerminkan ke
@@ -234,15 +244,26 @@ export function ExecutionModal({
     if (isDone) {
       setStatus("PASS");
       setActualResult("");
-      onAutoPass?.();
+      onResultStatusChange?.("PASS");
+    } else {
+      /**
+       * Bug DIBUKA lagi (Open/In Progress): server mengembalikan hasil eksekusi
+       * ini ke FAIL — invariant "bug aktif menempel pada TC Failed" — jadi state
+       * modal ikut disamakan.
+       */
+      setStatus("FAIL");
+      onResultStatusChange?.("FAIL");
     }
     showToast(
       isDone
         ? `Status bug diubah ke ${BUG_STATUS_BADGE[status].label} — status eksekusi diset ke Pass.`
-        : `Status bug berhasil diubah ke ${BUG_STATUS_BADGE[status].label}.`,
+        : `Status bug diubah ke ${BUG_STATUS_BADGE[status].label} — status eksekusi dikembalikan ke Fail.`,
       "success"
     );
   };
+
+  /** Semua bug AKTIF di hasil eksekusi ini — dasar dialog konflik status. */
+  const itemActiveBugs = (item.bugs ?? []).filter((b) => isActiveBugStatus(b.status));
 
   /**
    * Bug AKTIF yang menempel ke hasil eksekusi ini (fallback: bug aktif mana pun
@@ -669,28 +690,9 @@ export function ExecutionModal({
    * aktif = bg amber-100 + teks amber-800 semibold + border amber-300,
    * non-aktif = netral (slate-500) dengan border tipis.
    */
-  const save = async () => {
-    if (saving) return; // penjaga double-click
-    setMsg(null);
-
-    // Validasi khusus mode Fail: judul bug + langkah reproduksi wajib diisi.
-    if (isFail) {
-      if (!bugTitle.trim()) {
-        setMsg("Judul bug wajib diisi.");
-        return;
-      }
-      if (!actualResult.trim()) {
-        setMsg("Actual result / langkah reproduksi wajib diisi.");
-        return;
-      }
-    }
-
-    // Blocked wajib menyertakan alasan (penjaga kedua di server action).
-    if (status === "BLOCKED" && !notes.trim()) {
-      setMsg("Alasan Blocked wajib diisi.");
-      return;
-    }
-
+  /** Kirim hasil eksekusi ke server (validasi form sudah dilakukan `save`). */
+  const performSave = async () => {
+    if (saving) return;
     setSaving(true);
 
     // Evidence (mode edit) baru diunggah/dihapus ke server saat Simpan diklik.
@@ -742,6 +744,68 @@ export function ExecutionModal({
     }
     // Sukses: tutup modal dengan animasi (data sudah dipatch ke daftar induk).
     setClosing(true);
+  };
+
+  /**
+   * Simpan hasil eksekusi. Satu penjagaan penting di depan: selama masih ada bug
+   * aktif (Open / In Progress) yang menempel ke hasil ini, statusnya WAJIB
+   * Failed — jadi mengubahnya ke Passed/Skipped/Blocked harus lebih dulu
+   * menyelesaikan bug-nya (dialog konflik di bawah). Server menegakkan aturan
+   * yang sama, jadi UI yang dilewati tetap ditolak.
+   */
+  const save = async () => {
+    if (saving || resolving) return; // penjaga double-click
+    setMsg(null);
+
+    // Validasi khusus mode Fail: judul bug + langkah reproduksi wajib diisi.
+    if (isFail) {
+      if (!bugTitle.trim()) {
+        setMsg("Judul bug wajib diisi.");
+        return;
+      }
+      if (!actualResult.trim()) {
+        setMsg("Actual result / langkah reproduksi wajib diisi.");
+        return;
+      }
+    }
+
+    // Blocked wajib menyertakan alasan (penjaga kedua di server action).
+    if (status === "BLOCKED" && !notes.trim()) {
+      setMsg("Alasan Blocked wajib diisi.");
+      return;
+    }
+
+    if (status !== "FAIL" && itemActiveBugs.length > 0) {
+      setBugConflictOpen(true);
+      return;
+    }
+
+    await performSave();
+  };
+
+  /**
+   * Selesaikan konflik status: tutup bug (dianggap sudah diperbaiki) ATAU
+   * lepaskan bug dari run (jadi General Findings), lalu lanjutkan simpan dengan
+   * status yang dipilih QA.
+   */
+  const resolveBugConflict = async (choice: "close" | "detach") => {
+    if (resolving || saving) return;
+    setResolving(choice);
+    setMsg(null);
+    const ids = itemActiveBugs.map((b) => b.id);
+    for (const id of ids) {
+      const res =
+        choice === "close" ? await updateBugStatus(id, "CLOSED") : await detachBugFromRun(id);
+      if (res?.error) {
+        setResolving(null);
+        setMsg(res.error);
+        return;
+      }
+    }
+    onBugsResolved?.(ids, choice);
+    setResolving(null);
+    setBugConflictOpen(false);
+    await performSave();
   };
 
   return createPortal(
@@ -1651,6 +1715,133 @@ export function ExecutionModal({
           </div>
         </div>
       </div>
+      {/* Dialog konflik status: selama bug masih aktif, TC wajib Failed. */}
+      {bugConflictOpen && (
+        <div
+          role="alertdialog"
+          aria-modal="true"
+          aria-label="Bug aktif pada test case ini"
+          onClick={() => {
+            if (!resolving) setBugConflictOpen(false);
+          }}
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 250,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "1rem",
+            background: "rgba(15, 23, 42, 0.45)",
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: "100%",
+              maxWidth: 440,
+              background: "#fff",
+              borderRadius: 16,
+              boxShadow: "0 24px 48px rgba(15, 23, 42, 0.25)",
+              padding: "22px 24px",
+              fontFamily: FONT_SANS,
+            }}
+          >
+            <h4 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#0F172A" }}>
+              Masih ada {itemActiveBugs.length} bug aktif
+            </h4>
+            <p style={{ margin: "6px 0 0", fontSize: 14, lineHeight: "21px", color: "#475569" }}>
+              Status test case seharusnya <strong>Failed</strong> selama bug-nya masih Open / In
+              Progress. Pilih cara menyelesaikannya sebelum status diubah:
+            </p>
+            {msg && (
+              <p role="alert" style={{ margin: "8px 0 0", fontSize: 13, color: "#B91C1C" }}>
+                {msg}
+              </p>
+            )}
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 16 }}>
+              <button
+                type="button"
+                className="btn-radius-10"
+                onClick={() => void resolveBugConflict("close")}
+                disabled={!!resolving}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 8,
+                  height: 40,
+                  borderRadius: 10,
+                  border: "1px solid #FFC348",
+                  background: "#FFC348",
+                  color: "#0F172A",
+                  fontSize: 14,
+                  fontWeight: 600,
+                  cursor: resolving ? "not-allowed" : "pointer",
+                }}
+              >
+                {resolving === "close" ? (
+                  <>
+                    <Spinner size={14} /> Menutup bug…
+                  </>
+                ) : (
+                  <>
+                    <Check size={15} aria-hidden="true" /> Tutup bug &amp; simpan
+                  </>
+                )}
+              </button>
+              <button
+                type="button"
+                className="btn-radius-10"
+                onClick={() => void resolveBugConflict("detach")}
+                disabled={!!resolving}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 8,
+                  height: 40,
+                  borderRadius: 10,
+                  border: "1px solid #FCA5A5",
+                  background: "#fff",
+                  color: "#B91C1C",
+                  fontSize: 14,
+                  fontWeight: 600,
+                  cursor: resolving ? "not-allowed" : "pointer",
+                }}
+              >
+                {resolving === "detach" ? (
+                  <>
+                    <Spinner size={14} /> Melepas bug…
+                  </>
+                ) : (
+                  <>
+                    <Unlink size={15} aria-hidden="true" /> Lepas dari run &amp; simpan
+                  </>
+                )}
+              </button>
+              <button
+                type="button"
+                className="btn-radius-10"
+                onClick={() => setBugConflictOpen(false)}
+                disabled={!!resolving}
+                style={{
+                  height: 36,
+                  border: "none",
+                  borderRadius: 10,
+                  background: "transparent",
+                  color: "#475569",
+                  fontSize: 14,
+                  fontWeight: 600,
+                  cursor: resolving ? "not-allowed" : "pointer",
+                }}
+              >
+                Batal
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Toast modal ini — dipakai untuk umpan balik ubah status bug. */}
       <Toast toast={toast} onDismiss={dismissToast} />
     </div>,

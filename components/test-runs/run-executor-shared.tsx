@@ -201,6 +201,11 @@ export type ActiveRunBug = {
   id: string;
   title: string;
   status: BugStatus;
+  /**
+   * Status HASIL EKSEKUSI tempat bug ini menempel. Dipakai untuk mendeteksi data
+   * tidak sinkron: bug aktif seharusnya selalu menempel pada hasil FAIL.
+   */
+  resultStatus: RunResultItem["status"];
   /** TC tempat bug ditemukan (konteks baris). */
   tcId: string | null;
   /** Suite/modul bug; boleh kosong kalau suite-nya sudah dihapus. */

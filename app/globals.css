@@ -317,6 +317,111 @@ button,
   text-decoration: underline;
 }
 
+/* ---------------- Modal "Complete Test Run" ----------------
+   Hover & :focus-visible tidak bisa dinyatakan sebagai inline style, jadi
+   aturannya di sini. Warna DASAR elemen interaktif ikut ditulis di sini:
+   nilai dasar inline akan menang atas aturan :hover dan mematikan hover-nya. */
+
+/* Fokus keyboard untuk SEMUA tombol & link di dalam modal ini. */
+.complete-run-modal :is(button, a):focus-visible {
+  outline: 2px solid #f59e0b;
+  outline-offset: 2px;
+}
+
+/* Tombol tutup (✕) di kanan atas header. */
+.crm-close {
+  background: transparent;
+}
+
+.crm-close:hover:not(:disabled) {
+  background: #f1f5f9;
+}
+
+/* Link ID bug (membuka detail bug) + link "Buka Bugs Tracker". */
+.crm-bug-link,
+.crm-tracker-link {
+  color: #b91c1c;
+  text-decoration: none;
+}
+
+.crm-bug-link:hover,
+.crm-tracker-link:hover {
+  color: #7f1d1d;
+  text-decoration: underline;
+}
+
+/* Aksi per bug di item CASE NOTES: link teks kecil, bukan tombol. */
+.crm-detach-link {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 500;
+  text-decoration: underline;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.crm-detach-link:hover:not(:disabled) {
+  color: #dc2626;
+}
+
+.crm-detach-link:disabled {
+  color: #94a3b8;
+  cursor: not-allowed;
+}
+
+/* Tombol "Unlink" per bug: sekunder, hover kuning sistem. */
+.crm-unlink {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  color: #0f172a;
+}
+
+.crm-unlink:hover:not(:disabled) {
+  background: #fffbeb;
+  border-color: #f59e0b;
+  color: #92400e;
+}
+
+/* "Unlink All Bugs" (juga "Ya, Lepas" di dialog konfirmasi): outline merah. */
+.crm-unlink-all {
+  background: #fff;
+  border: 1px solid #fca5a5;
+  color: #b91c1c;
+}
+
+.crm-unlink-all:hover:not(:disabled) {
+  background: #fef2f2;
+  border-color: #f87171;
+}
+
+/* Footer: "Cancel" ghost + "Complete Run" primer kuning. */
+.crm-cancel {
+  background: transparent;
+  color: #334155;
+}
+
+.crm-cancel:hover:not(:disabled) {
+  background: #f1f5f9;
+}
+
+.crm-primary {
+  background: #f59e0b;
+  color: #111827;
+}
+
+.crm-primary:hover:not(:disabled) {
+  background: #d97706;
+}
+
+.crm-primary:disabled {
+  background: #f1f5f9;
+  color: #94a3b8;
+  cursor: not-allowed;
+}
+
 /* Spinner modal progress Import Test Case — hormati prefers-reduced-motion. */
 .import-spinner {
   animation: spin 0.9s linear infinite;

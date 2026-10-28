@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { useRefresh } from "@/lib/client/refresh-context";
 import { Check, ChevronDown, ChevronRight, Download, ExternalLink, Pencil } from "lucide-react";
 import { completeRun, completeRunWithSkip, deleteRun, updateRunResult } from "@/lib/actions/test-runs";
-import { createBug, updateBug, updateBugStatus } from "@/lib/actions/automation-bugs";
+import { createBug, detachBugFromRun, updateBug, updateBugStatus } from "@/lib/actions/automation-bugs";
 import { Spinner, Toast, useToast } from "@/components/ui/feedback";
 import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
 import { runCodeOf } from "@/lib/format";
@@ -171,6 +171,41 @@ export function RunExecutor({
     if (exportState === "loading") return;
     setExportState("loading");
     startPdfDownload(runId);
+  };
+
+  /**
+   * Lepaskan bug dari run ini (dipakai modal Completion Summary).
+   *
+   * Setelah server berhasil, bug dibuang dari SEMUA cermin lokal (`items`,
+   * `groups`, modal) — `activeBugs` diturunkan dari `items`, jadi gate modal
+   * langsung ikut menyusut tanpa refetch; begitu daftarnya kosong, state modal
+   * berubah jadi sukses dan tombol Complete Run aktif.
+   */
+  const handleDetachBugs = async (bugIds: string[]) => {
+    let firstError: string | undefined;
+    let released = 0;
+    for (const bugId of bugIds) {
+      const res = await detachBugFromRun(bugId);
+      if (res.error) {
+        firstError ??= res.error;
+        continue;
+      }
+      released += 1;
+      mapResults((r) =>
+        r.bugs?.some((b) => b.id === bugId)
+          ? { ...r, bugs: r.bugs.filter((b) => b.id !== bugId) }
+          : r
+      );
+    }
+    if (released > 0) {
+      showToast(
+        released > 1
+          ? `${released} bug dilepas dari Test Run.`
+          : "Bug dilepas dari Test Run dan jadi temuan ad-hoc.",
+        "success"
+      );
+    }
+    return firstError ? { error: firstError } : {};
   };
 
   /**
@@ -343,6 +378,7 @@ export function RunExecutor({
             id: b.id,
             title: b.title,
             status: b.status,
+            resultStatus: item.status,
             tcId: item.testCase?.tcId ?? null,
             suiteName: item.testCase?.suite?.name ?? null,
           });
@@ -548,6 +584,25 @@ export function RunExecutor({
             <span style={{ display: "inline-flex", alignItems: "center", gap: 7 }}>
               <Sq color="#CBD5E1" /> Untested <MNum color="#0F172A">{untested}</MNum>
             </span>
+            {/* Indikator bug aktif yang menempel di run ini. Tanpa ini, ringkasan
+                "Failed 0" bisa bertentangan dengan bug yang masih Open. */}
+            {activeBugs.length > 0 && (
+              <>
+                <VSep />
+                <span
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    fontWeight: 600,
+                    color: "#B45309",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  <span aria-hidden="true">⚠️</span> {activeBugs.length} Active Bugs Attached
+                </span>
+              </>
+            )}
           </div>
 
           <button
@@ -933,11 +988,30 @@ export function RunExecutor({
           onClose={() => setModalItem(null)}
           onOpenBugDetail={setBugDetailId}
           /**
-           * Bug ditutup dari Bug History → aksi server membalik hasil FAIL yang
-           * tertaut jadi PASS, jadi cermin lokal (kartu + penghitung) ikut
-           * di-patch di tempat — tanpa refetch halaman.
+           * Status hasil berubah karena aksi bug: ditutup → PASS (aksi server
+           * membalik hasil FAIL yang tertaut), dibuka lagi → FAIL. Cermin lokal
+           * (kartu + penghitung) ikut di-patch di tempat, tanpa refetch halaman.
            */
-          onAutoPass={() => patchResult(modalItem.id, { status: "PASS" })}
+          onResultStatusChange={(status) => patchResult(modalItem.id, { status })}
+          /**
+           * Bug diselesaikan dari dialog konflik status (ditutup / dilepas dari
+           * run): cermin lokal ikut dipatch supaya badge bug dan hitungan
+           * "Active Bugs Attached" langsung konsisten tanpa refetch.
+           */
+          onBugsResolved={(bugIds, choice) =>
+            mapResults((r) => {
+              if (!r.bugs?.some((b) => bugIds.includes(b.id))) return r;
+              return {
+                ...r,
+                bugs:
+                  choice === "detach"
+                    ? r.bugs.filter((b) => !bugIds.includes(b.id))
+                    : r.bugs.map((b) =>
+                        bugIds.includes(b.id) ? { ...b, status: "CLOSED" as const } : b
+                      ),
+              };
+            })
+          }
           onAttachmentsChange={(list) => patchResult(modalItem.id, { attachments: list })}
           bugPatch={bugPatch}
           onSave={async (data) => {
@@ -1106,6 +1180,11 @@ export function RunExecutor({
           activeBugs={activeBugs}
           overallNotes={overallNotes}
           onOverallNotesChange={setOverallNotes}
+          onDetach={handleDetachBugs}
+          /* "Buka Bug" (link ID) membuka Bug Detail Modal yang sudah ada —
+             z-index-nya lebih tinggi (300 > 260) sehingga menumpuk di atas
+             modal ini dan alur Complete Run tidak hilang. */
+          onOpenBug={setBugDetailId}
           onCancel={() => setCompleteOpen(false)}
           onConfirm={() => void finalizeComplete()}
           completing={completing}

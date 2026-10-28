@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/permissions";
 import { copyObject } from "@/lib/storage/r2";
+import { entityCode, runCodeOf } from "@/lib/format";
 import { ENVIRONMENT_OPTIONS } from "@/lib/qa-metrics";
 import { normalizeUrl } from "@/lib/validation";
 import type { BugErrorField } from "@/types/api";
@@ -224,6 +225,19 @@ export async function createBug(data: {
         createdById: user.id,
       },
     });
+    /**
+     * Invariant: bug AKTIF menempel pada TC berstatus FAIL. Kalau bug dibuat
+     * dari hasil yang statusnya bukan FAIL (data lama / jalur lain), hasilnya
+     * dipaksa kembali FAIL supaya ringkasan run tidak bertentangan dengan
+     * daftar bug di Bugs Tracker.
+     */
+    if (data.testRunResultId) {
+      await prisma.testRunResult.updateMany({
+        where: { id: data.testRunResultId, status: { not: "FAIL" } },
+        data: { status: "FAIL", updatedById: user.id },
+      });
+    }
+
     if (linkedTestCaseId) revalidatePath(`/test-cases/${linkedTestCaseId}`);
     if (data.testRunResultId) revalidatePath(`/test-runs`);
 
@@ -411,6 +425,22 @@ export async function updateBugStatus(
             }),
           ]
         : []),
+      /**
+       * Kebalikannya: bug DIBUKA lagi (OPEN / IN_PROGRESS) => hasil eksekusinya
+       * WAJIB kembali FAIL — invariant "bug aktif menempel pada TC Failed".
+       *
+       * Ini MENGUBAH aturan lama yang sengaja membiarkan hasilnya PASS saat bug
+       * dibuka ulang; aturan lama itulah yang membuat ringkasan run ("Failed 0")
+       * bertentangan dengan bug yang masih Open di Bugs Tracker.
+       */
+      ...(!isResolved && bug.testRunResultId
+        ? [
+            prisma.testRunResult.updateMany({
+              where: { id: bug.testRunResultId, status: { not: "FAIL" } },
+              data: { status: "FAIL", updatedById: user.id },
+            }),
+          ]
+        : []),
     ]);
 
     revalidatePath(`/test-cases`);
@@ -423,20 +453,86 @@ export async function updateBugStatus(
   }
 }
 
-/** Unlink bug dari hasil run (testRunResultId di-null-kan). */
-export async function unlinkBugFromRunResult(
-  bugId: string,
-  runResultId: string
-): Promise<AutomationBugActionState> {
-  await requireRole("QA");
+/**
+ * Lepaskan bug dari Test Run (Express Run) dan ubah ia menjadi temuan ad-hoc.
+ *
+ * Bug "hasil eksekusi" menempel ke run lewat `testRunResultId`, dan tautan itulah
+ * yang menahan penyelesaian run (quality gate di `completeRun`). Aksi ini:
+ *  1. memutus `testRunResultId` → bug tidak lagi menghambat completion;
+ *  2. memutus `testCaseId` → `sourceType` bug (diturunkan di API/UI:
+ *     `testCaseId ? "EXECUTION" : "GENERAL_FINDING"`) berpindah ke General
+ *     Findings, sehingga bug itu bisa di-retest lewat jalur ad-hoc;
+ *  3. mencatat riwayatnya di ActivityLog Test Case pemiliknya.
+ *
+ * `suiteId`/`projectId` SENGAJA dipertahankan supaya kolom Module dan agregasi
+ * bug per project/suite tetap terisi setelah tautan TC-nya dilepas.
+ *
+ * Menggantikan `unlinkBugFromRunResult` (dulu hanya men null-kan
+ * `testRunResultId` dan tidak pernah dipanggil dari UI mana pun).
+ */
+export async function detachBugFromRun(bugId: string): Promise<AutomationBugActionState> {
   try {
-    await prisma.bug.update({
-      where: { id: bugId, testRunResultId: runResultId },
-      data: { testRunResultId: null },
+    // Role-guard di DALAM try — sama seperti createBug/updateBug (lihat catatannya).
+    const user = await requireRole("QA");
+
+    const bug = await prisma.bug.findUnique({
+      where: { id: bugId },
+      select: {
+        testCaseId: true,
+        testRunResultId: true,
+        testRunResult: {
+          select: { run: { select: { id: true, name: true, sprint: true, createdAt: true } } },
+        },
+      },
     });
+    if (!bug) return { error: "Bug tidak ditemukan." };
+    if (!bug.testRunResultId) return { error: "Bug ini tidak terikat pada Test Run mana pun." };
+
+    const run = bug.testRunResult?.run ?? null;
+    // `requireRole` hanya mengembalikan id/role, jadi nama pencatat diambil di sini.
+    const actor = await prisma.user.findUnique({
+      where: { id: user.id },
+      select: { name: true, email: true },
+    });
+    const actorName = actor?.name ?? actor?.email ?? "Tidak diketahui";
+    const bugCode = entityCode("BUG", bugId);
+
+    await prisma.$transaction([
+      prisma.bug.update({
+        where: { id: bugId },
+        data: {
+          testRunResultId: null,
+          testCaseId: null,
+        },
+      }),
+      // ActivityLog adalah SATU-SATUNYA tabel riwayat aktivitas di app ini, dan
+      // barisnya milik Test Case — jadi entri ini memakai tautan TC yang baru
+      // saja diputus di atas (keduanya satu transaksi, tidak ada celah).
+      ...(bug.testCaseId
+        ? [
+            prisma.activityLog.create({
+              data: {
+                testCaseId: bug.testCaseId,
+                action: "UPDATED",
+                detail: run
+                  ? `Bug ${bugCode} dilepaskan dari Test Run "${run.name}" (${runCodeOf(
+                      run
+                    )}) oleh ${actorName}`
+                  : `Bug ${bugCode} dilepaskan dari Test Run oleh ${actorName}`,
+                userId: user.id,
+              },
+            }),
+          ]
+        : []),
+    ]);
+
+    revalidatePath("/bugs");
     revalidatePath("/test-runs");
-    return { success: true };
+    if (run?.id) revalidatePath(`/test-runs/${run.id}`);
+    if (bug.testCaseId) revalidatePath(`/test-cases/${bug.testCaseId}`);
+    return { success: true, bugId };
   } catch (error) {
+    if (isNextControlFlowError(error)) throw error;
     return handleError(error);
   }
 }

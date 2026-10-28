@@ -13,6 +13,15 @@ export type TestRunActionState = {
 
 type ResultStatus = "PASS" | "FAIL" | "BLOCKED" | "SKIPPED" | "NOT_RUN";
 
+/** Label status hasil untuk pesan error yang dibaca user. */
+const RESULT_STATUS_LABEL: Record<ResultStatus, string> = {
+  PASS: "Passed",
+  FAIL: "Failed",
+  BLOCKED: "Blocked",
+  SKIPPED: "Skipped",
+  NOT_RUN: "Untested",
+};
+
 /**
  * Error tak terduga di server. Kode error yang lazim (Prisma `P2003`/`P2002`
  * maupun SQLSTATE dari driver `pg` — app ini pakai adapter @prisma/adapter-pg)
@@ -328,6 +337,27 @@ export async function updateRunResult(
       include: { run: { select: { id: true, status: true } } },
     });
     if (!result) return { error: "Hasil run tidak ditemukan." };
+
+    /**
+     * Invariant BUG ↔ HASIL EKSEKUSI: selama masih ada bug aktif (OPEN /
+     * IN_PROGRESS) yang tertaut ke hasil ini, statusnya WAJIB FAIL.
+     *
+     * Tanpa penjagaan ini ringkasan run dan Bugs Tracker bisa saling
+     * bertentangan — persis kasus "Failed 0 tapi masih ada bug aktif": TC
+     * diubah ke Passed/Skipped sementara bug-nya tetap Open. UI menawarkan dua
+     * jalan keluar (tutup bug atau lepaskan dari run) sebelum menyimpan.
+     */
+    if (data.status !== "FAIL") {
+      const linkedActive = await prisma.bug.findMany({
+        where: { testRunResultId: resultId, status: { in: [...ACTIVE_BUG_STATUSES] } },
+        select: { id: true },
+      });
+      if (linkedActive.length > 0) {
+        return {
+          error: `Test case ini masih punya ${linkedActive.length} bug aktif. Tutup bug tersebut (Resolved/Closed) atau lepaskan dari run sebelum mengubah status menjadi ${RESULT_STATUS_LABEL[data.status]}.`,
+        };
+      }
+    }
 
     await prisma.testRunResult.update({
       where: { id: resultId },

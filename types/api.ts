@@ -420,6 +420,14 @@ export type SuiteDetailTestCase = {
   /** Jenis skenario: POSITIVE / NEGATIVE; null = belum dipilih QA. */
   type: "POSITIVE" | "NEGATIVE" | null;
   sectionId: string | null;
+  /** Ringkasan automation (read-only) — dipakai kolom "Automation" di tabel. */
+  automation: {
+    status: "NOT_AUTOMATED" | "AUTOMATED" | "FAILING" | "UNSTABLE";
+    externalTestId: string;
+    scriptPath: string | null;
+    lastRunAt: string | null;
+    lastResult: string | null;
+  } | null;
   createdAt: string;
   createdBy: { name: string | null } | null;
 };
@@ -794,4 +802,110 @@ export type ReportsPayload = {
   projects: ReportsProjectOption[];
   /** true bila belum ada eksekusi sama sekali di sistem. */
   noExecutionYet: boolean;
+};
+
+/* ---------- /api/test-cases/[id]/automation-runs ---------- */
+
+/** Satu baris riwayat eksekusi automation. */
+export type AutomationRunItem = {
+  id: string;
+  /** "PASS" | "FAIL" | "SKIPPED". */
+  status: string;
+  ranAt: string;
+};
+
+export type AutomationRunsPayload = {
+  /** Halaman yang diminta (urut terbaru dulu). */
+  runs: AutomationRunItem[];
+  /** Total SELURUH riwayat (bukan hanya halaman ini). */
+  total: number;
+  /** Jumlah PASS di seluruh riwayat. */
+  passed: number;
+  /** Jumlah FAIL di seluruh riwayat. */
+  failed: number;
+};
+
+/* ---------- /api/automation/overview ---------- */
+
+export type AutomationOverviewKpi = {
+  /** null bila tidak ada run di rentang. */
+  passRate: number | null;
+  passRatePrev: number | null;
+  totalRuns: number;
+  totalRunsPrev: number;
+  failed: number;
+  failedPrev: number;
+  failingNow: number;
+  flaky: number;
+  coverage: { automated: number; total: number; pct: number | null };
+};
+
+export type AutomationDailyItem = {
+  /** YYYY-MM-DD (WIB). */
+  date: string;
+  passed: number;
+  failed: number;
+  total: number;
+  /** null bila tidak ada run pada hari itu. */
+  passRate: number | null;
+};
+
+export type AutomationAlertItem = {
+  testCaseId: string;
+  tcId: string;
+  title: string;
+  /** Kalimat siap tampil. */
+  note: string;
+};
+
+export type AutomationMatrixCellState = "all-pass" | "some-fail" | "all-fail" | "none";
+
+export type AutomationMatrixItem = {
+  testCaseId: string;
+  tcId: string;
+  title: string;
+  /** null bila tidak ada run di rentang. */
+  passRate: number | null;
+  cells: {
+    date: string;
+    state: AutomationMatrixCellState;
+    passed: number;
+    failed: number;
+  }[];
+};
+
+export type AutomationDayRunItem = {
+  id: string;
+  ranAt: string;
+  testCaseId: string;
+  tcId: string;
+  title: string;
+  project: string;
+  suite: string;
+  status: string;
+};
+
+export type AutomationCoverageProjectItem = {
+  projectId: string;
+  name: string;
+  platform: PlatformCode | null;
+  total: number;
+  automated: number;
+  /** null bila total 0. */
+  pct: number | null;
+};
+
+export type AutomationOverviewPayload = {
+  range: { days: number; from: string; to: string };
+  kpi: AutomationOverviewKpi;
+  daily: AutomationDailyItem[];
+  alerts: {
+    failing: AutomationAlertItem[];
+    flaky: AutomationAlertItem[];
+    stale: AutomationAlertItem[];
+  };
+  matrix: { items: AutomationMatrixItem[]; hiddenCount: number };
+  day: { date: string; runs: AutomationDayRunItem[] };
+  coverageByProject: AutomationCoverageProjectItem[];
+  hiddenProjects: number;
 };

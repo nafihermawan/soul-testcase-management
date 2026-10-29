@@ -10,42 +10,46 @@ import {
   type ReactNode,
 } from "react";
 import {
+  AlertTriangle,
+  Check,
   CheckSquare,
   ChevronDown,
   ChevronRight,
   CircleAlert,
   Clock4,
-  Cpu,
+  Copy,
+  FileJson,
   FlaskConical,
-  GitBranch,
   Info,
   Link2,
   Link2Off,
   Loader2,
-  Monitor,
   Pencil,
   RefreshCw,
   Search,
-  Server,
-  Smartphone,
+  Upload,
   X,
 } from "lucide-react";
+import { AutomationOverview } from "@/components/automation/automation-overview";
 import {
+  applyAutomationReport,
   bulkLinkAutomation,
   bulkUnlinkAutomation,
   bulkUnlinkAutomationByTestCaseIds,
   createAutomationLink,
   updateAutomationLink,
   updateAutomationStatus,
+  type ApplyAutomationReportResult,
 } from "@/lib/actions/automation";
+import { parsePlaywrightReport, type ParsedReport } from "@/lib/playwright-report";
 import { getJSON, useApi } from "@/lib/client/use-api";
 import { HistoryPagination } from "@/components/test-runs/history-pagination";
-import { useToast, Toast, ConfirmDialog } from "@/components/ui/feedback";
+import { Spinner, useToast, Toast, ConfirmDialog } from "@/components/ui/feedback";
 import { Select } from "@/components/ui/select";
 import { ErrorBlock, StatsCardsSkeleton, TableCardSkeleton } from "@/components/ui/data-states";
 import type {
+  AutomationOverviewPayload,
   AutomationPayload,
-  AutomationProjectStat,
   AutomationRow,
   AutomationRowStatus,
   AutomationSuiteGroup,
@@ -74,14 +78,6 @@ const PLATFORM_LABEL: Record<string, string> = {
   MOBILE: "Mobile",
   HARDWARE: "Hardware",
   API: "API",
-};
-
-/** Ikon platform — samakan dengan header run (WEB→Monitor, dst). */
-const PLATFORM_ICON: Record<string, typeof Smartphone> = {
-  WEB: Monitor,
-  MOBILE: Smartphone,
-  HARDWARE: Cpu,
-  API: Server,
 };
 
 /** Urutan grup Platform di dropdown filter Suite. Platform di luar daftar ditaruh paling akhir. */
@@ -151,6 +147,13 @@ function buildRowsPath(
 
 /* ---------- Main Component ---------- */
 
+/** Tanggal hari ini (WIB) "YYYY-MM-DD" — default hari terpilih di overview. */
+function todayWibKey(): string {
+  const w = new Date(Date.now() + 7 * 60 * 60 * 1000);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${w.getUTCFullYear()}-${pad(w.getUTCMonth() + 1)}-${pad(w.getUTCDate())}`;
+}
+
 export function AutomationPageClient({
   canManage,
   canUpdateStatus,
@@ -166,10 +169,15 @@ export function AutomationPageClient({
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [selProjects, setSelProjects] = useState<Set<string>>(new Set());
   const [selSuites, setSelSuites] = useState<Set<string>>(new Set());
-  // Default view: collapsed-by-suite. Toggle off -> mode flat lintas suite.
-  const [groupBySuite, setGroupBySuite] = useState(true);
+  // Daftar selalu dikelompokkan per suite (toggle "Group by Suite" dihapus).
+  const groupBySuite: boolean = true;
   const [flatPage, setFlatPage] = useState(1);
   const [flatPerPage, setFlatPerPage] = useState(DEFAULT_PER_PAGE);
+
+  // Overview health (KPI/grafik/matriks): rentang hari + hari terpilih.
+  const [days, setDays] = useState<7 | 14 | 30>(14);
+  const [selectedDate, setSelectedDate] = useState<string>(todayWibKey);
+  const [matrixLimit, setMatrixLimit] = useState(20);
 
   // Bulk state
   const [selected, setSelected] = useState<Set<string>>(new Set()); // id TestCase, lintas halaman/grup
@@ -184,6 +192,7 @@ export function AutomationPageClient({
   const [editScript, setEditScript] = useState("");
   const [confirmUnlink, setConfirmUnlink] = useState<AutomationRow | null>(null);
   const [ciOpen, setCiOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
 
   // Debounce pencarian sebelum dikirim ke server.
   useEffect(() => {
@@ -217,11 +226,17 @@ export function AutomationPageClient({
 
   const { data, error, loading, reload } = useApi<AutomationPayload>(mainPath);
 
+  // Overview health (bagian KPI s.d. Coverage) — path berubah saat hari/limit
+  // berubah sehingga useApi otomatis refetch.
+  const overviewPath = `/api/automation/overview?days=${days}&date=${selectedDate}&limit=${matrixLimit}`;
+  const overview = useApi<AutomationOverviewPayload>(overviewPath, { alwaysFresh: true });
+
   // reload() menyegarkan payload utama; reloadToken memicu grup yang terbuka
   // ikut memuat ulang supaya UI tidak stale setelah mutasi.
   const [reloadToken, setReloadToken] = useState(0);
   const reloadAll = () => {
     reload();
+    overview.reload();
     setReloadToken((t) => t + 1);
   };
 
@@ -472,11 +487,6 @@ export function AutomationPageClient({
     );
   }
 
-  const summary = data.summary;
-  const projectStats: AutomationProjectStat[] = data.projectStats.filter(
-    (p) => selProjects.size === 0 || selProjects.has(p.projectId)
-  );
-
   // Opsi project untuk filter: platform dulu (A→Z), lalu nama (lihat byPlatformThenName).
   const sortedProjects = [...data.projects].sort(byPlatformThenName);
 
@@ -502,164 +512,64 @@ export function AutomationPageClient({
   };
 
   return (
-    <div style={{ fontFamily: "var(--font-sans)", width: "100%", display: "flex", flexDirection: "column", gap: 16 }}>
-      {/* Header banner */}
-      <div
+    <main
+      className="auto-page"
+      style={{
+        fontFamily: "var(--font-sans)",
+        margin: "-1rem",
+        padding: 24,
+        minHeight: "calc(100% + 2rem)",
+        background: "#F4F5F7",
+        display: "flex",
+        flexDirection: "column",
+        gap: 20,
+      }}
+    >
+      {/* Bagian 1–6: Header, KPI, Run per Hari, Perlu Perhatian, matriks,
+          detail hari terpilih, dan Coverage per Project. */}
+      <AutomationOverview
+        data={overview.data}
+        days={days}
+        today={todayWibKey()}
+        selectedDate={selectedDate}
+        onDaysChange={(d) => setDays(d)}
+        onSelectDate={(d) => setSelectedDate(d)}
+        onUpload={() => setReportOpen(true)}
+        onCiGuide={() => setCiOpen(true)}
+        onShowAllMatrix={() => setMatrixLimit(500)}
+      />
+
+      {/* Bagian 7: Test Case per Suite — filter di dalam card. */}
+      <section
         style={{
           background: "#fff",
           border: "1px solid #E5E7EB",
-          borderRadius: 12,
-          padding: "20px 24px",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 16,
-          flexWrap: "wrap",
+          borderRadius: 16,
+          overflow: "hidden",
         }}
       >
-        <div>
-          <h1 style={{ fontSize: 20, fontWeight: 700, color: "#1E293B", margin: 0, letterSpacing: "-0.025em" }}>
-            Automation Coverage &amp; Health
-          </h1>
-          <p style={{ margin: "6px 0 0", fontSize: 12, fontWeight: 400, color: "#64748B" }}>
-            Pantau otomatisasi test case, status hasil CI, dan cakupan per project.
-          </p>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          {canManage && (
-            <button
-              type="button"
-              onClick={() => setCiOpen(true)}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 8,
-                padding: "10px 16px",
-                borderRadius: 8,
-                border: "none",
-                background: "#F59E0B",
-                color: "#fff",
-                fontSize: "0.85rem",
-                fontWeight: 700,
-                cursor: "pointer",
-              }}
-            >
-              <GitBranch size={15} /> Cara Integrasi CI
-            </button>
-          )}
-          {!canManage && canUpdateStatus && (
-            <span style={{ fontSize: "0.75rem", color: "#6B7280", background: "#F1F5F9", borderRadius: 999, padding: "4px 10px" }}>
-              Developer — hanya update status
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* Summary cards — memakai agregat total (bukan halaman) */}
-      <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-        {summaryCard("auto", "Automated", summary.automated, "#047857", "#ECFDF5", <FlaskConical size={17} />)}
-        {summaryCard("fail", "Failing", summary.failing, "#BE123C", "#FFF1F2", <CircleAlert size={17} />)}
-        {summaryCard("stale", "Stale", summary.stale, "#B45309", "#FFFBEB", <Clock4 size={17} />)}
-        {summaryCard("unauto", "Belum Automated", summary.notAutomated, "#64748B", "#F1F5F9", <Link2Off size={17} />)}
-      </div>
-
-      {/* Coverage bar per project */}
-      <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, padding: "16px 20px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: "#0F172A" }}>Coverage per Project</div>
-          <div style={{ fontSize: 13, fontWeight: 700, color: "#0F172A" }}>{summary.coveragePct}%</div>
-        </div>
-        {/* Grid 2 kolom (auto-fit agar tetap 1 kolom di layar sempit). Nama
-            project, persentase, dan bar-nya dibuat berdekatan dalam satu kartu. */}
         <div
           style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))",
-            gap: 12,
+            padding: "16px 24px",
+            borderBottom: "1px solid #EEF0F3",
+            display: "flex",
+            gap: 10,
+            flexWrap: "wrap",
+            alignItems: "center",
           }}
         >
-          {projectStats.map((p) => (
-            <div
-              key={p.projectId}
-              style={{
-                border: "1px solid #E5E7EB",
-                borderRadius: 10,
-                padding: "10px 12px",
-                background: "#fff",
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-                <div
-                  title={p.name}
-                  style={{
-                    flex: 1,
-                    minWidth: 0,
-                    fontSize: "0.8rem",
-                    fontWeight: 700,
-                    color: "#334155",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {p.name}
-                </div>
-                <div style={{ fontSize: "0.78rem", fontWeight: 700, color: "#0F172A" }}>
-                  {p.coveragePct}%
-                </div>
-              </div>
-              <div style={{ fontSize: "0.7rem", color: "#94A3B8", marginTop: 2 }}>
-                {p.platform ? `${PLATFORM_LABEL[p.platform]} · ` : ""}
-                {p.total} TC
-              </div>
-              {/* h-2 (8px) + rounded-full: tetap terlihat walau angkanya rendah. */}
-              <div
-                style={{
-                  display: "flex",
-                  height: 8,
-                  borderRadius: 999,
-                  overflow: "hidden",
-                  background: "#E2E8F0",
-                  marginTop: 6,
-                }}
-              >
-                {p.automated > 0 && <div style={{ width: `${(p.automated / p.total) * 100}%`, background: "#10B981" }} title={`Automated ${p.automated}`} />}
-                {p.stale > 0 && <div style={{ width: `${(p.stale / p.total) * 100}%`, background: "#F59E0B" }} title={`Stale ${p.stale}`} />}
-                {p.failing > 0 && <div style={{ width: `${(p.failing / p.total) * 100}%`, background: "#F43F5E" }} title={`Failing ${p.failing}`} />}
-                {p.unstable > 0 && <div style={{ width: `${(p.unstable / p.total) * 100}%`, background: "#8B5CF6" }} title={`Unstable ${p.unstable}`} />}
-              </div>
-            </div>
-          ))}
-          {projectStats.length === 0 && (
-            <div style={{ fontSize: "0.85rem", color: "#9CA3AF", textAlign: "center", padding: "0.5rem" }}>Tidak ada project.</div>
-          )}
-        </div>
-      </div>
-
-      {/* Filter bar + actions */}
-      <div
-        style={{
-          background: "#fff",
-          border: "1px solid #E5E7EB",
-          borderRadius: 12,
-          padding: "14px 16px",
-          // mb-4: beri jarak napas antara kontrol filter dan tabel.
-          marginBottom: 16,
-          display: "flex",
-          gap: 10,
-          flexWrap: "wrap",
-          alignItems: "center",
-        }}
-      >
-        <div style={{ position: "relative", flex: 1, minWidth: 180, maxWidth: 300 }}>
-          <Search size={14} style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF" }} />
-          <input
-            value={qInput}
-            onChange={(e) => setQInput(e.target.value)}
-            placeholder="Cari TC ID / judul / external id…"
-            style={{ ...inputBase, paddingLeft: 30, width: "100%" }}
-          />
-        </div>
+          <h2 style={{ margin: 0, marginRight: "auto", fontSize: 17, fontWeight: 600, color: "#0F172A" }}>
+            Test Case per Suite
+          </h2>
+          <div style={{ position: "relative", flex: 1, minWidth: 180, maxWidth: 300 }}>
+            <Search size={14} style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF" }} />
+            <input
+              value={qInput}
+              onChange={(e) => setQInput(e.target.value)}
+              placeholder="Cari TC ID, judul, external ID…"
+              style={{ ...inputBase, paddingLeft: 30, width: "100%", height: 40, borderRadius: 10 }}
+            />
+          </div>
 
         <Select
           value={statusFilter}
@@ -738,34 +648,6 @@ export function AutomationPageClient({
           )}
         </MultiChipFilter>
 
-        <button
-          type="button"
-          onClick={() =>
-            setGroupBySuite((v) => {
-              setFlatPage(1);
-              return !v;
-            })
-          }
-          title="Kelompokkan baris per Suite"
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 6,
-            padding: "8px 12px",
-            borderRadius: 8,
-            border: groupBySuite ? "1px solid #FFC348" : "1px solid #D1D5DB",
-            background: groupBySuite ? "rgba(255, 195, 72, 0.20)" : "#fff",
-            color: groupBySuite ? "#1E293B" : "#374151",
-            fontSize: "0.8rem",
-            fontWeight: 600,
-            cursor: "pointer",
-            whiteSpace: "nowrap",
-          }}
-        >
-          <FlaskConical size={13} />
-          Group by Suite
-        </button>
-
         {selected.size > 0 && canManage && (
           <>
             <span style={{ fontSize: "0.8rem", fontWeight: 700, color: "#0F172A", marginLeft: 4 }}>{selected.size} dipilih</span>
@@ -815,10 +697,8 @@ export function AutomationPageClient({
             </button>
           </>
         )}
-      </div>
+        </div>
 
-      {/* Table card */}
-      <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, overflow: "hidden" }}>
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
             {/* Header kolom global hanya untuk mode flat. Di mode grouped,
@@ -907,7 +787,7 @@ export function AutomationPageClient({
             }}
           />
         )}
-      </div>
+      </section>
 
       {/* Modals */}
       {bulkMode === "link" && canManage && (
@@ -992,6 +872,16 @@ export function AutomationPageClient({
       )}
 
       {ciOpen && <CiGuideModal onClose={() => setCiOpen(false)} />}
+      {reportOpen && (
+        <UploadReportModal
+          onClose={() => setReportOpen(false)}
+          onApplied={(applied) => {
+            showToast(`${applied} Hasil test berhasil diterapkan.`, "success");
+            setReportOpen(false);
+            reloadAll();
+          }}
+        />
+      )}
 
       <ConfirmDialog
         open={bulkMode === "unlink"}
@@ -1017,67 +907,11 @@ export function AutomationPageClient({
       />
 
       <Toast toast={toast} onDismiss={dismissToast} />
-    </div>
+    </main>
   );
 }
 
 /* ---------- Sub-components ---------- */
-
-/**
- * Kartu metrik ringkas. Keempat kartu wajib berstruktur identik:
- * [Icon] -> [Value (bold besar)] -> [Label (slate-500 kecil)].
- *
- * Saat nilainya 0, ikon & angkanya dibuat netral supaya kartu "kosong" tidak
- * terbaca seperti status aktif — label tetap tampil di bawah angka.
- */
-function summaryCard(key: string, label: string, value: number, color: string, bg: string, icon: ReactNode) {
-  const isZero = value === 0;
-  return (
-    <div
-      key={key}
-      style={{
-        background: "#fff",
-        border: "1px solid #E5E7EB",
-        borderRadius: 12,
-        padding: "16px 18px",
-        display: "flex",
-        alignItems: "center",
-        gap: 12,
-        minWidth: 180,
-        flex: 1,
-      }}
-    >
-      <div
-        style={{
-          width: 36,
-          height: 36,
-          borderRadius: 10,
-          background: isZero ? "#F1F5F9" : bg,
-          color: isZero ? "#94A3B8" : color,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          flexShrink: 0,
-        }}
-      >
-        {icon}
-      </div>
-      <div style={{ minWidth: 0 }}>
-        <div
-          style={{
-            fontSize: 22,
-            fontWeight: 800,
-            lineHeight: 1.2,
-            color: isZero ? "#94A3B8" : "#0F172A",
-          }}
-        >
-          {value}
-        </div>
-        <div style={{ fontSize: 12, fontWeight: 600, color: "#64748B" }}>{label}</div>
-      </div>
-    </div>
-  );
-}
 
 /* Item opsi di dalam popover filter: nama di kiri, badge platform di kanan. */
 const filterOptionRow: CSSProperties = {
@@ -1493,38 +1327,30 @@ function SuiteGroup({
 
   return (
     <>
-      <tr
-        style={{
-          background: "rgba(248, 250, 252, 0.7)",
-          borderTop: "1px solid #E2E8F0",
-          borderBottom: "1px solid #E2E8F0",
-        }}
-      >
+      <tr style={{ borderTop: "1px solid #EEF0F3" }}>
         <td colSpan={8} style={{ padding: 0 }}>
           <div style={{ display: "flex", alignItems: "center" }}>
             <button
               type="button"
               onClick={() => setExpanded((v) => !v)}
+              className="auto-hover-row"
               style={{
-                display: "flex",
+                display: "grid",
+                gridTemplateColumns: "minmax(260px,1fr) 260px 170px",
+                gap: 16,
                 alignItems: "center",
-                // Dua sisi: identitas suite di kiri, badge di kanan.
-                justifyContent: "space-between",
-                gap: 12,
                 flex: 1,
-                // py-3: beri ruang vertikal agar teks & badge tidak bertumpuk.
-                padding: "12px 12px",
+                minWidth: 0,
+                padding: "12px 24px",
                 border: "none",
-                background: "transparent",
                 cursor: "pointer",
                 textAlign: "left",
               }}
             >
-              {/* Kiri: chevron + nama suite saja (metadata project pindah ke
-                  grup kanan). */}
               <span style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
                 <ChevronRight
                   size={15}
+                  aria-hidden="true"
                   style={{
                     color: "#64748B",
                     flexShrink: 0,
@@ -1534,8 +1360,8 @@ function SuiteGroup({
                 />
                 <span
                   style={{
-                    fontSize: 12,
-                    fontWeight: 700,
+                    fontSize: 14,
+                    fontWeight: 600,
                     color: "#0F172A",
                     overflow: "hidden",
                     textOverflow: "ellipsis",
@@ -1546,53 +1372,28 @@ function SuiteGroup({
                 </span>
               </span>
 
-              {/* Kanan: nama project → garis pemisah → badge platform → badge
-                  jumlah TC & status. `gap: 12` = `gap-3`; garis tipis menjaga
-                  teks project dan badge platform tidak menempel. */}
               <span
+                title={`${group.projectName}${group.platform ? ` · ${PLATFORM_LABEL[group.platform] ?? group.platform}` : ""}`}
                 style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 12,
-                  flexShrink: 0,
-                  flexWrap: "wrap",
-                  justifyContent: "flex-end",
+                  fontSize: 13,
+                  color: "#64748B",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
                 }}
               >
-                <span
-                  title={group.projectName}
-                  style={{
-                    maxWidth: 200,
-                    fontSize: 11,
-                    fontWeight: 400,
-                    color: "#94A3B8",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {group.projectName}
-                </span>
-                <span
-                  aria-hidden="true"
-                  style={{ width: 1, height: 14, background: "var(--border)", flexShrink: 0 }}
-                />
-                {group.platform && (
-                  <GroupBadge
-                    icon={<PlatformIcon platform={group.platform} />}
-                    label={PLATFORM_LABEL[group.platform] ?? group.platform}
-                  />
-                )}
-                <GroupBadge label={`${group.total} TC`} />
-                {group.notAutomated > 0 && <GroupBadge label={`${group.notAutomated} Belum`} />}
-                {group.failing > 0 && <MiniBadge color="#BE123C" bg="#FFF1F2" border="#FECDD3" label={`${group.failing} Failing`} />}
-                {group.stale > 0 && <MiniBadge color="#B45309" bg="#FFFBEB" border="#FDE68A" label={`${group.stale} Stale`} />}
-                {group.unstable > 0 && <MiniBadge color="#6D28D9" bg="#F5F3FF" border="#DDD6FE" label={`${group.unstable} Unstable`} />}
+                {group.projectName}
+                {group.platform ? ` · ${PLATFORM_LABEL[group.platform] ?? group.platform}` : ""}
+              </span>
+
+              <span style={{ fontSize: 13, color: "#64748B", textAlign: "right", whiteSpace: "nowrap" }}>
+                <span style={{ fontWeight: 600, color: "#0F172A" }}>{group.automated}</span> /{" "}
+                {group.total} automated
               </span>
             </button>
             {/* Ditaruh di luar tombol expand agar klik checkbox tidak ikut toggle grup. */}
             {expanded && canManage && (
-              <label style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "0 12px", fontSize: "0.72rem", color: "#94A3B8", whiteSpace: "nowrap", cursor: "pointer" }}>
+              <label style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "0 24px", fontSize: "0.72rem", color: "#94A3B8", whiteSpace: "nowrap", cursor: "pointer" }}>
                 {renderSelectAll(state.rows)}
                 pilih halaman
               </label>
@@ -1688,58 +1489,6 @@ const SUB_HEAD: React.CSSProperties = {
   textTransform: "uppercase",
 };
 
-/**
- * Badge netral untuk header grup (total TC & jumlah Belum). Badge status yang
- * bermasalah (Failing/Stale/Unstable) sengaja tetap berwarna lewat MiniBadge
- * supaya sinyal problem-first tidak hilang.
- */
-function GroupBadge({ label, icon }: { label: string; icon?: ReactNode }) {
-  return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: icon ? 5 : undefined,
-        padding: "2px 8px",
-        borderRadius: 999,
-        fontSize: 11,
-        fontWeight: 500,
-        color: "#475569",
-        background: "rgba(226, 232, 240, 0.6)",
-        whiteSpace: "nowrap",
-      }}
-    >
-      {icon}
-      {label}
-    </span>
-  );
-}
-
-/** Ikon platform untuk badge (fallback: Smartphone). */
-function PlatformIcon({ platform }: { platform: string }) {
-  const Icon = PLATFORM_ICON[platform.toUpperCase()] ?? Smartphone;
-  return <Icon size={12} aria-hidden="true" />;
-}
-
-function MiniBadge({ label, color, bg, border }: { label: string; color: string; bg: string; border: string }) {
-  return (
-    <span
-      style={{
-        padding: "1px 8px",
-        borderRadius: 999,
-        fontSize: "0.68rem",
-        fontWeight: 700,
-        color,
-        background: bg,
-        border: `1px solid ${border}`,
-        whiteSpace: "nowrap",
-      }}
-    >
-      {label}
-    </span>
-  );
-}
-
 function IconBtn({ children, onClick, title, danger }: { children: ReactNode; onClick: () => void; title: string; danger?: boolean }) {
   return (
     <button
@@ -1818,5 +1567,611 @@ Content-Type: application/json
         </div>
       </div>
     </Modal>
+  );
+}
+
+/** Batas ukuran file hasil (10 MB). */
+const MAX_REPORT_BYTES = 10 * 1024 * 1024;
+
+const COMMAND = "npx playwright test --reporter=json > hasil.json";
+
+const fmtBytes = (n: number): string =>
+  n >= 1024 * 1024
+    ? `${(n / (1024 * 1024)).toFixed(1).replace(".", ",")} MB`
+    : `${Math.max(1, Math.round(n / 1024))} KB`;
+
+/** Item ringkasan hasil (dot + label + angka). */
+function ResultCount({
+  dot,
+  color,
+  label,
+  n,
+}: {
+  dot: string;
+  color: string;
+  label: string;
+  n: number;
+}) {
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+      <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: "50%", background: dot }} />
+      <span>{label}</span>
+      <span style={{ fontWeight: 600, color }}>{n}</span>
+    </span>
+  );
+}
+
+/** Satu langkah bernomor di body modal. */
+function ReportStep({
+  n,
+  title,
+  first,
+  children,
+}: {
+  n: number;
+  title: string;
+  first?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <li
+      style={{
+        display: "grid",
+        gridTemplateColumns: "24px 1fr",
+        columnGap: 14,
+        padding: "16px 0",
+        borderTop: first ? "none" : "1px solid #EEF0F3",
+      }}
+    >
+      <span
+        style={{
+          width: 24,
+          height: 24,
+          borderRadius: "50%",
+          background: "#F1F5F9",
+          color: "#334155",
+          fontSize: 12,
+          fontWeight: 600,
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        {n}
+      </span>
+      <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 10 }}>
+        <div style={{ fontSize: 15, lineHeight: "24px", fontWeight: 600, color: "#0F172A" }}>
+          {title}
+        </div>
+        {children}
+      </div>
+    </li>
+  );
+}
+
+/**
+ * Modal "Upload hasil test": 3 langkah (jalankan test → upload file → periksa
+ * hasil). Parsing & penerapan memakai logika yang sudah ada
+ * (parsePlaywrightReport + applyAutomationReport).
+ */
+function UploadReportModal({
+  onClose,
+  onApplied,
+}: {
+  onClose: () => void;
+  /** Dipanggil setelah sukses: parent menampilkan toast, menutup modal, refetch. */
+  onApplied: (applied: number) => void;
+}) {
+  const [fileName, setFileName] = useState<string | null>(null);
+  const [fileSize, setFileSize] = useState<number | null>(null);
+  const [parsed, setParsed] = useState<ParsedReport | null>(null);
+  const [invalid, setInvalid] = useState<string | null>(null);
+  const [pasteOpen, setPasteOpen] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const [pending, setPending] = useState(false);
+  const [result, setResult] = useState<ApplyAutomationReportResult | null>(null);
+  const [copiedCmd, setCopiedCmd] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+
+  const copyCommand = async () => {
+    try {
+      await navigator.clipboard.writeText(COMMAND);
+      setCopiedCmd(true);
+      setTimeout(() => setCopiedCmd(false), 1500);
+    } catch {
+      // clipboard tidak tersedia — abaikan
+    }
+  };
+
+  const resetFile = () => {
+    setFileName(null);
+    setFileSize(null);
+    setParsed(null);
+    setInvalid(null);
+    setResult(null);
+  };
+
+  const readText = (text: string, name: string | null, size: number | null) => {
+    setResult(null);
+    if (name) {
+      setFileName(name);
+      setFileSize(size);
+    }
+    const trimmed = text.trim();
+    if (!trimmed) {
+      setParsed(null);
+      setInvalid(null);
+      return;
+    }
+    let json: unknown;
+    try {
+      json = JSON.parse(trimmed);
+    } catch {
+      setParsed(null);
+      setInvalid("Bukan format JSON Playwright yang valid. Pastikan memakai --reporter=json.");
+      return;
+    }
+    const p = parsePlaywrightReport(json);
+    if (p.entries.length === 0 && p.errors.length > 0) {
+      setParsed(null);
+      setInvalid(p.errors[0]);
+      return;
+    }
+    setParsed(p);
+    setInvalid(null);
+  };
+
+  const onFile = async (file: File | null) => {
+    if (!file) return;
+    if (file.size > MAX_REPORT_BYTES) {
+      setFileName(file.name);
+      setFileSize(file.size);
+      setParsed(null);
+      setInvalid("Ukuran file melebihi 10 MB.");
+      return;
+    }
+    readText(await file.text(), file.name, file.size);
+  };
+
+  const counts = useMemo(() => {
+    const c = { pass: 0, fail: 0, skipped: 0 };
+    for (const e of parsed?.entries ?? []) {
+      if (e.status === "PASS") c.pass += 1;
+      else if (e.status === "FAIL") c.fail += 1;
+      else c.skipped += 1;
+    }
+    return c;
+  }, [parsed]);
+
+  const total = parsed?.entries.length ?? 0;
+  const applyable = total > 0;
+
+  const apply = async () => {
+    if (!parsed || total === 0 || pending) return;
+    setPending(true);
+    setResult(null);
+    try {
+      const res = await applyAutomationReport(parsed.entries);
+      if (res.error) {
+        setResult(res);
+        return;
+      }
+      // Sukses → parent: toast, tutup modal, refetch dashboard.
+      onApplied((res.updated ?? 0) + (res.created ?? 0));
+    } catch {
+      setResult({ error: "Terjadi kesalahan. Coba lagi." });
+    } finally {
+      setPending(false);
+    }
+  };
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 90,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "1rem",
+      }}
+    >
+      <div
+        style={{ position: "absolute", inset: 0, background: "rgba(15,23,42,0.45)" }}
+        onClick={onClose}
+      />
+
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="upload-report-title"
+        style={{
+          position: "relative",
+          width: 600,
+          maxWidth: "100%",
+          maxHeight: "calc(100vh - 80px)",
+          background: "#fff",
+          borderRadius: 16,
+          boxShadow: "0 24px 48px rgba(15,23,42,0.25)",
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
+        }}
+      >
+        {/* Header (tetap) */}
+        <div
+          style={{
+            padding: "20px 24px 18px 28px",
+            borderBottom: "1px solid #EEF0F3",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            flexShrink: 0,
+          }}
+        >
+          <h3 id="upload-report-title" style={{ margin: 0, fontSize: 20, fontWeight: 700, color: "#0F172A" }}>
+            Upload hasil test
+          </h3>
+          <button
+            type="button"
+            className="auto-close-btn"
+            onClick={onClose}
+            aria-label="Tutup"
+            style={{
+              width: 40,
+              height: 40,
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              border: "none",
+              cursor: "pointer",
+            }}
+          >
+            <X size={20} style={{ color: "#475569" }} />
+          </button>
+        </div>
+
+        {/* Body (satu-satunya area scroll) */}
+        <div style={{ flex: "1 1 auto", minHeight: 0, overflowY: "auto", padding: "8px 28px 24px" }}>
+          <ol style={{ listStyle: "none", margin: 0, padding: 0 }}>
+            {/* Langkah 1 */}
+            <ReportStep n={1} title="Jalankan test dan simpan hasilnya" first>
+              <p style={{ margin: 0, fontSize: 14, lineHeight: "21px", color: "#475569" }}>
+                Tulis External Test ID di judul test, mis.{" "}
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, color: "#0F172A" }}>
+                  [LG-001]
+                </span>
+                , agar hasilnya otomatis tercatat ke test case yang sesuai.
+              </p>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  padding: "8px 8px 8px 14px",
+                  background: "#F8FAFC",
+                  border: "1px solid #E5E7EB",
+                  borderRadius: 10,
+                }}
+              >
+                <code
+                  style={{
+                    flex: 1,
+                    minWidth: 0,
+                    fontFamily: "var(--font-mono)",
+                    fontSize: 13,
+                    color: "#0F172A",
+                    whiteSpace: "nowrap",
+                    overflowX: "auto",
+                  }}
+                >
+                  {COMMAND}
+                </code>
+                <button
+                  type="button"
+                  className="auto-copy-btn"
+                  onClick={() => void copyCommand()}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    height: 32,
+                    padding: "0 10px",
+                    fontSize: 13,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    flexShrink: 0,
+                  }}
+                >
+                  {copiedCmd ? <Check size={14} /> : <Copy size={14} />}
+                  {copiedCmd ? "Tersalin" : "Salin"}
+                </button>
+              </div>
+            </ReportStep>
+
+            {/* Langkah 2 */}
+            <ReportStep n={2} title="Upload file hasil">
+              <input
+                ref={fileRef}
+                type="file"
+                accept=".json"
+                style={{ display: "none" }}
+                onChange={(e) => void onFile(e.target.files?.[0] ?? null)}
+              />
+
+              {fileName ? (
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 12,
+                    padding: "12px 8px 12px 14px",
+                    border: `1px solid ${invalid ? "#FCA5A5" : "#E5E7EB"}`,
+                    background: invalid ? "#FEF2F2" : "#fff",
+                    borderRadius: 12,
+                  }}
+                >
+                  <FileJson
+                    size={20}
+                    aria-hidden="true"
+                    style={{ color: invalid ? "#DC2626" : "#64748B", flexShrink: 0 }}
+                  />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div
+                      title={fileName}
+                      style={{
+                        fontSize: 14,
+                        fontWeight: 600,
+                        color: "#0F172A",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {fileName}
+                    </div>
+                    <div style={{ fontSize: 13, color: invalid ? "#B91C1C" : "#15803D" }}>
+                      {invalid ?? `${fmtBytes(fileSize ?? 0)} · berhasil dibaca`}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="auto-file-clear"
+                    onClick={resetFile}
+                    aria-label="Hapus file"
+                    style={{
+                      width: 32,
+                      height: 32,
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      border: "none",
+                      cursor: "pointer",
+                      flexShrink: 0,
+                    }}
+                  >
+                    <X size={16} style={{ color: "#64748B" }} />
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    className="auto-dropzone"
+                    data-drag={dragOver ? "true" : "false"}
+                    onClick={() => fileRef.current?.click()}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setDragOver(true);
+                    }}
+                    onDragLeave={() => setDragOver(false)}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setDragOver(false);
+                      const f = e.dataTransfer.files?.[0];
+                      if (f) void onFile(f);
+                    }}
+                    style={{
+                      width: "100%",
+                      padding: "22px 16px",
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      gap: 6,
+                      cursor: "pointer",
+                    }}
+                  >
+                    <Upload size={24} aria-hidden="true" style={{ color: "#64748B" }} />
+                    <span style={{ fontSize: 14, color: "#334155" }}>
+                      <span style={{ fontWeight: 600, color: "#B45309" }}>Pilih file</span> atau tarik ke
+                      sini
+                    </span>
+                    <span style={{ fontSize: 13, color: "#64748B" }}>
+                      File JSON dari Playwright, maks. 10 MB
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className="auto-text-link"
+                    onClick={() => setPasteOpen((v) => !v)}
+                  >
+                    {pasteOpen ? "Sembunyikan kolom JSON" : "Atau tempel isi JSON"}
+                  </button>
+
+                  {pasteOpen && (
+                    <div>
+                      <label htmlFor="automation-json-input" className="sr-only">
+                        Isi JSON hasil test
+                      </label>
+                      <textarea
+                        id="automation-json-input"
+                        rows={4}
+                        placeholder='{"suites": [ … ] }'
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          if (!v.trim()) {
+                            setParsed(null);
+                            setInvalid(null);
+                            setResult(null);
+                            return;
+                          }
+                          if (v.trim().startsWith("{")) readText(v, null, null);
+                        }}
+                        className="auto-json-textarea"
+                        style={{
+                          width: "100%",
+                          padding: "12px 14px",
+                          fontFamily: "var(--font-mono)",
+                          fontSize: 13,
+                          lineHeight: "20px",
+                          border: "1px solid #E2E8F0",
+                          borderRadius: 10,
+                          resize: "vertical",
+                        }}
+                      />
+                    </div>
+                  )}
+                </>
+              )}
+            </ReportStep>
+
+            {/* Langkah 3 — hanya setelah berhasil dibaca */}
+            {parsed && (
+              <ReportStep n={3} title="Periksa hasil">
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 18, fontSize: 14, color: "#475569" }}>
+                  <span>
+                    <span style={{ fontWeight: 600, color: "#0F172A" }}>{total}</span> test terbaca
+                  </span>
+                  <ResultCount dot="#16A34A" color="#15803D" label="Passed" n={counts.pass} />
+                  <ResultCount dot="#DC2626" color="#B91C1C" label="Failed" n={counts.fail} />
+                  <ResultCount dot="#A855F7" color="#7E22CE" label="Skipped" n={counts.skipped} />
+                </div>
+
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 6,
+                    fontSize: 14,
+                    lineHeight: "21px",
+                    color: "#334155",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+                    <Check
+                      size={16}
+                      aria-hidden="true"
+                      style={{ color: "#16A34A", marginTop: 2, flexShrink: 0 }}
+                    />
+                    <span>
+                      <span style={{ fontWeight: 600 }}>{total}</span> test cocok dengan test case dan
+                      akan diperbarui.
+                    </span>
+                  </div>
+                  {parsed.withoutId > 0 && (
+                    <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+                      <AlertTriangle
+                        size={16}
+                        aria-hidden="true"
+                        style={{ color: "#D97706", marginTop: 2, flexShrink: 0 }}
+                      />
+                      <span>
+                        <span style={{ fontWeight: 600 }}>{parsed.withoutId}</span> test tanpa External
+                        Test ID dan akan dilewati:{" "}
+                        <span style={{ fontFamily: "var(--font-mono)", fontSize: 13 }}>
+                          {parsed.withoutIdTitles.join(", ")}
+                        </span>
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </ReportStep>
+            )}
+          </ol>
+
+          {result?.error && (
+            <div style={{ marginTop: 16, fontSize: "0.8rem", color: "#BE123C" }}>{result.error}</div>
+          )}
+        </div>
+
+        {/* Footer (tetap) */}
+        <div
+          style={{
+            padding: "16px 24px 16px 28px",
+            borderTop: "1px solid #EEF0F3",
+            background: "#fff",
+            display: "flex",
+            flexWrap: "wrap",
+            alignItems: "center",
+            gap: 12,
+            flexShrink: 0,
+          }}
+        >
+          {!applyable && (
+            <span style={{ fontSize: 14, color: "#64748B" }}>Upload file hasil untuk melanjutkan.</span>
+          )}
+          <div style={{ display: "flex", gap: 8, marginLeft: "auto" }}>
+            <button
+              type="button"
+              className="auto-ghost-btn"
+              onClick={onClose}
+              style={{
+                height: 44,
+                padding: "0 18px",
+                border: "none",
+                fontSize: 15,
+                fontWeight: 600,
+                color: "#334155",
+                cursor: "pointer",
+              }}
+            >
+              Batal
+            </button>
+            <button
+              type="button"
+              className="auto-primary-btn"
+              onClick={() => void apply()}
+              disabled={pending || !applyable}
+              aria-busy={pending}
+              style={{
+                height: 44,
+                padding: "0 20px",
+                border: "none",
+                fontSize: 15,
+                fontWeight: 600,
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 8,
+                background: applyable ? "#F59E0B" : "#F1F5F9",
+                color: applyable ? "#111827" : "#94A3B8",
+                cursor: pending || !applyable ? "not-allowed" : "pointer",
+              }}
+            >
+              {pending ? (
+                <>
+                  <Spinner size={15} /> Menerapkan...
+                </>
+              ) : applyable ? (
+                `Terapkan ${total} hasil`
+              ) : (
+                "Terapkan"
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }

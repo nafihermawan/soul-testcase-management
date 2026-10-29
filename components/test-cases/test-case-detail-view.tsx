@@ -854,6 +854,7 @@ export function TestCaseDetailView({
                 content: (
                   <AutomationTab
                     testCaseId={tc.id}
+                    tcId={tc.tcId}
                     automation={
                       tc.automation
                         ? {

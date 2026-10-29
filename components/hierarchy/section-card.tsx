@@ -35,6 +35,9 @@ export function SectionCard({
   selectedTcIds,
   onToggleTc,
   onToggleAll,
+  onLinkAutomation,
+  onEditAutomation,
+  onUnlinkAutomation,
   onQuickUpdate,
 }: {
   section: Section;
@@ -67,6 +70,10 @@ export function SectionCard({
   selectedTcIds: Set<string>;
   onToggleTc: (tcId: string) => void;
   onToggleAll: (tcList: TestCase[]) => void;
+  /** Aksi automation dari kolom Automation / menu Opsi (opsional). */
+  onLinkAutomation?: (t: TestCase) => void;
+  onEditAutomation?: (t: TestCase) => void;
+  onUnlinkAutomation?: (t: TestCase) => void;
   onQuickUpdate: (
     t: TestCase,
     data: {
@@ -362,6 +369,9 @@ export function SectionCard({
               selectedTcIds={selectedTcIds}
               onToggleTc={onToggleTc}
               onToggleAll={onToggleAll}
+              onLinkAutomation={onLinkAutomation}
+              onEditAutomation={onEditAutomation}
+              onUnlinkAutomation={onUnlinkAutomation}
               onQuickUpdate={onQuickUpdate}
             />
           )}

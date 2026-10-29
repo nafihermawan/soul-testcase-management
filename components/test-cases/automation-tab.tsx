@@ -1,12 +1,14 @@
 "use client";
 
-import { useState } from "react";
-import { Code2, Link2, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { Check, Copy, Link2Off, Pencil } from "lucide-react";
 import { removeAutomationLink, upsertAutomationLink } from "@/lib/actions/automation-bugs";
 import { useRefresh } from "@/lib/client/refresh-context";
+import { getJSON } from "@/lib/client/use-api";
 import { Spinner, Toast, useToast } from "@/components/ui/feedback";
 import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
 import { Select } from "@/components/ui/select";
+import type { AutomationRunItem, AutomationRunsPayload } from "@/types/api";
 
 export type AutomationInfo = {
   id: string;
@@ -17,23 +19,137 @@ export type AutomationInfo = {
   lastResult: string | null;
 };
 
-const statusStyle: Record<AutomationInfo["status"], { bg: string; color: string; label: string }> =
-  {
-    AUTOMATED: { bg: "var(--success-bg)", color: "var(--success)", label: "Automated" },
-    FAILING: { bg: "var(--danger-bg)", color: "var(--danger)", label: "Failing" },
-    UNSTABLE: { bg: "var(--warning-bg)", color: "#B45309", label: "Unstable" },
-    NOT_AUTOMATED: {
-      bg: "var(--surface-muted)",
-      color: "var(--text-secondary)",
-      label: "Belum Automated",
-    },
+/** Dot + teks status automation (tanpa pill). */
+const STATUS_TONE: Record<
+  AutomationInfo["status"],
+  { dot: string; text: string; label: string }
+> = {
+  AUTOMATED: { dot: "#16A34A", text: "#15803D", label: "Automated" },
+  FAILING: { dot: "#DC2626", text: "#B91C1C", label: "Failing" },
+  UNSTABLE: { dot: "#F59E0B", text: "#B45309", label: "Unstable" },
+  NOT_AUTOMATED: { dot: "#94A3B8", text: "#475569", label: "Belum Automated" },
+};
+
+/** Dot + teks hasil run. */
+const RUN_TONE: Record<string, { dot: string; text: string; label: string }> = {
+  PASS: { dot: "#16A34A", text: "#15803D", label: "Passed" },
+  FAIL: { dot: "#DC2626", text: "#B91C1C", label: "Failed" },
+  SKIPPED: { dot: "#A855F7", text: "#7E22CE", label: "Skipped" },
+};
+const RUN_FALLBACK = { dot: "#94A3B8", text: "#64748B", label: "—" };
+
+const PAGE_SIZE = 5;
+
+/** "29 Okt 2026, 15.41" (id-ID memakai titik untuk jam). */
+const formatRanAt = (iso: string): string =>
+  new Date(iso).toLocaleString("id-ID", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+/** Nilai monospace (truncate) + tombol salin 32×32. */
+function CopyValue({ value, label }: { value: string; label: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // clipboard tidak tersedia — abaikan
+    }
   };
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+      <span
+        title={value}
+        style={{
+          fontFamily: "var(--font-mono, monospace)",
+          fontSize: 14,
+          fontWeight: 500,
+          color: "#0F172A",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+          minWidth: 0,
+        }}
+      >
+        {value}
+      </span>
+      <button
+        type="button"
+        onClick={() => void copy()}
+        className="tc-copy-icon-btn"
+        aria-label={`Salin ${label}`}
+        style={{
+          width: 32,
+          height: 32,
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          flexShrink: 0,
+        }}
+      >
+        {copied ? <Check size={15} color="#15803D" /> : <Copy size={15} />}
+      </button>
+    </div>
+  );
+}
+
+/** Satu baris <dl>: label 180px + nilai. */
+function InfoRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "180px minmax(0, 1fr)",
+        gap: 16,
+        alignItems: "center",
+        padding: "6px 0",
+      }}
+    >
+      <dt style={{ fontSize: 14, color: "#64748B" }}>{label}</dt>
+      <dd style={{ margin: 0, minWidth: 0 }}>{children}</dd>
+    </div>
+  );
+}
+
+/** Item ringkasan (Passed/Failed). */
+function SummaryItem({
+  dot,
+  textColor,
+  label,
+  count,
+}: {
+  dot: string;
+  textColor: string;
+  label: string;
+  count: number;
+}) {
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+      <span
+        aria-hidden="true"
+        style={{ width: 8, height: 8, borderRadius: "50%", background: dot, flexShrink: 0 }}
+      />
+      <span style={{ fontSize: 14, color: "#475569" }}>{label}</span>
+      <span style={{ fontSize: 14, fontWeight: 600, color: textColor }}>{count}</span>
+    </span>
+  );
+}
 
 export function AutomationTab({
   testCaseId,
+  tcId,
   automation,
 }: {
+  /** id internal (cuid) — untuk aksi & fetch riwayat. */
   testCaseId: string;
+  /** ID test case yang tampil (mis. web-lgn-001). */
+  tcId: string;
   automation: AutomationInfo | null;
 }) {
   const refresh = useRefresh();
@@ -47,6 +163,66 @@ export function AutomationTab({
   const [error, setError] = useState<string | null>(null);
   const [confirmRemove, setConfirmRemove] = useState(false);
   const { toast, showToast, dismissToast } = useToast();
+
+  // --- Riwayat run (dipaginasi dari backend: 5 per halaman) ---
+  const [runs, setRuns] = useState<AutomationRunItem[]>([]);
+  const [total, setTotal] = useState(0);
+  const [passed, setPassed] = useState(0);
+  const [failed, setFailed] = useState(0);
+  const [loadingRuns, setLoadingRuns] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  const automationId = automation?.id ?? null;
+  const lastRunAt = automation?.lastRunAt ?? null;
+
+  const loadFirstPage = useCallback(async () => {
+    setLoadingRuns(true);
+    try {
+      const res = await getJSON<AutomationRunsPayload>(
+        `/api/test-cases/${testCaseId}/automation-runs?offset=0&limit=${PAGE_SIZE}`
+      );
+      setRuns(res.runs);
+      setTotal(res.total);
+      setPassed(res.passed);
+      setFailed(res.failed);
+    } catch {
+      // gagal memuat riwayat — biarkan kosong, bagian lain tetap tampil
+    } finally {
+      setLoadingRuns(false);
+    }
+  }, [testCaseId]);
+
+  useEffect(() => {
+    if (!automationId) {
+      setRuns([]);
+      setTotal(0);
+      setPassed(0);
+      setFailed(0);
+      return;
+    }
+    void loadFirstPage();
+  }, [automationId, lastRunAt, loadFirstPage]);
+
+  const loadMore = async () => {
+    if (loadingMore || runs.length >= total) return;
+    setLoadingMore(true);
+    try {
+      const res = await getJSON<AutomationRunsPayload>(
+        `/api/test-cases/${testCaseId}/automation-runs?offset=${runs.length}&limit=${PAGE_SIZE}`
+      );
+      setRuns((prev) => {
+        const seen = new Set(prev.map((r) => r.id));
+        return [...prev, ...res.runs.filter((r) => !seen.has(r.id))];
+      });
+      setTotal(res.total);
+      setPassed(res.passed);
+      setFailed(res.failed);
+    } catch {
+      // abaikan — tombol bisa dicoba lagi
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   const save = async () => {
     setPending(true);
@@ -72,215 +248,24 @@ export function AutomationTab({
     refresh();
   };
 
-  if (!automation && !editing) {
-    return (
-      <div
-        style={{
-          background: "#fff",
-          border: "1px solid var(--border)",
-          borderRadius: "var(--radius-lg)",
-          boxShadow: "var(--shadow-md)",
-          padding: "2.5rem 1.5rem",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          textAlign: "center",
-          gap: "0.9rem",
-        }}
-      >
-        {/* Ilustrasi: ikon code/robot */}
-        <div
-          style={{
-            width: 56,
-            height: 56,
-            borderRadius: 16,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            background: "#EFF6FF",
-            color: "#2563EB",
-          }}
-        >
-          <Code2 size={28} />
-        </div>
-
-        <div>
-          <h3 style={{ margin: 0, fontSize: "1.05rem", fontWeight: 700, color: "#111827" }}>
-            Test Case ini belum terhubung ke skrip otomatisasi
-          </h3>
-          <p
-            style={{
-              margin: "0.5rem auto 0",
-              maxWidth: 480,
-              fontSize: "0.88rem",
-              color: "var(--text-muted)",
-              lineHeight: 1.6,
-            }}
-          >
-            Hubungkan test case ke skrip otomatisasi (Cypress, Playwright, atau Selenium) agar
-            eksekusi regresi bisa berjalan otomatis dan hasilnya terpantau langsung di sini. Cukup
-            isi External Test ID dan path skrip, lalu status kesehatan otomatisasi (Automated /
-            Failing / Unstable) akan ter-update dari run terakhir.
-          </p>
-        </div>
-
-        <button
-          type="button"
-          onClick={() => setEditing(true)}
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: "0.45rem",
-            marginTop: "0.25rem",
-            padding: "0.55rem 1.2rem",
-            borderRadius: 8,
-            border: "none",
-            background: "#2563EB",
-            color: "#fff",
-            fontWeight: 600,
-            fontSize: "0.85rem",
-            cursor: "pointer",
-            transition: "background-color 0.15s ease",
-          }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = "#1D4ED8")}
-          onMouseLeave={(e) => (e.currentTarget.style.background = "#2563EB")}
-        >
-          <Link2 size={15} /> Link Automation Script
-        </button>
-      </div>
-    );
-  }
-
-  const st = statusStyle[automation?.status ?? "NOT_AUTOMATED"];
+  const tone = STATUS_TONE[automation?.status ?? "NOT_AUTOMATED"];
 
   return (
-    <div style={{ padding: "1.25rem", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-      {!editing && automation ? (
-        <>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: "0.75rem",
-              flexWrap: "wrap",
-            }}
-          >
-            <div>
-              <div style={{ fontSize: "0.78rem", color: "var(--text-muted)", fontWeight: 600 }}>
-                External Test ID
-              </div>
-              <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.9rem", fontWeight: 700 }}>
-                {automation.externalTestId}
-              </div>
-            </div>
-            <span
-              style={{
-                display: "inline-block",
-                padding: "0.2rem 0.6rem",
-                borderRadius: 999,
-                fontSize: "0.75rem",
-                fontWeight: 700,
-                background: st.bg,
-                color: st.color,
-              }}
-            >
-              {st.label}
-            </span>
-          </div>
-
-          {automation.scriptPath && (
-            <div>
-              <div style={{ fontSize: "0.78rem", color: "var(--text-muted)", fontWeight: 600 }}>
-                Script Path
-              </div>
-              <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.85rem" }}>
-                {automation.scriptPath}
-              </div>
-            </div>
-          )}
-
-          {(automation.lastRunAt || automation.lastResult) && (
-            <div
-              style={{
-                display: "flex",
-                gap: "1.5rem",
-                fontSize: "0.82rem",
-                color: "var(--text-secondary)",
-                borderTop: "1px solid var(--border)",
-                paddingTop: "0.6rem",
-              }}
-            >
-              <div>
-                <span style={{ color: "var(--text-muted)" }}>Run terakhir: </span>
-                {automation.lastRunAt
-                  ? new Date(automation.lastRunAt).toLocaleString("id-ID")
-                  : "—"}
-              </div>
-              <div>
-                <span style={{ color: "var(--text-muted)" }}>Hasil: </span>
-                {automation.lastResult ?? "—"}
-              </div>
-            </div>
-          )}
-
-          <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.25rem" }}>
-            <button
-              type="button"
-              onClick={() => {
-                setEditing(true);
-                setExternalTestId(automation.externalTestId);
-                setScriptPath(automation.scriptPath ?? "");
-                setStatus(automation.status);
-              }}
-              style={{
-                padding: "0.4rem 0.9rem",
-                borderRadius: 8,
-                border: "1px solid var(--border-strong)",
-                background: "var(--surface-muted)",
-                color: "var(--text-secondary)",
-                fontWeight: 600,
-                fontSize: "0.82rem",
-                cursor: "pointer",
-              }}
-            >
-              Edit
-            </button>
-            <button
-              type="button"
-              onClick={() => setConfirmRemove(true)}
-              disabled={pending}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "0.35rem",
-                padding: "0.4rem 0.9rem",
-                borderRadius: 8,
-                border: "1px solid var(--danger)",
-                background: "#fff",
-                color: "var(--danger)",
-                fontWeight: 600,
-                fontSize: "0.82rem",
-                cursor: "pointer",
-              }}
-            >
-              <Trash2 size={13} /> Hapus
-            </button>
-          </div>
-        </>
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.7rem" }}>
+    <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 16 }}>
+      {editing ? (
+        /* ---- Form hubungkan / edit (logika lama dipertahankan) ---- */
+        <div style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: 12 }}>
           <div>
-            <label style={{ fontSize: "0.78rem", fontWeight: 600, color: "var(--text-secondary)" }}>
+            <label style={{ fontSize: 13, fontWeight: 600, color: "#64748B" }}>
               External Test ID
             </label>
             <input
               value={externalTestId}
               onChange={(e) => setExternalTestId(e.target.value)}
-              placeholder="cth: officer-login-success-01"
+              placeholder="cth: LG-001"
               style={{
                 width: "100%",
-                marginTop: "0.25rem",
+                marginTop: 6,
                 padding: "0.5rem 0.75rem",
                 border: "1px solid var(--border-strong)",
                 borderRadius: 8,
@@ -289,16 +274,16 @@ export function AutomationTab({
             />
           </div>
           <div>
-            <label style={{ fontSize: "0.78rem", fontWeight: 600, color: "var(--text-secondary)" }}>
+            <label style={{ fontSize: 13, fontWeight: 600, color: "#64748B" }}>
               Script Path
             </label>
             <input
               value={scriptPath}
               onChange={(e) => setScriptPath(e.target.value)}
-              placeholder="tests/e2e/officer/login.spec.ts"
+              placeholder="tests/login/login.spec.ts"
               style={{
                 width: "100%",
-                marginTop: "0.25rem",
+                marginTop: 6,
                 padding: "0.5rem 0.75rem",
                 border: "1px solid var(--border-strong)",
                 borderRadius: 8,
@@ -307,13 +292,11 @@ export function AutomationTab({
             />
           </div>
           <div>
-            <label style={{ fontSize: "0.78rem", fontWeight: 600, color: "var(--text-secondary)" }}>
-              Status
-            </label>
+            <label style={{ fontSize: 13, fontWeight: 600, color: "#64748B" }}>Status</label>
             <Select
               value={status}
               ariaLabel="Status automation"
-              style={{ marginTop: "0.25rem", width: "100%" }}
+              style={{ marginTop: 6, width: "100%" }}
               onChange={(e) => setStatus(e.target.value as AutomationInfo["status"])}
             >
               <option value="NOT_AUTOMATED">Belum Automated</option>
@@ -325,7 +308,7 @@ export function AutomationTab({
 
           {error && <div style={{ fontSize: "0.82rem", color: "var(--danger)" }}>{error}</div>}
 
-          <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
             <button
               type="button"
               onClick={() => {
@@ -347,37 +330,273 @@ export function AutomationTab({
             </button>
             <button
               type="button"
-              onClick={save}
+              onClick={() => void save()}
               disabled={pending}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "0.35rem",
-                padding: "0.45rem 1rem",
-                borderRadius: 8,
-                border: "none",
-                background: "#2563EB",
-                color: "#fff",
-                fontWeight: 600,
-                fontSize: "0.84rem",
-                cursor: pending ? "not-allowed" : "pointer",
-              }}
+              className="tc-btn-secondary"
             >
               {pending ? (
-                <span style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem" }}>
-                  <Spinner size={13} /> Menyimpan...
-                </span>
-              ) : (
                 <>
-                  <Link2 size={14} /> Simpan
+                  <Spinner size={13} /> Menyimpan...
                 </>
+              ) : (
+                "Simpan"
               )}
             </button>
           </div>
         </div>
+      ) : automation ? (
+        /* ---- State terhubung ---- */
+        <>
+          {/* Baris atas: status (read-only) + aksi */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              flexWrap: "wrap",
+              gap: 12,
+              padding: "16px 24px 6px",
+            }}
+          >
+            <span
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                fontSize: 14,
+                fontWeight: 600,
+                color: tone.text,
+              }}
+            >
+              <span
+                aria-hidden="true"
+                style={{ width: 8, height: 8, borderRadius: "50%", background: tone.dot }}
+              />
+              {tone.label}
+            </span>
+
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <button
+                type="button"
+                className="tc-btn-secondary"
+                onClick={() => {
+                  setExternalTestId(automation.externalTestId);
+                  setScriptPath(automation.scriptPath ?? "");
+                  setStatus(automation.status);
+                  setEditing(true);
+                }}
+              >
+                <Pencil size={16} /> Edit
+              </button>
+              <button
+                type="button"
+                className="tc-unlink-btn"
+                onClick={() => setConfirmRemove(true)}
+                disabled={pending}
+                aria-label="Unlink automation dari test case ini"
+                title="Unlink automation"
+                style={{
+                  width: 40,
+                  height: 40,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0,
+                }}
+              >
+                <Link2Off size={18} />
+              </button>
+            </div>
+          </div>
+
+          {/* Informasi automation */}
+          <dl style={{ margin: 0, padding: "4px 24px" }}>
+            <InfoRow label="Test Case ID">
+              <CopyValue value={tcId} label="Test Case ID" />
+            </InfoRow>
+            <InfoRow label="External Test ID">
+              <CopyValue value={automation.externalTestId} label="External Test ID" />
+            </InfoRow>
+            <InfoRow label="Script Path">
+              {automation.scriptPath ? (
+                <CopyValue value={automation.scriptPath} label="Script Path" />
+              ) : (
+                <span style={{ fontSize: 14, color: "#64748B" }}>—</span>
+              )}
+            </InfoRow>
+          </dl>
+
+          {/* Riwayat run */}
+          <div style={{ padding: "20px 24px" }}>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                flexWrap: "wrap",
+                gap: 12,
+                marginBottom: 12,
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 12,
+                  fontWeight: 600,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.05em",
+                  color: "#64748B",
+                }}
+              >
+                Riwayat Run <span style={{ color: "#94A3B8" }}>· {total}</span>
+              </div>
+              {total > 0 && (
+                <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
+                  <SummaryItem dot="#16A34A" textColor="#15803D" label="Passed" count={passed} />
+                  <SummaryItem dot="#DC2626" textColor="#B91C1C" label="Failed" count={failed} />
+                </div>
+              )}
+            </div>
+
+            {loadingRuns && total === 0 ? (
+              <p style={{ margin: 0, fontSize: 14, color: "#64748B" }}>Memuat riwayat…</p>
+            ) : total === 0 ? (
+              <p style={{ margin: 0, fontSize: 14, color: "#64748B" }}>
+                Script ini belum pernah dijalankan.
+              </p>
+            ) : (
+              <>
+                <div style={{ border: "1px solid #E5E7EB", borderRadius: 12, overflow: "hidden" }}>
+                  {/* Header tabel */}
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "160px 1fr",
+                      gap: 20,
+                      height: 40,
+                      alignItems: "center",
+                      padding: "0 20px",
+                      background: "#F8FAFC",
+                      borderBottom: "1px solid #EEF0F3",
+                      fontSize: 12,
+                      fontWeight: 600,
+                      textTransform: "uppercase",
+                      letterSpacing: "0.05em",
+                      color: "#64748B",
+                    }}
+                  >
+                    <span>Hasil</span>
+                    <span>Waktu Eksekusi</span>
+                  </div>
+                  {runs.map((r, i) => {
+                    const rt = RUN_TONE[r.status] ?? RUN_FALLBACK;
+                    return (
+                      <div
+                        key={r.id}
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: "160px 1fr",
+                          gap: 20,
+                          alignItems: "center",
+                          padding: "10px 20px",
+                          borderTop: i === 0 ? "none" : "1px solid #EEF0F3",
+                        }}
+                      >
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                          <span
+                            aria-hidden="true"
+                            style={{
+                              width: 7,
+                              height: 7,
+                              borderRadius: "50%",
+                              background: rt.dot,
+                              flexShrink: 0,
+                            }}
+                          />
+                          <span style={{ fontSize: 14, fontWeight: 600, color: rt.text }}>
+                            {rt.label}
+                          </span>
+                        </span>
+                        <span
+                          style={{
+                            fontSize: 14,
+                            color: "#334155",
+                            fontVariantNumeric: "tabular-nums",
+                          }}
+                        >
+                          {formatRanAt(r.ranAt)}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Paginasi: load more */}
+                <div
+                  style={{
+                    marginTop: 12,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    flexWrap: "wrap",
+                    gap: 12,
+                  }}
+                >
+                  <span style={{ fontSize: 13, color: "#64748B" }}>
+                    Menampilkan {runs.length} dari {total} run
+                  </span>
+                  {runs.length < total && (
+                    <button
+                      type="button"
+                      className="tc-load-more-btn"
+                      onClick={() => void loadMore()}
+                      disabled={loadingMore}
+                      style={{
+                        height: 36,
+                        padding: "0 14px",
+                        fontSize: 14,
+                        fontWeight: 600,
+                        cursor: loadingMore ? "not-allowed" : "pointer",
+                      }}
+                    >
+                      {loadingMore
+                        ? "Memuat…"
+                        : `Tampilkan ${Math.min(PAGE_SIZE, total - runs.length)} lagi`}
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        </>
+      ) : (
+        /* ---- State belum terhubung ---- */
+        <div
+          style={{
+            padding: "48px 24px",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            textAlign: "center",
+            gap: 6,
+          }}
+        >
+          <div style={{ fontSize: 15, fontWeight: 600, color: "#0F172A" }}>
+            Belum terhubung ke automation
+          </div>
+          <div style={{ fontSize: 14, color: "#64748B" }}>
+            Hubungkan test case ini dengan script automation agar hasilnya tercatat otomatis.
+          </div>
+          <button
+            type="button"
+            className="tc-text-link"
+            onClick={() => setEditing(true)}
+            style={{ marginTop: 6 }}
+          >
+            + Hubungkan script
+          </button>
+        </div>
       )}
 
-      {/* Confirm hapus automation link */}
       <ConfirmDeleteDialog
         open={confirmRemove}
         itemType="Link Automation"
@@ -386,7 +605,6 @@ export function AutomationTab({
         onCancel={() => setConfirmRemove(false)}
       />
 
-      {/* Toast */}
       <Toast toast={toast} onDismiss={dismissToast} />
     </div>
   );

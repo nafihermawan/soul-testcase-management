@@ -1432,6 +1432,276 @@ input[type="radio"]:focus-visible {
   text-decoration: underline;
 }
 
+/* Kolom Automation di tabel test case (halaman suite): badge clickable.
+   Warna dasar ditaruh di CSS supaya aturan :hover bisa menang. */
+.tc-automation-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  font-size: 14px;
+  cursor: pointer;
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.tc-automation-badge--on {
+  color: #15803d;
+  font-weight: 600;
+}
+
+.tc-automation-badge--on:hover {
+  text-decoration: underline;
+}
+
+.tc-automation-badge--off {
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+.tc-automation-badge--off:hover {
+  color: #475569;
+  text-decoration: underline;
+}
+
+.tc-automation-badge:focus-visible {
+  outline: 2px solid #f59e0b;
+  outline-offset: 2px;
+}
+
+/* ---- Halaman Automation (health revamp) ----
+   Hover/focus tidak bisa dinyatakan sebagai inline style; warna dasar elemen
+   yang punya hover ditaruh di sini agar aturan :hover bisa menang. */
+
+/* Fokus keyboard untuk SEMUA kontrol di halaman ini. */
+.auto-page :is(button, a, input, select):focus-visible {
+  outline: 2px solid #f59e0b;
+  outline-offset: 2px;
+}
+
+/* Opsi segmented control (7/14/30 hari) — hover hanya untuk yang tidak aktif. */
+.auto-seg-option {
+  border-radius: 8px !important;
+}
+
+.auto-seg-option:hover:not([aria-checked="true"]) {
+  background: #e2e8f0;
+}
+
+/* Tombol sekunder (Upload hasil test / Tampilkan semua). */
+.auto-secondary-btn {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px !important;
+  color: #0f172a;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.auto-secondary-btn:hover:not(:disabled) {
+  background: #fffbeb;
+  border-color: #f59e0b;
+  color: #92400e;
+}
+
+/* Item di kartu "Perlu Perhatian". */
+.auto-alert-link:hover {
+  background: #fafafb;
+}
+
+/* Baris tabel yang bisa di-hover (detail hari, coverage, header suite). */
+.auto-hover-row {
+  background: transparent;
+  transition: background-color 0.15s ease;
+}
+
+.auto-hover-row:hover {
+  background: #fafafb;
+}
+
+/* Batang grafik Run per Hari (pilihan aktif memakai background inline). */
+.auto-bar-col:hover {
+  background: rgba(15, 23, 42, 0.03);
+}
+
+/* Kotak matriks: hover memperjelas tepi. */
+.auto-matrix-cell {
+  border-radius: 4px !important;
+}
+
+.auto-matrix-cell:hover {
+  outline: 2px solid rgba(15, 23, 42, 0.12);
+}
+
+/* Batang grafik Run per Hari. */
+.auto-bar-col {
+  border-radius: 6px !important;
+}
+
+/* ---- Modal "Upload hasil test" (langkah bernomor) ---- */
+
+.auto-close-btn {
+  background: transparent;
+  border-radius: 10px !important;
+}
+
+.auto-close-btn:hover {
+  background: #f1f5f9;
+}
+
+.auto-file-clear {
+  background: transparent;
+  border-radius: 8px !important;
+}
+
+.auto-file-clear:hover {
+  background: #f1f5f9;
+}
+
+.auto-copy-btn {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px !important;
+  color: #334155;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.auto-copy-btn:hover {
+  background: #fffbeb;
+  border-color: #f59e0b;
+  color: #92400e;
+}
+
+.auto-ghost-btn {
+  background: transparent;
+  border-radius: 10px !important;
+  transition: background-color 0.15s ease;
+}
+
+.auto-ghost-btn:hover {
+  background: #f1f5f9;
+}
+
+.auto-primary-btn {
+  border-radius: 10px !important;
+}
+
+.auto-dropzone {
+  border: 1.5px dashed #cbd5e1;
+  border-radius: 12px !important;
+  background: #fff;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.auto-dropzone:hover,
+.auto-dropzone[data-drag="true"] {
+  border-color: #f59e0b;
+  background: #fffbeb;
+}
+
+.auto-text-link {
+  align-self: flex-start;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #b45309;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.auto-text-link:hover {
+  color: #92400e;
+  text-decoration: underline;
+}
+
+.auto-json-textarea:focus,
+.auto-json-textarea:focus-visible {
+  outline: none;
+  border-color: #f59e0b !important;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.18);
+}
+
+/* ---- Tab Automation (detail Test Case) ----
+   Hover tidak bisa dinyatakan inline; warna dasar elemen interaktif yang
+   punya hover ditaruh di sini agar aturan :hover bisa menang. */
+
+/* Tombol unlink: ikon saja, hover merah muda. */
+.tc-unlink-btn {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #64748b;
+  border-radius: 10px !important;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.tc-unlink-btn:hover:not(:disabled) {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+/* Tombol salin nilai (ikon 32×32). */
+.tc-copy-icon-btn {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #64748b;
+  border-radius: 6px !important;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.tc-copy-icon-btn:hover {
+  background: #f1f5f9;
+}
+
+/* Link teks "+ Hubungkan script". */
+.tc-text-link {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #b45309;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.tc-text-link:hover {
+  color: #92400e;
+  text-decoration: underline;
+}
+
+/* Tombol "Tampilkan N lagi" (load more) — sekunder, hover kuning sistem. */
+.tc-load-more-btn {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px !important;
+  color: #0f172a;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.tc-load-more-btn:hover:not(:disabled) {
+  background: #fffbeb;
+  border-color: #f59e0b;
+  color: #92400e;
+}
+
 /* Halaman detail Test Case › tab Bugs */
 
 /* Link ID bug: merah, hover lebih gelap + underline. */

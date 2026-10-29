@@ -324,6 +324,25 @@ model AutomationLink {
   updatedAt      DateTime         @updatedAt
 
   testCase TestCase @relation(fields: [testCaseId], references: [id], onDelete: Cascade)
+
+  /** Riwayat setiap eksekusi automation (webhook CI / upload laporan). */
+  runs AutomationRun[]
+}
+
+/**
+ * Satu baris = satu kali eksekusi automation untuk sebuah AutomationLink.
+ * Ditulis saat webhook CI atau upload laporan menerima hasil.
+ */
+model AutomationRun {
+  id               String   @id @default(cuid())
+  automationLinkId String
+  /** Hasil run: "PASS" | "FAIL" | "SKIPPED". */
+  status           String
+  ranAt            DateTime @default(now())
+
+  automationLink AutomationLink @relation(fields: [automationLinkId], references: [id], onDelete: Cascade)
+
+  @@index([automationLinkId, ranAt])
 }
 
 model Bug {

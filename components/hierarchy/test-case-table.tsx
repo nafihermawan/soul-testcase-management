@@ -1,7 +1,7 @@
 "use client";
 
-import { FolderInput, Pencil, Trash2 } from "lucide-react";
-import { RowActionsMenu } from "@/components/settings/row-actions-menu";
+import { FolderInput, Link2, Link2Off, Pencil, RefreshCw, Trash2 } from "lucide-react";
+import { RowActionsMenu, type RowAction } from "@/components/settings/row-actions-menu";
 import { Select } from "@/components/ui/select";
 import {
   plainSelectStyle,
@@ -10,6 +10,127 @@ import {
   typeTone,
   type TestCase,
 } from "./test-cases-shared";
+
+/** Label hasil run terakhir untuk tooltip kolom Automation. */
+const lastResultLabel = (lastResult: string | null): string =>
+  lastResult === "PASS"
+    ? "Passed"
+    : lastResult === "FAIL"
+      ? "Failed"
+      : lastResult === "SKIPPED"
+        ? "Skipped"
+        : "—";
+
+/** "29 Okt 2026 15.41" (tanpa koma, sesuai tooltip spec). */
+const formatRunAt = (iso: string): string => {
+  const d = new Date(iso);
+  const date = d.toLocaleDateString("id-ID", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+  const time = d.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
+  return `${date} ${time}`;
+};
+
+/** Sel kolom Automation — badge clickable untuk kelola tautan automation. */
+function AutomationCell({
+  t,
+  onLink,
+  onEdit,
+}: {
+  t: TestCase;
+  onLink?: () => void;
+  onEdit?: () => void;
+}) {
+  const a = t.automation ?? null;
+  const linked = !!a && a.status !== "NOT_AUTOMATED";
+
+  if (a?.status === "AUTOMATED") {
+    const tooltip = a.lastRunAt
+      ? `Run terakhir: ${lastResultLabel(a.lastResult)}, ${formatRunAt(a.lastRunAt)}`
+      : "Belum pernah dijalankan";
+    return (
+      <button
+        type="button"
+        className="tc-automation-badge tc-automation-badge--on"
+        // Baris membuka Detail Modal; badge ini harus berdiri sendiri.
+        onClick={(e) => {
+          e.stopPropagation();
+          onEdit?.();
+        }}
+        title={tooltip}
+      >
+        <RefreshCw size={14} aria-hidden="true" /> Automated
+      </button>
+    );
+  }
+
+  // Belum terhubung / status lain (Failing, Unstable) → label abu-abu.
+  const label =
+    !a || a.status === "NOT_AUTOMATED"
+      ? "Manual"
+      : a.status === "FAILING"
+        ? "Failing"
+        : "Unstable";
+  return (
+    <button
+      type="button"
+      className="tc-automation-badge tc-automation-badge--off"
+      onClick={(e) => {
+        e.stopPropagation();
+        (linked ? onEdit : onLink)?.();
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
+/**
+ * Item menu automation untuk kolom Opsi:
+ * - Manual → "Link Automation"
+ * - Terhubung → "Edit Automation Link" + "Unlink Automation"
+ */
+function automationMenuActions(
+  t: TestCase,
+  handlers: {
+    onLink?: (t: TestCase) => void;
+    onEdit?: (t: TestCase) => void;
+    onUnlink?: (t: TestCase) => void;
+  }
+): RowAction[] {
+  const a = t.automation ?? null;
+  const linked = !!a && a.status !== "NOT_AUTOMATED";
+  const { onLink, onEdit, onUnlink } = handlers;
+  const actions: RowAction[] = [];
+
+  if (linked) {
+    if (onEdit) {
+      actions.push({
+        label: "Edit Automation Link",
+        icon: <Pencil size={15} />,
+        onClick: () => onEdit(t),
+      });
+    }
+    if (onUnlink) {
+      actions.push({
+        label: "Unlink Automation",
+        icon: <Link2Off size={15} />,
+        onClick: () => onUnlink(t),
+        destructive: true,
+      });
+    }
+  } else if (onLink) {
+    actions.push({
+      label: "Link Automation",
+      icon: <Link2 size={15} />,
+      onClick: () => onLink(t),
+    });
+  }
+
+  return actions;
+}
 
 export function TestCaseTable({
   testCases,
@@ -23,6 +144,9 @@ export function TestCaseTable({
   selectedTcIds,
   onToggleTc,
   onToggleAll,
+  onLinkAutomation,
+  onEditAutomation,
+  onUnlinkAutomation,
   onQuickUpdate,
 }: {
   testCases: TestCase[];
@@ -37,6 +161,12 @@ export function TestCaseTable({
   onToggleTc?: (tcId: string) => void;
   /** Select All untuk daftar TC yang sedang ditampilkan (per section). */
   onToggleAll?: (tcList: TestCase[]) => void;
+  /** Badge/menu "Link Automation" (status Manual). */
+  onLinkAutomation?: (t: TestCase) => void;
+  /** Badge/menu "Edit Automation Link" (sudah terhubung). */
+  onEditAutomation?: (t: TestCase) => void;
+  /** Menu "Unlink Automation". */
+  onUnlinkAutomation?: (t: TestCase) => void;
   onQuickUpdate: (
     t: TestCase,
     data: {
@@ -134,6 +264,9 @@ export function TestCaseTable({
             <th style={{ padding: "0.5rem 0.5rem", fontWeight: 600, width: 144, textAlign: "left" }}>
               Status
             </th>
+            <th style={{ padding: "0.5rem 0.5rem", fontWeight: 600, width: 150, textAlign: "left" }}>
+              Automation
+            </th>
             {canEdit && (
               <th
                 style={{
@@ -227,6 +360,7 @@ export function TestCaseTable({
                 </button>
               </td>
               <td
+                title={t.title}
                 style={{
                   padding: "0.5rem 0.5rem",
                   width: "auto",
@@ -344,6 +478,13 @@ export function TestCaseTable({
                   </Select>
                 </div>
               </td>
+              <td style={{ padding: "0.5rem 0.5rem", width: 150, textAlign: "left" }}>
+                <AutomationCell
+                  t={t}
+                  onLink={onLinkAutomation ? () => onLinkAutomation(t) : undefined}
+                  onEdit={onEditAutomation ? () => onEditAutomation(t) : undefined}
+                />
+              </td>
               {canEdit && (
                 <td style={{ padding: "0.5rem 0.5rem", textAlign: "center", width: 64 }}>
                   <div
@@ -353,6 +494,11 @@ export function TestCaseTable({
                   >
                     <RowActionsMenu
                       actions={[
+                        ...automationMenuActions(t, {
+                          onLink: onLinkAutomation,
+                          onEdit: onEditAutomation,
+                          onUnlink: onUnlinkAutomation,
+                        }),
                         ...(onMoveTc
                           ? [
                               {

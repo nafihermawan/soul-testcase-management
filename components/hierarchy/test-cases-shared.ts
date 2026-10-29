@@ -2,6 +2,14 @@
 
 import type React from "react";
 
+export type TestCaseAutomation = {
+  status: "NOT_AUTOMATED" | "AUTOMATED" | "FAILING" | "UNSTABLE";
+  externalTestId: string;
+  scriptPath: string | null;
+  lastRunAt: string | null;
+  lastResult: string | null;
+};
+
 export type TestCase = {
   id: string;
   tcId: string;
@@ -16,6 +24,8 @@ export type TestCase = {
   /** Jenis skenario: POSITIVE / NEGATIVE; null = belum dipilih. */
   type: "POSITIVE" | "NEGATIVE" | null;
   sectionId: string | null;
+  /** Ringkasan automation (read-only). Opsional: record hasil create/update tidak selalu membawanya. */
+  automation?: TestCaseAutomation | null;
   createdAt?: string | Date;
   createdBy?: { name: string | null } | null;
 };
@@ -120,4 +130,5 @@ export const TC_EXPORT_HEADER = [
   "expectedResult",
   "priority",
   "status",
+  "automation",
 ] as const;

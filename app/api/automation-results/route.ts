@@ -63,6 +63,8 @@ export async function POST(request: Request) {
           lastResult: status,
           lastRunAt: timestamp,
           scriptPath: scriptPath ?? existing.scriptPath,
+          // Catat riwayat run (hanya bila hasilnya jelas PASS/FAIL).
+          ...(status ? { runs: { create: { status, ranAt: timestamp } } } : {}),
         },
         include: { testCase: { select: { id: true, tcId: true } } },
       });
@@ -98,6 +100,8 @@ export async function POST(request: Request) {
             lastResult: status,
             lastRunAt: timestamp,
             scriptPath,
+            // Run pertama sekaligus tercatat di riwayat.
+            ...(status ? { runs: { create: { status, ranAt: timestamp } } } : {}),
           },
         },
       },

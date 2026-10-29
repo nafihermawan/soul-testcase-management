@@ -32,6 +32,16 @@ export async function GET(
           sectionId: true,
           createdAt: true,
           createdBy: { select: { name: true } },
+          // Ringkasan automation untuk kolom "Automation" di tabel.
+          automation: {
+            select: {
+              status: true,
+              externalTestId: true,
+              scriptPath: true,
+              lastRunAt: true,
+              lastResult: true,
+            },
+          },
         },
       },
       sections: {
@@ -58,6 +68,15 @@ export async function GET(
     status: tc.status,
     type: tc.type,
     sectionId: tc.sectionId,
+    automation: tc.automation
+      ? {
+          status: tc.automation.status,
+          externalTestId: tc.automation.externalTestId,
+          scriptPath: tc.automation.scriptPath,
+          lastRunAt: tc.automation.lastRunAt ? tc.automation.lastRunAt.toISOString() : null,
+          lastResult: tc.automation.lastResult,
+        }
+      : null,
     createdAt: tc.createdAt.toISOString(),
     createdBy: tc.createdBy,
   }));

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { formatCase } from "@/lib/format";
 import { useRefresh } from "@/lib/client/refresh-context";
 import { invalidateApiCache } from "@/lib/client/use-api";
+import { removeAutomationLink, upsertAutomationLink } from "@/lib/actions/automation-bugs";
 import {
   AlertCircle,
   Check,
@@ -57,6 +58,7 @@ import { MoveTargetModal, type MoveTarget } from "./move-target-modal";
 import { SectionCard } from "./section-card";
 import { TestCaseForm } from "./test-case-form";
 import { TestCaseTable } from "./test-case-table";
+import { AutomationLinkModal } from "./automation-link-modal";
 import {
   IMPORT_BATCH_SIZE,
   TC_EXPORT_HEADER,
@@ -188,6 +190,16 @@ export function TestCasesManager({
   const [deleteTcTarget, setDeleteTcTarget] = useState<TestCase | null>(null);
   /** Sedang menghapus TC — dialog konfirmasi menampilkan spinner. */
   const [tcDeleting, setTcDeleting] = useState(false);
+  // Modal link/edit automation (kolom Automation & menu Opsi)
+  const [automationModal, setAutomationModal] = useState<{
+    tc: TestCase;
+    mode: "link" | "edit";
+  } | null>(null);
+  const [automationPending, setAutomationPending] = useState(false);
+  const [automationError, setAutomationError] = useState<string | null>(null);
+  // Konfirmasi unlink automation
+  const [unlinkTarget, setUnlinkTarget] = useState<TestCase | null>(null);
+  const [unlinkPending, setUnlinkPending] = useState(false);
   // Modal konfirmasi hapus section
   const [sectionDeleteTarget, setSectionDeleteTarget] = useState<{
     id: string;
@@ -488,6 +500,66 @@ export function TestCasesManager({
     invalidateApiCache();
   };
 
+  /* ---------- Automation linking (kolom Automation & menu Opsi) ---------- */
+
+  const openAutomationModal = (t: TestCase, mode: "link" | "edit") => {
+    setAutomationError(null);
+    setAutomationModal({ tc: t, mode });
+  };
+
+  const saveAutomationLink = async (externalId: string, scriptPath: string) => {
+    if (!automationModal) return;
+    const t = automationModal.tc;
+    setAutomationPending(true);
+    setAutomationError(null);
+    const res = await upsertAutomationLink(t.id, {
+      externalTestId: externalId,
+      scriptPath,
+      status: "AUTOMATED",
+    });
+    setAutomationPending(false);
+    if (res.error) {
+      setAutomationError(res.error);
+      return;
+    }
+    // Patch lokal: badge langsung berubah Manual → Automated tanpa refetch.
+    setLocalTestCases((prev) =>
+      prev.map((tc) =>
+        tc.id === t.id
+          ? {
+              ...tc,
+              automation: {
+                status: "AUTOMATED",
+                externalTestId: externalId,
+                scriptPath: scriptPath.trim() ? scriptPath.trim() : null,
+                lastRunAt: tc.automation?.lastRunAt ?? null,
+                lastResult: tc.automation?.lastResult ?? null,
+              },
+            }
+          : tc
+      )
+    );
+    setAutomationModal(null);
+    showToast("Tautan automation disimpan.", "success");
+    invalidateApiCache();
+  };
+
+  const unlinkAutomation = async (t: TestCase) => {
+    setUnlinkPending(true);
+    const res = await removeAutomationLink(t.id);
+    setUnlinkPending(false);
+    if (res.error) {
+      showToast(res.error, "error");
+      return;
+    }
+    setUnlinkTarget(null);
+    setLocalTestCases((prev) =>
+      prev.map((tc) => (tc.id === t.id ? { ...tc, automation: null } : tc))
+    );
+    showToast("Tautan automation dilepas.", "success");
+    invalidateApiCache();
+  };
+
   const handleExport = async (format: "csv" | "xlsx") => {
     // SPESIFIKASI HEADER CSV EXPORT — urutan & penamaan diambil dari
     // TC_EXPORT_HEADER supaya presisi dan tidak bisa melenceng.
@@ -508,6 +580,8 @@ export function TestCasesManager({
         expectedResult: t.expectedResult ?? "",
         priority: t.priority,
         status: t.status,
+        // Kolom Automation: hanya dua nilai sesuai spec.
+        automation: t.automation?.status === "AUTOMATED" ? "Automated" : "Manual",
       };
       return Object.fromEntries(TC_EXPORT_HEADER.map((h) => [h, byHeader[h]]));
     });
@@ -552,6 +626,7 @@ export function TestCasesManager({
       "User masuk ke dashboard utama", // expectedResult
       "HIGH", // priority
       "ACTIVE", // status
+      "Manual", // automation (hanya info; diisi otomatis dari data)
     ];
     // Escape nilai yang mengandung koma/quote/baris baru
     const escapeCsv = (v: string) => {
@@ -836,7 +911,12 @@ export function TestCasesManager({
                   const res = await updateTestCase(fd);
                   if (res.success && res.testCase) {
                     const updated = res.testCase;
-                    setLocalTestCases((prev) => prev.map((tc) => (tc.id === updated.id ? updated : tc)));
+                    // Merge (bukan replace): record hasil update tidak membawa
+                    // `automation`, jadi nilai lama harus dipertahankan agar
+                    // kolom Automation tidak berubah jadi "Manual".
+                    setLocalTestCases((prev) =>
+                      prev.map((tc) => (tc.id === updated.id ? { ...tc, ...updated } : tc))
+                    );
                     setEditingTcId(null);
                     // Edit bisa mengubah status (mis. jadi Deprecated) -> cache
                     // payload run harus dibuang agar daftar eksekusi ikut segar.
@@ -867,6 +947,9 @@ export function TestCasesManager({
               }}
               onEdit={(t) => setEditingTcId(t.id)}
               onDeleteTc={(t) => setDeleteTcTarget(t)}
+              onLinkAutomation={(t) => openAutomationModal(t, "link")}
+              onEditAutomation={(t) => openAutomationModal(t, "edit")}
+              onUnlinkAutomation={(t) => setUnlinkTarget(t)}
               onDropTc={(tcId) => void handleDropTc(tcId, section.id, section.name)}
               onMoveTc={(t) =>
                 setMoveRequest({ kind: "testcase", ids: [t.id], label: t.tcId })
@@ -975,6 +1058,9 @@ export function TestCasesManager({
                   onDragTcEnd={() => setDraggingTcId(null)}
                   onMoveTc={(t) => setMoveRequest({ kind: "testcase", ids: [t.id], label: t.tcId })}
                   onOpenDetail={(t) => setDetailTc(t)}
+                  onLinkAutomation={(t) => openAutomationModal(t, "link")}
+                  onEditAutomation={(t) => openAutomationModal(t, "edit")}
+                  onUnlinkAutomation={(t) => setUnlinkTarget(t)}
                   selectedTcIds={selectedTcIds}
                   onToggleTc={toggleTcSelection}
                   onToggleAll={toggleAllInList}
@@ -1009,6 +1095,35 @@ export function TestCasesManager({
             />
           )}
       </div>
+
+      {/* Modal: Link / Edit Automation */}
+      {automationModal && (
+        <AutomationLinkModal
+          mode={automationModal.mode}
+          tcId={automationModal.tc.tcId}
+          initialExternalId={automationModal.tc.automation?.externalTestId ?? ""}
+          initialScriptPath={automationModal.tc.automation?.scriptPath ?? ""}
+          pending={automationPending}
+          error={automationError}
+          onClose={() => {
+            if (automationPending) return;
+            setAutomationModal(null);
+            setAutomationError(null);
+          }}
+          onSave={(externalId, scriptPath) => void saveAutomationLink(externalId, scriptPath)}
+        />
+      )}
+
+      {/* Konfirmasi unlink automation */}
+      <ConfirmDeleteDialog
+        open={unlinkTarget !== null}
+        itemType="Tautan Automation"
+        itemName={unlinkTarget?.tcId}
+        impact="Test case akan kembali berstatus Manual."
+        pending={unlinkPending}
+        onConfirm={() => unlinkTarget && void unlinkAutomation(unlinkTarget)}
+        onCancel={() => setUnlinkTarget(null)}
+      />
 
       {/* Modal: Tambah Section Baru */}
       {showAddSection && (

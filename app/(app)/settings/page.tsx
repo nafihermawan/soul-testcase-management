@@ -25,7 +25,19 @@ export default function SettingsPage() {
   const { data, error, loading, reload } = useApi<SettingsPayload>("/api/settings");
 
   return (
-    <main style={{ fontFamily: "var(--font-sans, system-ui, sans-serif)", width: "100%" }}>
+    <main
+      style={{
+        fontFamily: "var(--font-sans, system-ui, sans-serif)",
+        // Tanpa batas lebar: mengisi penuh lebar layar. `margin: "-1rem"`
+        // menetralkan padding `.app-main` lalu diganti padding halaman 24px
+        // (pola yang sama dengan halaman detail run / detail test case).
+        width: "100%",
+        boxSizing: "border-box",
+        margin: "-1rem",
+        padding: 24,
+        minHeight: "calc(100% + 2rem)",
+      }}
+    >
       {meLoading || !me || blocked ? (
         <TableCardSkeleton />
       ) : error ? (

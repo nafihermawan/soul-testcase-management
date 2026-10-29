@@ -1,190 +1,170 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Pencil, Trash2 } from "lucide-react";
-import { deleteTestCase } from "@/lib/actions/test-cases";
+import { Flag, Pencil } from "lucide-react";
 import { formatCase } from "@/lib/format";
-import { Toast, useToast } from "@/components/ui/feedback";
-import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
 
-const badge = (label: string, bg: string, color: string) => (
-  <span
-    style={{
-      display: "inline-block",
-      padding: "0.18rem 0.6rem",
-      borderRadius: 999,
-      fontSize: "0.72rem",
-      fontWeight: 700,
-      letterSpacing: "0.03em",
-      background: bg,
-      color,
-    }}
-  >
-    {label}
-  </span>
-);
+/**
+ * Warna status: dot + teks. Spesifikasi menyebut contoh Active; varian lain
+ * memakai tonalitas sejenis (Draft amber, Deprecated slate).
+ */
+const STATUS_TONE: Record<string, { dot: string; text: string }> = {
+  ACTIVE: { dot: "#16A34A", text: "#15803D" },
+  DRAFT: { dot: "#F59E0B", text: "#B45309" },
+  DEPRECATED: { dot: "#94A3B8", text: "#64748B" },
+};
+
+/** Warna bendera + teks untuk indikator prioritas. */
+const PRIORITY_TONE: Record<string, { flag: string; text: string }> = {
+  CRITICAL: { flag: "#DC2626", text: "#B91C1C" },
+  HIGH: { flag: "#EA580C", text: "#C2410C" },
+  MEDIUM: { flag: "#F59E0B", text: "#B45309" },
+  LOW: { flag: "#94A3B8", text: "#475569" },
+};
 
 export function TestCasePageHeader({
   id,
-  code,
   title,
   status,
   priority,
-  suiteId,
+  project,
+  suite,
   canEdit,
+  showEdit,
 }: {
   id: string;
-  code: string;
   title: string;
   status: "DRAFT" | "ACTIVE" | "DEPRECATED";
   priority: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
-  suiteId: string;
+  project: { id: string; name: string };
+  suite: { id: string; name: string };
   canEdit: boolean;
+  /** Tombol Edit hanya tampil saat tab "Detail" aktif. */
+  showEdit: boolean;
 }) {
-  const router = useRouter();
-  const { toast, showToast, dismissToast } = useToast();
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-
-  // Label badge pakai Title Case ("Active", "Critical") — nilainya sendiri tetap
-  // uppercase di data.
-  const statusBadge =
-    status === "ACTIVE"
-      ? badge(formatCase(status), "#D1FAE5", "#047857")
-      : status === "DRAFT"
-        ? badge(formatCase(status), "#FEF3C7", "#B45309")
-        : badge(formatCase(status), "#F3F4F6", "#6B7280");
-
-  const priorityBadge =
-    priority === "CRITICAL"
-      ? badge(formatCase(priority), "#FEE2E2", "#B91C1C")
-      : priority === "HIGH"
-        ? badge(formatCase(priority), "#FFEDD5", "#C2410C")
-        : priority === "MEDIUM"
-          ? badge(formatCase(priority), "#DBEAFE", "#1D4ED8")
-          : badge(formatCase(priority), "#F3F4F6", "#374151");
-
-  const doDelete = async () => {
-    setDeleting(true);
-    const fd = new FormData();
-    fd.set("id", id);
-    await deleteTestCase(fd);
-    setDeleting(false);
-    showToast("Test case dihapus.", "success");
-    router.push(`/suites/${suiteId}`);
-  };
+  const statusTone = STATUS_TONE[status] ?? STATUS_TONE.DEPRECATED;
+  const priorityTone = PRIORITY_TONE[priority] ?? PRIORITY_TONE.LOW;
 
   return (
-    <>
-      <div
+    <div
+      style={{
+        background: "#fff",
+        border: "1px solid #E5E7EB",
+        borderRadius: 16,
+        padding: "22px 28px 24px",
+      }}
+    >
+      {/* Breadcrumb — tanpa ID test case. */}
+      <nav
+        aria-label="Breadcrumb"
         style={{
           display: "flex",
           alignItems: "center",
+          gap: 8,
+          fontSize: 14,
+          flexWrap: "wrap",
+        }}
+      >
+        <Link href="/" className="tc-crumb">
+          Projects
+        </Link>
+        <span aria-hidden="true" style={{ color: "#CBD5E1" }}>
+          /
+        </span>
+        <Link href={`/projects/${project.id}`} className="tc-crumb">
+          {project.name}
+        </Link>
+        <span aria-hidden="true" style={{ color: "#CBD5E1" }}>
+          /
+        </span>
+        <Link href={`/suites/${suite.id}`} className="tc-crumb">
+          {suite.name}
+        </Link>
+      </nav>
+
+      {/* Judul + meta + aksi */}
+      <div
+        style={{
+          marginTop: 12,
+          display: "flex",
+          alignItems: "flex-start",
           justifyContent: "space-between",
-          gap: "0.75rem",
+          gap: 16,
           flexWrap: "wrap",
         }}
       >
         <div style={{ minWidth: 0, flex: 1 }}>
           <h1
             style={{
-              fontSize: 20,
-              fontWeight: 700,
               margin: 0,
-              color: "#1E293B",
-              letterSpacing: "-0.025em",
-              display: "flex",
-              alignItems: "center",
-              gap: "0.6rem",
-              flexWrap: "wrap",
-              lineHeight: 1.3,
+              fontSize: 24,
+              lineHeight: "32px",
+              fontWeight: 700,
+              color: "#0F172A",
             }}
           >
-            <span style={{ minWidth: 0 }}>{title}</span>
-            {priorityBadge}
-            {statusBadge}
+            {title}
           </h1>
-          <p
+
+          {/* Baris meta: status (dot + teks) | divider | prioritas (bar + teks). */}
+          <div
             style={{
-              margin: "0.35rem 0 0",
-              fontSize: "0.85rem",
-              color: "var(--text-muted)",
+              marginTop: 10,
               display: "flex",
               alignItems: "center",
-              gap: "0.4rem",
+              gap: 14,
+              fontSize: 14,
               flexWrap: "wrap",
             }}
           >
             <span
               style={{
-                fontFamily: "var(--font-mono, monospace)",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 7,
                 fontWeight: 600,
-                color: "#4B5563",
+                color: statusTone.text,
               }}
             >
-              {code}
+              <span
+                aria-hidden="true"
+                style={{
+                  width: 7,
+                  height: 7,
+                  borderRadius: "50%",
+                  background: statusTone.dot,
+                }}
+              />
+              {formatCase(status)}
             </span>
-          </p>
+            <span aria-hidden="true" style={{ width: 1, height: 16, background: "#E2E8F0" }} />
+            <span
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                fontWeight: 600,
+                color: priorityTone.text,
+              }}
+            >
+              <Flag size={14} aria-hidden="true" color={priorityTone.flag} />
+              {formatCase(priority)} priority
+            </span>
+          </div>
         </div>
 
-        {canEdit && (
-          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexShrink: 0 }}>
-            <Link
-              href={`/suites/${suiteId}?edit=${encodeURIComponent(id)}`}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "0.4rem",
-                padding: "0.45rem 1rem",
-                borderRadius: 6,
-                border: "1px solid var(--border-strong)",
-                background: "#fff",
-                color: "#1F2937",
-                fontSize: "0.8rem",
-                fontWeight: 600,
-                textDecoration: "none",
-                cursor: "pointer",
-              }}
-            >
-              <Pencil size={14} /> Edit
-            </Link>
-            <button
-              type="button"
-              onClick={() => setConfirmDelete(true)}
-              disabled={deleting}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "0.4rem",
-                padding: "0.45rem 1rem",
-                borderRadius: 6,
-                border: "1px solid #FECACA",
-                background: "#fff",
-                color: "#DC2626",
-                fontSize: "0.8rem",
-                fontWeight: 600,
-                cursor: "pointer",
-              }}
-            >
-              <Trash2 size={14} /> Delete
-            </button>
-          </div>
+        {/* Aksi: HANYA Edit (Delete tidak ditampilkan di halaman ini), dan hanya
+            saat tab Detail aktif. */}
+        {canEdit && showEdit && (
+          <Link
+            href={`/suites/${suite.id}?edit=${encodeURIComponent(id)}`}
+            className="tc-btn-secondary"
+            style={{ flexShrink: 0 }}
+          >
+            <Pencil size={16} /> Edit
+          </Link>
         )}
       </div>
-
-      <ConfirmDeleteDialog
-        open={confirmDelete}
-        itemType="Test Case"
-        itemName={code}
-        impact="Riwayat run & bug terkaitnya juga akan terhapus."
-        pending={deleting}
-        onConfirm={() => void doDelete()}
-        onCancel={() => setConfirmDelete(false)}
-      />
-
-      <Toast toast={toast} onDismiss={dismissToast} />
-    </>
+    </div>
   );
 }

@@ -17,6 +17,7 @@ import {
   FolderInput,
   History,
   Loader2,
+  Pencil,
   Plus,
   Search,
   Table,
@@ -24,6 +25,8 @@ import {
   Upload,
   X
 } from "lucide-react";
+import { TestStepsList } from "@/components/test-cases/test-steps-list";
+import { ScrollCueBody } from "@/components/ui/scroll-cue";
 import {
   createTestCase,
   deleteTestCase,
@@ -1427,15 +1430,27 @@ function TestCaseDetailModal({
     }
   };
 
+  // --- Scroll cue (gradien + tombol bulat chevron + bayangan) ditangani
+  // komponen `ScrollCueBody` yang membungkus header/isi/footer modal. ---
+
   // Steps: pisahkan per baris kalau ada, untuk tampilan step-by-step
   const stepsList = (tc.steps ?? "")
     .split("\n")
     .map((st) => st.trim())
     .filter(Boolean);
 
+  // Expected Result per baris — dipakai memasangkan expected ke tiap langkah
+  // (hanya bila jumlah barisnya sepadan dengan jumlah langkah, sama seperti
+  // halaman detail test case).
+  const stepExpectedResults = (tc.expectedResult ?? "")
+    .split("\n")
+    .map((st) => st.trim())
+    .filter(Boolean);
+  const showPerStep = stepsList.length > 0 && stepExpectedResults.length === stepsList.length;
+
   // Teks polos berwarna (tanpa pill/box) untuk priority & status.
   const priorityText: React.CSSProperties = {
-    fontSize: 12,
+    fontSize: 15,
     fontWeight: 600,
     color:
       tc.priority === "CRITICAL"
@@ -1448,26 +1463,25 @@ function TestCaseDetailModal({
   };
 
   const statusText: React.CSSProperties = {
-    fontSize: 12,
+    fontSize: 15,
     fontWeight: 600,
     color: tc.status === "ACTIVE" ? "#059669" : tc.status === "DRAFT" ? "#D97706" : "#DC2626",
   };
 
   const sectionLabel: React.CSSProperties = {
-    fontSize: "0.72rem",
+    fontSize: 13,
     fontWeight: 600,
-    color: "#6B7280",
-    letterSpacing: "0.01em",
-    margin: "0 0 0.4rem",
+    color: "#64748B",
+    margin: "0 0 8px",
   };
 
   /** Label kecil di atas tiap nilai metadata. */
   const metaLabel: React.CSSProperties = {
     display: "block",
-    color: "#9CA3AF",
+    color: "#64748B",
     fontWeight: 500,
-    fontSize: "0.72rem",
-    marginBottom: "0.25rem",
+    fontSize: 13,
+    marginBottom: 8,
   };
 
   /**
@@ -1494,7 +1508,7 @@ function TestCaseDetailModal({
     {
       label: "Author",
       value: tc.createdBy?.name ?? "—",
-      valueStyle: { fontWeight: 600, color: "#1F2937", fontSize: "0.82rem" },
+      valueStyle: { fontWeight: 600, color: "#0F172A", fontSize: 15 },
     },
     {
       label: "Dibuat",
@@ -1505,9 +1519,106 @@ function TestCaseDetailModal({
             year: "numeric",
           })
         : "—",
-      valueStyle: { fontWeight: 500, color: "#374151", fontSize: "0.82rem" },
+      valueStyle: { fontWeight: 600, color: "#0F172A", fontSize: 15 },
     },
   ];
+
+  // Header & footer modal — diteruskan sebagai props ke `ScrollCueBody`
+  // (keduanya diam, hanya area isi yang menggulir).
+  const modalHeader = (
+    <div style={{ padding: "1.25rem 1.5rem 0", background: "#fff" }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "flex-start",
+          justifyContent: "space-between",
+          gap: "0.75rem",
+          paddingBottom: "0.85rem",
+          borderBottom: "1px solid var(--border)",
+        }}
+      >
+        <div style={{ minWidth: 0 }}>
+          <span
+            style={{
+              fontFamily: "var(--font-mono, monospace)",
+              fontSize: "0.72rem",
+              color: "#9CA3AF",
+              fontWeight: 500,
+              letterSpacing: "0.02em",
+            }}
+          >
+            {tc.tcId}
+          </span>
+          <h2
+            style={{
+              fontSize: "1.05rem",
+              fontWeight: 700,
+              margin: "0.3rem 0 0",
+              color: "#111827",
+              lineHeight: 1.35,
+            }}
+          >
+            {tc.title}
+          </h2>
+        </div>
+        <button
+          type="button"
+          aria-label="Tutup"
+          onClick={onClose}
+          style={{
+            width: 30,
+            height: 30,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            border: "none",
+            background: "transparent",
+            color: "var(--text-muted)",
+            borderRadius: 6,
+            cursor: "pointer",
+            flexShrink: 0,
+          }}
+        >
+          <X size={18} />
+        </button>
+      </div>
+    </div>
+  );
+
+  const modalFooter = (
+    <div style={{ padding: "0 1.5rem 0.9rem", background: "rgba(249, 250, 251, 0.5)" }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: "0.75rem",
+          paddingTop: "0.9rem",
+          borderTop: "1px solid #EEF0F3",
+        }}
+      >
+        <Link
+          href={`/test-cases/${tc.id}?tab=runs`}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "0.35rem",
+            color: "#1D4ED8",
+            fontSize: "0.8rem",
+            fontWeight: 500,
+            textDecoration: "none",
+          }}
+        >
+          <History size={14} /> Lihat Detail
+        </Link>
+        {canEdit && (
+          <button type="button" className="tc-btn-secondary" onClick={onEdit}>
+            <Pencil size={16} /> Edit
+          </button>
+        )}
+      </div>
+    </div>
+  );
 
   return createPortal(
     <div
@@ -1543,75 +1654,19 @@ function TestCaseDetailModal({
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header — divider di-inset selebar padding modal (sejajar konten). */}
-        <div style={{ padding: "1.25rem 1.5rem 0" }}>
+        {/* Isi modal: header + area scroll + footer. Petunjuk scroll (gradien +
+            tombol bulat chevron) + bayangan header/footer ditangani
+            `ScrollCueBody`; hanya area isi yang menggulir. */}
+        <ScrollCueBody header={modalHeader} footer={modalFooter}>
+          {/* Konten (padding + jarak antar section 24px) */}
           <div
             style={{
+              padding: "1rem 1.5rem 1.25rem",
               display: "flex",
-              alignItems: "flex-start",
-              justifyContent: "space-between",
-              gap: "0.75rem",
-              paddingBottom: "0.85rem",
-              borderBottom: "1px solid var(--border)",
+              flexDirection: "column",
+              gap: 24,
             }}
           >
-            <div style={{ minWidth: 0 }}>
-              <span
-                style={{
-                  fontFamily: "var(--font-mono, monospace)",
-                  fontSize: "0.72rem",
-                  color: "#9CA3AF",
-                  fontWeight: 500,
-                  letterSpacing: "0.02em",
-                }}
-              >
-                {tc.tcId}
-              </span>
-              <h2
-                style={{
-                  fontSize: "1.05rem",
-                  fontWeight: 700,
-                  margin: "0.3rem 0 0",
-                  color: "#111827",
-                  lineHeight: 1.35,
-                }}
-              >
-                {tc.title}
-              </h2>
-            </div>
-            <button
-              type="button"
-              aria-label="Tutup"
-              onClick={onClose}
-              style={{
-                width: 30,
-                height: 30,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                border: "none",
-                background: "transparent",
-                color: "var(--text-muted)",
-                borderRadius: 6,
-                cursor: "pointer",
-                flexShrink: 0,
-              }}
-            >
-              <X size={18} />
-            </button>
-          </div>
-        </div>
-
-        {/* Body */}
-        <div
-          style={{
-            padding: "1rem 1.5rem 1.25rem",
-            overflowY: "auto",
-            display: "flex",
-            flexDirection: "column",
-            gap: "1.25rem",
-          }}
-        >
           {/* Metadata: kolom sama lebar, dipisah garis vertikal 1px (gray-300,
               self-center) yang rata tengah. Jarak 1rem di kiri-kanan tiap garis
               supaya judul & value tidak menempel ke pembatasnya. */}
@@ -1644,10 +1699,10 @@ function TestCaseDetailModal({
             <p
               style={{
                 margin: 0,
-                fontSize: "0.88rem",
-                color: "#374151",
+                fontSize: 15,
+                lineHeight: "24px",
+                color: "#0F172A",
                 whiteSpace: "pre-wrap",
-                lineHeight: 1.6,
               }}
             >
               {tc.scenario || (
@@ -1663,11 +1718,11 @@ function TestCaseDetailModal({
               <ul
                 style={{
                   margin: 0,
-                  paddingLeft: "1.2rem",
-                  fontSize: 12,
+                  paddingLeft: 20,
+                  fontSize: 15,
                   fontWeight: 400,
-                  color: "#334155",
-                  lineHeight: 1.6,
+                  color: "#0F172A",
+                  lineHeight: "24px",
                 }}
               >
                 {tc.precondition
@@ -1682,7 +1737,10 @@ function TestCaseDetailModal({
                   )
                   .filter(Boolean)
                   .map((line, i) => (
-                    <li key={i}>{line}</li>
+                    // Jarak antar poin 4px.
+                    <li key={i} style={{ marginBottom: 4 }}>
+                      {line}
+                    </li>
                   ))}
               </ul>
             ) : (
@@ -1750,148 +1808,47 @@ function TestCaseDetailModal({
             </div>
           )}
 
-          {/* Expected Result (dedicated section) */}
-          <div>
-            <h4 style={sectionLabel}>Expected Result</h4>
-            {tc.expectedResult ? (
-              <p
-                style={{
-                  margin: 0,
-                  fontSize: "0.88rem",
-                  color: "#374151",
-                  lineHeight: 1.6,
-                  whiteSpace: "pre-wrap",
-                }}
-              >
-                {tc.expectedResult}
-              </p>
-            ) : (
-              <p style={{ margin: 0, color: "#9CA3AF", fontStyle: "italic", fontSize: "0.85rem" }}>
-                Tidak ada expected result.
-              </p>
-            )}
-          </div>
-
-          {/* Test Steps */}
-          <div>
-            <h4 style={sectionLabel}>Test Steps</h4>
-            <div style={{ border: "1px solid var(--border)", borderRadius: 8, overflow: "hidden" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.78rem" }}>
-                <thead
+          {/* Expected Result (section terpisah) — disembunyikan bila expected
+              sudah tampil per langkah di daftar Test Steps, sama seperti di
+              halaman detail test case. */}
+          {!showPerStep && (
+            <div>
+              <h4 style={sectionLabel}>Expected Result</h4>
+              {tc.expectedResult ? (
+                <p
                   style={{
-                    background: "#F9FAFB",
-                    borderBottom: "1px solid var(--border)",
-                    color: "#6B7280",
-                    textAlign: "left",
+                    margin: 0,
+                    fontSize: 15,
+                    lineHeight: "24px",
+                    color: "#0F172A",
+                    whiteSpace: "pre-wrap",
                   }}
                 >
-                  <tr>
-                    <th
-                      style={{
-                        padding: "0.5rem 0.6rem",
-                        width: 44,
-                        textAlign: "center",
-                        fontWeight: 600,
-                        borderRight: "1px solid var(--border)",
-                      }}
-                    >
-                      #
-                    </th>
-                    <th style={{ padding: "0.5rem 0.75rem", fontWeight: 600 }}>Step Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {stepsList.length === 0 ? (
-                    <tr>
-                      <td
-                        colSpan={2}
-                        style={{
-                          padding: "1.25rem",
-                          color: "#9CA3AF",
-                          fontStyle: "italic",
-                          textAlign: "center",
-                        }}
-                      >
-                        Step action tidak tersedia.
-                      </td>
-                    </tr>
-                  ) : (
-                    stepsList.map((step, i) => (
-                      <tr key={i} style={{ borderTop: "1px solid var(--border)" }}>
-                        <td
-                          style={{
-                            padding: "0.5rem 0.6rem",
-                            textAlign: "center",
-                            fontWeight: 600,
-                            color: "#9CA3AF",
-                            borderRight: "1px solid var(--border)",
-                          }}
-                        >
-                          {i + 1}
-                        </td>
-                        <td
-                          style={{ padding: "0.5rem 0.75rem", color: "#374151", lineHeight: 1.55 }}
-                        >
-                          {step}
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+                  {tc.expectedResult}
+                </p>
+              ) : (
+                <p style={{ margin: 0, color: "#9CA3AF", fontStyle: "italic", fontSize: "0.85rem" }}>
+                  Tidak ada expected result.
+                </p>
+              )}
             </div>
-          </div>
-        </div>
+          )}
 
-        {/* Footer — divider di-inset selebar padding modal, senada dengan header. */}
-        <div style={{ padding: "0 1.5rem 0.9rem", background: "rgba(249, 250, 251, 0.5)" }}>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: "0.75rem",
-              paddingTop: "0.9rem",
-              borderTop: "1px solid var(--border)",
-            }}
-          >
-            <Link
-              href={`/test-cases/${tc.id}?tab=runs`}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "0.35rem",
-                color: "#1D4ED8",
-                fontSize: "0.8rem",
-                fontWeight: 500,
-                textDecoration: "none",
-              }}
-            >
-              <History size={14} /> Lihat Run History
-            </Link>
-            {canEdit && (
-              <button
-                type="button"
-                onClick={onEdit}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "0.4rem",
-                  padding: "0.45rem 1.1rem",
-                  border: "none",
-                  borderRadius: 3,
-                  background: "#F59E0B",
-                  color: "#000000",
-                  fontSize: "0.78rem",
-                  fontWeight: 400,
-                  cursor: "pointer",
-                }}
-              >
-               Edit
-              </button>
+          {/* Test Steps — daftar bernomor (komponen bersama dengan halaman detail) */}
+          <div>
+            <h4 style={sectionLabel}>
+              Test Steps <span style={{ color: "#94A3B8" }}>· {stepsList.length}</span>
+            </h4>
+            {stepsList.length === 0 ? (
+              <p style={{ margin: 0, fontSize: 14, color: "#64748B" }}>
+                Belum ada langkah pengujian.
+              </p>
+            ) : (
+              <TestStepsList steps={stepsList} expectedResults={stepExpectedResults} />
             )}
           </div>
-        </div>
+          </div>
+        </ScrollCueBody>
       </div>
     </div>,
     document.body

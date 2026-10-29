@@ -763,21 +763,6 @@ button,
   }
 }
 
-/* Petunjuk scroll: panah kecil yang memantul halus (discreet) di dasar modal */
-@keyframes scrollCueBounce {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-4px);
-  }
-}
-
-.scroll-cue-bounce {
-  animation: scrollCueBounce 1.4s ease-in-out infinite;
-}
-
 /* Skeleton loader: shimmer lembut — warna dasar tetap sama. */
 @keyframes skeletonShimmer {
   from {
@@ -1240,6 +1225,277 @@ input[type="radio"]:focus-visible {
 .suite-name-link:hover {
   color: #1d4ed8;
   text-decoration: underline;
+}
+
+/* ==========================================================================
+   HALAMAN DETAIL TEST CASE
+   Hover / :focus-visible / warna state tidak bisa dinyatakan sebagai inline
+   style, jadi seluruh aturan di bawah hidup di CSS. Properti dasar elemen
+   interaktif yang punya state juga ikut di sini — kalau nilainya inline, inline
+   akan selalu menang atas aturan :hover dan hover-nya mati.
+   ========================================================================== */
+
+/* Root halaman: latar penuh + padding 24px. `margin: -16px` menetralkan padding
+   1rem milik `.app-main` supaya latar menutup seluruh area scroll (padding app
+   shell sengaja 1rem agar tidak ada margin tebal; halaman ini menggantinya). */
+.tc-detail-root {
+  margin: -16px;
+  padding: 24px;
+  min-height: calc(100% + 32px);
+  background: #f4f5f7;
+}
+
+/* Fokus keyboard untuk SEMUA tombol, link, dan tab di halaman ini. */
+.tc-detail-root :is(button, a, [role="tab"]):focus-visible {
+  outline: 2px solid #f59e0b;
+  outline-offset: 2px;
+}
+
+/* Breadcrumb: link slate → hover gelap + underline. */
+.tc-crumb {
+  color: #64748b;
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.tc-crumb:hover {
+  color: #0f172a;
+  text-decoration: underline;
+}
+
+/* Tombol sekunder (Edit): hover kuning sistem. Dipakai `<a>` (header halaman
+   detail) maupun `<button>` (footer modal preview) — radius dipaksa 10px agar
+   tidak ditimpa aturan global `button` (3px), dan focus-visible di sini supaya
+   berlaku juga di luar halaman detail test case. */
+.tc-btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px !important;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.tc-btn-secondary:hover {
+  background: #fffbeb;
+  border-color: #f59e0b;
+  color: #92400e;
+}
+
+.tc-btn-secondary:focus-visible {
+  outline: 2px solid #f59e0b;
+  outline-offset: 2px;
+}
+
+/* Tab gaya underline (bukan kotak). Warna & berat sengaja di CSS: non-aktif
+   berubah saat hover, dan state aktif memakai color + border-bottom. */
+.tc-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 2px 12px;
+  /* Tarik 1px ke atas garis border-bottom tablist supaya underline aktif
+     duduk tepat di atasnya (bukan menggantung 1px di bawah). */
+  margin-bottom: -1px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  /* Menang atas radius global `button` (3px !important) agar ujung underline
+     aktif tetap lurus. */
+  border-radius: 0 !important;
+  background: transparent;
+  color: #475569;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.tc-tab:hover {
+  color: #0f172a;
+}
+
+.tc-tab[aria-selected="true"] {
+  color: #b45309;
+  font-weight: 600;
+  border-bottom-color: #f59e0b;
+}
+
+/* Badge jumlah pada tab (Bugs / Attachments). */
+.tc-tab-badge {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* Link biru (Project / Suite di card Informasi) — underline hanya saat hover. */
+.tc-link-blue {
+  color: #1d4ed8;
+  text-decoration: none;
+}
+
+.tc-link-blue:hover {
+  text-decoration: underline;
+}
+
+/* Link "+ Tambah langkah" pada state kosong Test Steps. */
+.tc-add-step {
+  color: #b45309;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.tc-add-step:hover {
+  color: #92400e;
+  text-decoration: underline;
+}
+
+/* Tombol "Salin" pada blok Test Data (radius 8px via `.btn-radius-8`).
+   Kini berada di baris header section (bukan melayang di atas blok). */
+.tc-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.tc-copy-btn:hover {
+  background: #fffbeb;
+  border-color: #f59e0b;
+  color: #92400e;
+}
+
+/* Tombol ikon salin ID test case (32×32, transparan; radius 8px via
+   `.btn-radius-8`). */
+.tc-idcopy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  color: #64748b;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.tc-idcopy:hover {
+  background: #f1f5f9;
+}
+
+/* Tombol teks "Lihat selengkapnya" / "Sembunyikan" pada Actual Result
+   (Run History): tanpa border/latar, hanya teks amber. */
+.tc-expand-btn {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #b45309;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.tc-expand-btn:hover {
+  color: #92400e;
+  text-decoration: underline;
+}
+
+/* Halaman detail Test Case › tab Bugs */
+
+/* Link ID bug: merah, hover lebih gelap + underline. */
+.tc-bug-link {
+  color: #b91c1c;
+  text-decoration: none;
+}
+
+.tc-bug-link:hover {
+  color: #7f1d1d;
+  text-decoration: underline;
+}
+
+/* Baris tabel bug: hover latar sangat muda. */
+.tc-bug-row:hover {
+  background: #fafafb;
+}
+
+/* Tombol ikon hapus bug (36×36, radius 8px via `.btn-radius-8`). Warna dasar
+   ada di CSS (bukan inline) supaya hover bisa menang. */
+.tc-trash-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: transparent;
+  color: #64748b;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.tc-trash-btn:hover {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+/* Teks khusus pembaca layar (label kolom Aksi tanpa tampilan visual). */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Tombol scroll cue (modal): bulat 40px berisi chevron amber. Warna dasar ada
+   di CSS (bukan inline) supaya hover bisa menang; radius dipaksa 50% karena
+   aturan global `button` memaksa 3px. */
+.scroll-cue-btn {
+  padding: 0;
+  background: #ffffff;
+  border: 1px solid #fde68a;
+  border-radius: 50% !important;
+}
+
+.scroll-cue-btn:hover {
+  background: #fffbeb;
+  border-color: #f59e0b;
+}
+
+.scroll-cue-btn:focus-visible {
+  outline: 2px solid #f59e0b;
+  outline-offset: 2px;
 }
 
 /* ==========================================================================

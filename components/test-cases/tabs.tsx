@@ -6,24 +6,41 @@ export type TabItem = {
   key: string;
   label: string;
   content: React.ReactNode;
+  /** Jumlah item (mis. Bugs / Attachments) — tampil sebagai badge kecil. */
+  badge?: number;
 };
 
-export function Tabs({ tabs, initialKey }: { tabs: TabItem[]; initialKey?: string }) {
+export function Tabs({
+  tabs,
+  initialKey,
+  onChange,
+}: {
+  tabs: TabItem[];
+  initialKey?: string;
+  /** Dipanggil saat tab berganti — dipakai halaman untuk menyesuaikan UI lain. */
+  onChange?: (key: string) => void;
+}) {
   const [active, setActive] = useState(
     tabs.some((t) => t.key === initialKey) ? initialKey! : (tabs[0]?.key ?? "")
   );
 
+  const select = (key: string) => {
+    setActive(key);
+    onChange?.(key);
+  };
+
   return (
     <div>
+      {/* Gaya underline: state warna/berat/border ditangani `.tc-tab` di
+          globals.css (hover & aria-selected tidak bisa lewat inline style). */}
       <div
         role="tablist"
         style={{
           display: "flex",
-          gap: "0.35rem",
+          gap: 28,
+          borderBottom: "1px solid #E2E8F0",
+          marginBottom: 20,
           flexWrap: "wrap",
-          borderBottom: "1px solid var(--border)",
-          marginBottom: "1rem",
-          paddingBottom: 0,
         }}
       >
         {tabs.map((tab) => {
@@ -34,23 +51,13 @@ export function Tabs({ tabs, initialKey }: { tabs: TabItem[]; initialKey?: strin
               type="button"
               role="tab"
               aria-selected={isActive}
-              onClick={() => setActive(tab.key)}
-              style={{
-                padding: "0.45rem 1rem",
-                marginBottom: "0.45rem",
-                border: isActive ? "1px solid #FCD34D" : "1px solid transparent",
-                borderRadius: 8,
-                background: isActive ? "#FEF3C7" : "transparent",
-                color: isActive ? "#92400E" : "var(--text-secondary)",
-                fontWeight: isActive ? 700 : 500,
-                fontSize: "0.85rem",
-                cursor: "pointer",
-                // Properti eksplisit (tanpa `all`) memakai token motion global.
-                transition:
-                  "background-color var(--dur-fast, 120ms) var(--ease-out, ease-out), border-color var(--dur-fast, 120ms) var(--ease-out, ease-out), color var(--dur-fast, 120ms) var(--ease-out, ease-out)",
-              }}
+              className="tc-tab"
+              onClick={() => select(tab.key)}
             >
               {tab.label}
+              {typeof tab.badge === "number" && (
+                <span className="tc-tab-badge">{tab.badge}</span>
+              )}
             </button>
           );
         })}

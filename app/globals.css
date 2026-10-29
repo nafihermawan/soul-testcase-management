@@ -1352,12 +1352,17 @@ input[type="radio"]:focus-visible {
   text-decoration: underline;
 }
 
-/* Link "+ Tambah langkah" pada state kosong Test Steps. */
+/* Link/tombol "+ Tambah langkah" pada state kosong Test Steps. Kini berupa
+   <button>, jadi reset gaya tombol bawaannya. */
 .tc-add-step {
+  padding: 0;
+  border: none;
+  background: transparent;
   color: #b45309;
   font-size: 14px;
   font-weight: 600;
   text-decoration: none;
+  cursor: pointer;
 }
 
 .tc-add-step:hover {

@@ -1,8 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Check, Copy, Pencil, Plus } from "lucide-react";
+import { TestCaseForm } from "@/components/hierarchy/test-case-form";
+import type { TestCase } from "@/components/hierarchy/test-cases-shared";
+import { updateTestCase } from "@/lib/actions/test-cases";
 import { AutomationTab } from "@/components/test-cases/automation-tab";
 import { AttachmentsPanel } from "@/components/attachments/attachments-panel";
 import { TestCasePageHeader } from "@/components/test-cases/detail-header";
@@ -357,10 +361,14 @@ const TAB_KEYS = ["detail", "automation", "runs", "bugs", "activity", "attachmen
 export function TestCaseDetailView({
   testCaseId,
   initialTab,
+  initialEdit = null,
 }: {
   testCaseId: string;
   initialTab?: string;
+  /** Deep-link `?edit=<tcId>`: buka modal edit langsung saat mount. */
+  initialEdit?: string | null;
 }) {
+  const router = useRouter();
   const { data, error, loading, reload } = useApi<TestCaseDetailPayload>(
     `/api/test-cases/${testCaseId}`
   );
@@ -369,6 +377,12 @@ export function TestCaseDetailView({
   const [activeTab, setActiveTab] = useState<string>(() =>
     initialTab && TAB_KEYS.includes(initialTab) ? initialTab : "detail"
   );
+  // Modal edit dikelola di halaman INI (local state) supaya menyimpan/menutup
+  // tidak pernah memindahkan user keluar dari halaman detail.
+  const [editOpen, setEditOpen] = useState<boolean>(Boolean(initialEdit));
+  useEffect(() => {
+    if (initialEdit) setEditOpen(true);
+  }, [initialEdit]);
 
   if (error?.status === 404) {
     return (
@@ -403,10 +417,48 @@ export function TestCaseDetailView({
     );
   }
 
+  /** Buka modal edit di halaman ini (URL disinkronkan `?edit=` untuk deep-link). */
+  const openEdit = () => {
+    setEditOpen(true);
+    const params = new URLSearchParams(window.location.search);
+    params.set("edit", tc.id);
+    router.replace(`/test-cases/${tc.id}?${params.toString()}`, { scroll: false });
+  };
+
+  /** Tutup modal: tetap di halaman ini, hanya hapus query `edit` dari URL. */
+  const closeEdit = () => {
+    setEditOpen(false);
+    const params = new URLSearchParams(window.location.search);
+    if (params.has("edit")) {
+      params.delete("edit");
+      const qs = params.toString();
+      router.replace(`/test-cases/${tc.id}${qs ? `?${qs}` : ""}`, { scroll: false });
+    }
+  };
+
+  // Nilai awal form edit — bentuk `TestCase` (dipakai bersama TestCaseForm).
+  const editInitial: TestCase = {
+    id: tc.id,
+    tcId: tc.tcId,
+    title: tc.title,
+    scenario: tc.scenario,
+    precondition: tc.precondition,
+    steps: tc.steps,
+    testData: tc.testData,
+    expectedResult: tc.expectedResult,
+    priority: tc.priority,
+    status: tc.status,
+    type: tc.type,
+    sectionId: tc.sectionId,
+    createdAt: tc.createdAt,
+    createdBy: tc.createdBy,
+  };
+
   const stepsList = (tc.steps ?? "")
     .split("\n")
     .map((st) => st.trim())
     .filter(Boolean);
+
   const stepExpectedResults = (tc.expectedResult ?? "")
     .split("\n")
     .map((st) => st.trim())
@@ -496,12 +548,9 @@ export function TestCaseDetailView({
             >
               <span style={{ fontSize: 14, color: "#64748B" }}>Belum ada langkah pengujian.</span>
               {tc.canEdit && (
-                <Link
-                  href={`/suites/${tc.suite!.id}?edit=${encodeURIComponent(tc.id)}`}
-                  className="tc-add-step"
-                >
+                <button type="button" className="tc-add-step" onClick={openEdit}>
                   + Tambah langkah
-                </Link>
+                </button>
               )}
             </div>
           ) : (
@@ -783,7 +832,6 @@ export function TestCaseDetailView({
         >
           {/* Card header: breadcrumb + judul/meta + aksi Edit (hanya tab Detail) */}
           <TestCasePageHeader
-            id={tc.id}
             title={tc.title}
             status={tc.status}
             priority={tc.priority}
@@ -791,6 +839,7 @@ export function TestCaseDetailView({
             suite={tc.suite}
             canEdit={tc.canEdit}
             showEdit={activeTab === "detail"}
+            onEdit={openEdit}
           />
 
           {/* Tab bar → konten */}
@@ -837,6 +886,28 @@ export function TestCaseDetailView({
             ]}
           />
         </div>
+
+        {/* Modal edit Test Case — dikelola di halaman ini; menyimpan/menutup
+            tetap berada di halaman detail (tidak ada redirect). */}
+        {editOpen && (
+          <TestCaseForm
+            key={editInitial.id}
+            title="Edit Test Case"
+            suiteName={tc.suite.name}
+            suiteId={tc.suite.id}
+            initial={editInitial}
+            submitLabel="Simpan Perubahan"
+            onCancel={closeEdit}
+            onSubmit={async (fd) => {
+              fd.set("id", tc.id);
+              const res = await updateTestCase(fd);
+              // Sukses: form memanggil onCancel (closeEdit) → tetap di halaman
+              // ini. Refetch payload detail agar UI langsung terbarui.
+              if (res.success) reload();
+              return res;
+            }}
+          />
+        )}
       </RefreshContext.Provider>
     </main>
   );

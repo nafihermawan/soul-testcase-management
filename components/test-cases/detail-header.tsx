@@ -23,7 +23,6 @@ const PRIORITY_TONE: Record<string, { flag: string; text: string }> = {
 };
 
 export function TestCasePageHeader({
-  id,
   title,
   status,
   priority,
@@ -31,8 +30,8 @@ export function TestCasePageHeader({
   suite,
   canEdit,
   showEdit,
+  onEdit,
 }: {
-  id: string;
   title: string;
   status: "DRAFT" | "ACTIVE" | "DEPRECATED";
   priority: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
@@ -41,6 +40,8 @@ export function TestCasePageHeader({
   canEdit: boolean;
   /** Tombol Edit hanya tampil saat tab "Detail" aktif. */
   showEdit: boolean;
+  /** Membuka modal edit di halaman ini (tanpa pindah halaman). */
+  onEdit: () => void;
 }) {
   const statusTone = STATUS_TONE[status] ?? STATUS_TONE.DEPRECATED;
   const priorityTone = PRIORITY_TONE[priority] ?? PRIORITY_TONE.LOW;
@@ -153,16 +154,17 @@ export function TestCasePageHeader({
           </div>
         </div>
 
-        {/* Aksi: HANYA Edit (Delete tidak ditampilkan di halaman ini), dan hanya
-            saat tab Detail aktif. */}
+        {/* Aksi: hanya Edit, hanya saat tab Detail aktif. Membuka modal edit
+            di halaman ini (bukan navigate ke halaman suite). */}
         {canEdit && showEdit && (
-          <Link
-            href={`/suites/${suite.id}?edit=${encodeURIComponent(id)}`}
+          <button
+            type="button"
             className="tc-btn-secondary"
+            onClick={onEdit}
             style={{ flexShrink: 0 }}
           >
             <Pencil size={16} /> Edit
-          </Link>
+          </button>
         )}
       </div>
     </div>

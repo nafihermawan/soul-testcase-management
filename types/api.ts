@@ -483,6 +483,10 @@ export type TestCaseDetailPayload = {
   title: string;
   priority: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
   status: "DRAFT" | "ACTIVE" | "DEPRECATED";
+  /** Jenis skenario: POSITIVE / NEGATIVE; null = belum dipilih. */
+  type: "POSITIVE" | "NEGATIVE" | null;
+  /** Section tempat TC berada (null = belum di-assign ke section). */
+  sectionId: string | null;
   canEdit: boolean;
   scenario: string | null;
   precondition: string | null;

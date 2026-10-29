@@ -95,6 +95,8 @@ export async function GET(
     title: tc.title,
     priority: tc.priority,
     status: tc.status,
+    type: tc.type,
+    sectionId: tc.sectionId,
     canEdit: apiRoleAtLeast(user.role, "QA"),
     scenario: tc.scenario,
     precondition: tc.precondition,

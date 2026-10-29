@@ -5,7 +5,13 @@ export default function TestCaseDetailPage({
   searchParams,
 }: {
   params: { id: string };
-  searchParams?: { tab?: string };
+  searchParams?: { tab?: string; edit?: string };
 }) {
-  return <TestCaseDetailView testCaseId={params.id} initialTab={searchParams?.tab} />;
+  return (
+    <TestCaseDetailView
+      testCaseId={params.id}
+      initialTab={searchParams?.tab}
+      initialEdit={searchParams?.edit ?? null}
+    />
+  );
 }

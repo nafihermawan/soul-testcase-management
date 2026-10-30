@@ -83,6 +83,7 @@ export function AttachmentsPanel({
   thumbnailOnly = false,
   deferred = false,
   hideTrigger = false,
+  invalid = false,
   handleRef,
   onPendingChange,
 }: {
@@ -109,6 +110,10 @@ export function AttachmentsPanel({
    *  menaruh pemicunya sendiri (mis. inline di header section Evidence).
    *  Pemicunya tetap bisa dipanggil lewat `handleRef.current.pick()`. */
   hideTrigger?: boolean;
+  /** Tandai dropzone dengan garis tepi merah saat validasi parent gagal
+   *  (mis. evidence wajib belum diunggah). Default `false` — panel lain
+   *  tidak terpengaruh. */
+  invalid?: boolean;
   /** Handle untuk memicu commit/reset/pick saat `deferred`. */
   handleRef?: React.Ref<AttachmentsPanelHandle>;
   /** Jumlah file yang masih tertahan di klien (mode `deferred`) — dipakai parent
@@ -442,7 +447,7 @@ export function AttachmentsPanel({
             gap: "0.3rem",
             padding: compact ? "0.9rem 1rem" : "1.25rem 1rem",
             borderRadius: 8,
-            border: `2px dashed ${dragging ? "#94A3B8" : "#CBD5E1"}`,
+            border: `2px dashed ${dragging ? "#94A3B8" : invalid ? "#EF4444" : "#CBD5E1"}`,
             background: dragging ? "#F1F5F9" : "#F8FAFC",
             cursor: uploading ? "wait" : "pointer",
             textAlign: "center",

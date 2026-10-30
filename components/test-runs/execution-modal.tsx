@@ -143,6 +143,15 @@ export function ExecutionModal({
    * sudah diunggah" pada validasi tombol Simpan.
    */
   const [pendingEvidence, setPendingEvidence] = useState(0);
+  /**
+   * Pesan validasi INLINE section Evidence: diisi saat Simpan diklik sementara
+   * evidence wajib (Fail/Blocked) masih kosong. Tombol Simpan sengaja TIDAK
+   * di-disable untuk syarat ini — error muncul di bawah dropzone + fokus ke
+   * section-nya (lihat `focusEvidence`).
+   */
+  const [evidenceError, setEvidenceError] = useState<string | null>(null);
+  /** Anchor section Evidence untuk scroll/fokus saat validasi gagal. */
+  const evidenceSectionRef = useRef<HTMLDivElement>(null);
 
   /**
    * Animasi buka/tutup. `entered` dipasang setelah frame pertama benar-benar
@@ -460,22 +469,25 @@ export function ExecutionModal({
     if (!showsEvidence) setPendingEvidence(0);
   }, [showsEvidence]);
 
+  // Evidence masuk (atau section-nya disembunyikan): redam error inline-nya
+  // supaya border merah + pesan tidak tertinggal setelah file diunggah.
+  useEffect(() => {
+    if (hasEvidence || !showsEvidence) setEvidenceError(null);
+  }, [hasEvidence, showsEvidence]);
+
   /**
-   * Tombol "Simpan Eksekusi" DISABLED sampai penguji memilih status
-   * (selain NOT_RUN). Aturan tambahan per status:
-   * - PASS         : aktif langsung (evidence opsional);
-   * - SKIPPED      : wajib memilih alasan — dan, kalau alasannya "Lainnya",
-   *                  wajib mengisi keterangannya;
-   * - BLOCKED      : wajib mengisi "Alasan Blocked";
-   * - FAIL/BLOCKED : wajib ada evidence, atau sudah ada catatan.
+   * Tombol "Simpan Eksekusi" DISABLED hanya untuk syarat yang benar-benar
+   * menghalangi penyimpanan (belum pilih status, alasan Skipped/Blocked belum
+   * diisi). Syarat EVIDENCE sengaja TIDAK men-disable tombol: tombol yang mati
+   * tanpa alasan membingungkan, jadi validasinya berupa error INLINE saat
+   * Simpan diklik (lihat `save` + `focusEvidence`).
    */
   const saveBlocked =
     status === "NOT_RUN" ||
     (status === "SKIPPED" &&
       (skippedReason === "" ||
         (skippedReason === SKIP_REASON_OTHER && skippedReasonNote.trim() === ""))) ||
-    (status === "BLOCKED" && notes.trim() === "") ||
-    (requiresEvidence && !hasEvidence && (notes ?? "").trim() === "");
+    (status === "BLOCKED" && notes.trim() === "");
 
   /** Salin Test Data ke clipboard (tombol ringkas di samping nilainya). */
   const copyTestData = async () => {
@@ -747,6 +759,18 @@ export function ExecutionModal({
   };
 
   /**
+   * Gulir + fokuskan section Evidence saat validasi inline-nya gagal (tombol
+   * Simpan tetap bisa diklik) supaya QA langsung melihat apa yang kurang di
+   * form yang panjang.
+   */
+  const focusEvidence = () => {
+    const el = evidenceSectionRef.current;
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    el.focus({ preventScroll: true });
+  };
+
+  /**
    * Simpan hasil eksekusi. Satu penjagaan penting di depan: selama masih ada bug
    * aktif (Open / In Progress) yang menempel ke hasil ini, statusnya WAJIB
    * Failed — jadi mengubahnya ke Passed/Skipped/Blocked harus lebih dulu
@@ -756,6 +780,7 @@ export function ExecutionModal({
   const save = async () => {
     if (saving || resolving) return; // penjaga double-click
     setMsg(null);
+    setEvidenceError(null);
 
     // Validasi khusus mode Fail: judul bug + langkah reproduksi wajib diisi.
     if (isFail) {
@@ -772,6 +797,14 @@ export function ExecutionModal({
     // Blocked wajib menyertakan alasan (penjaga kedua di server action).
     if (status === "BLOCKED" && !notes.trim()) {
       setMsg("Alasan Blocked wajib diisi.");
+      return;
+    }
+
+    // Evidence wajib (Fail/Blocked) — divalidasi INLINE, bukan tombol yang
+    // di-disable: error muncul di bawah dropzone + fokus ke section-nya.
+    if (requiresEvidence && !hasEvidence) {
+      setEvidenceError("Evidence wajib diunggah untuk melaporkan bug.");
+      focusEvidence();
       return;
     }
 
@@ -1567,14 +1600,26 @@ export function ExecutionModal({
                 ditahan di klien dulu (`deferred`) dan baru diunggah ke R2 saat
                 Simpan; Batal membuangnya. Di Pass, evidence opsional. */}
             {showsEvidence && (
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: "#475569" }}>
-                    Evidence{" "}
-                    <span style={{ fontWeight: 400, color: "#64748B" }}>
-                      · {(item.attachments ?? []).length + pendingEvidence}
+              <div
+                ref={evidenceSectionRef}
+                tabIndex={-1}
+                style={{ display: "flex", flexDirection: "column", gap: 8, outline: "none" }}
+              >
+                <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: "#475569" }}>
+                      Evidence
+                      {requiresEvidence && <span style={{ color: "#B91C1C" }}> *</span>}{" "}
+                      <span style={{ fontWeight: 400, color: "#64748B" }}>
+                        · {(item.attachments ?? []).length + pendingEvidence}
+                      </span>
                     </span>
-                  </span>
+                    {requiresEvidence && (
+                      <span style={{ fontSize: 12, color: "#94A3B8" }}>
+                        (Minimal 1 file evidence wajib diunggah)
+                      </span>
+                    )}
+                  </div>
                   {editable && (
                     <button
                       type="button"
@@ -1604,11 +1649,17 @@ export function ExecutionModal({
                   onChange={onAttachmentsChange}
                   onPendingChange={setPendingEvidence}
                   handleRef={evidenceRef}
+                  invalid={Boolean(evidenceError)}
                   deferred
                   compact
                   plain
                   hideTrigger
                 />
+                {evidenceError && (
+                  <span style={{ fontSize: 12, fontWeight: 500, color: "#B91C1C" }}>
+                    {evidenceError}
+                  </span>
+                )}
               </div>
             )}
 
